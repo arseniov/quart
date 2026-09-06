@@ -1,0 +1,11 @@
+.claude
+CLAUDE.md
+docs/
+
+.env*
+
+node_modules
+__pycache__
+.venv
+venv
+
