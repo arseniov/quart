@@ -1,1 +1,0 @@
-{ "extends": ["@quart/config/prettier/base.json"] }
