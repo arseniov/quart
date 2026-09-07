@@ -2,14 +2,18 @@
   "name": "quart",
   "private": true,
   "version": "0.0.0",
-  "engines": { "node": ">=22.11", "pnpm": ">=9.15" },
+  "engines": {
+    "node": ">=22.11",
+    "pnpm": ">=9.15"
+  },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@quart/config": "workspace:*",
