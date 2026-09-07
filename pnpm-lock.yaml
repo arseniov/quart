@@ -21,6 +21,37 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
+  apps/migrate:
+    dependencies:
+      '@quart/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      kysely:
+        specifier: 0.27.4
+        version: 0.27.4
+      pg:
+        specifier: 8.13.1
+        version: 8.13.1
+    devDependencies:
+      '@quart/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/node':
+        specifier: 22.10.2
+        version: 22.10.2
+      '@types/pg':
+        specifier: 8.11.10
+        version: 8.11.10
+      eslint:
+        specifier: 9.17.0
+        version: 9.17.0
+      tsx:
+        specifier: 4.19.2
+        version: 4.19.2
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+
   packages/config:
     devDependencies:
       '@eslint/js':
