@@ -1,0 +1,24 @@
+-- 0022_seed_default_taxonomies.down.sql
+SET search_path = public;
+
+DELETE FROM issue_categories WHERE id IN (
+  'ccccccc1-0000-0000-0000-000000000001',
+  'ccccccc1-0000-0000-0000-000000000002',
+  'ccccccc1-0000-0000-0000-000000000003',
+  'ccccccc1-0000-0000-0000-000000000010',
+  'ccccccc1-0000-0000-0000-000000000011'
+);
+
+DELETE FROM topics WHERE id IN (
+  'bbbbbbb1-0000-0000-0000-000000000001',
+  'bbbbbbb1-0000-0000-0000-000000000002',
+  'bbbbbbb1-0000-0000-0000-000000000003',
+  'bbbbbbb1-0000-0000-0000-000000000004'
+);
+
+DELETE FROM topic_categories WHERE id IN (
+  'aaaaaaa1-0000-0000-0000-000000000001',
+  'aaaaaaa1-0000-0000-0000-000000000002',
+  'aaaaaaa1-0000-0000-0000-000000000003',
+  'aaaaaaa1-0000-0000-0000-000000000004'
+);
