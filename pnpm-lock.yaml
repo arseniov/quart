@@ -85,6 +85,25 @@ importers:
         specifier: 2.1.8
         version: 2.1.8(@types/node@22.10.2)
 
+  packages/shared-contracts:
+    dependencies:
+      '@quart/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@quart/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.10.2
+        version: 22.10.2
+      eslint:
+        specifier: 9.17.0
+        version: 9.17.0
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+
   packages/shared-types:
     dependencies:
       zod:
