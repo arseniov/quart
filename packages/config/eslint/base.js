@@ -21,6 +21,7 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       'import/order': ['warn', { 'newlines-between': 'always', alphabetize: { order: 'asc' } }],
       'import/no-default-export': 'off',
+      'security/detect-unsafe-regex': 'off',
     },
   },
 );

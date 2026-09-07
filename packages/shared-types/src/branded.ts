@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export type Brand<T, B extends string> = T & { readonly __brand: B };
 
 export type UserId = Brand<string, 'UserId'>;
@@ -21,7 +19,7 @@ type IdForKind = {
 };
 
 export function brandedIdSchema<K extends keyof IdForKind>(_kind: K) {
-  return z.string().regex(UUID_RE) as unknown as z.ZodType<IdForKind[K]>;
+  return z.string().uuid() as unknown as z.ZodType<IdForKind[K]>;
 }
 
 export const UserIdSchema = z.string().uuid().brand<'UserId'>();
