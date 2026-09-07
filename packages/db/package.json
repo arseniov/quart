@@ -3,10 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "exports": {
-    ".": "./src/index.ts",
-    "./migrate": "./src/migrate.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./migrate": {
+      "types": "./src/migrate.ts",
+      "default": "./dist/migrate.js"
+    }
   },
   "scripts": {
     "build": "tsc",
