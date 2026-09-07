@@ -1,0 +1,163 @@
+# Docker Compose for Quart (production).
+# Deploy via Dokploy. VPS has no public IP — ingress is Cloudflare Tunnel only.
+
+name: quart
+
+x-base: &base
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '20m', max-file: '5' }
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    <<: *base
+    environment:
+      POSTGRES_DB: quart
+      POSTGRES_USER: quart
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets: [pg_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U quart -d quart']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+    # No `ports` — only the `migrate`, `api`, and `worker` services reach postgres.
+
+  pgbouncer:
+    image: bitnami/pgbouncer:1.23.1
+    <<: *base
+    environment:
+      PGBOUNCER_DB_BACKEND: postgres:5432
+      PGBOUNCER_DATABASE: quart
+      PGBOUNCER_AUTH_TYPE: md5
+      PGBOUNCER_AUTH_FILE: /etc/pgbouncer/userlist.txt
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: 1000
+      PGBOUNCER_DEFAULT_POOL_SIZE: 20
+    secrets: [pg_password]
+    volumes:
+      - ./postgres/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./postgres/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [backend]
+    ports: ['127.0.0.1:6432:6432']
+
+  valkey:
+    image: valkey/valkey:7.2.5
+    <<: *base
+    command: ['valkey-server', '--save', '60', '1', '--appendonly', 'no']
+    volumes:
+      - valkey_data:/data
+    networks: [backend]
+    ports: ['127.0.0.1:6379:6379']
+
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    <<: *base
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    secrets: [minio_root_user, minio_root_password]
+    command: ['server', '/data', '--console-address', ':9001']
+    volumes:
+      - minio_data:/data
+    networks: [backend]
+    ports: ['127.0.0.1:9000:9000', '127.0.0.1:9001:9001']
+
+  migrate:
+    image: ghcr.io/quart/migrate:${TAG:-latest}
+    <<: *base
+    environment:
+      DATABASE_URL_FILE: /run/secrets/pg_password
+    secrets: [pg_password]
+    entrypoint: ['node', 'dist/migrate.js', 'latest']
+    depends_on:
+      pgbouncer: { condition: service_started }
+    networks: [backend]
+    restart: 'no' # run-once service
+
+  api:
+    image: ghcr.io/quart/api:${TAG:-latest}
+    <<: *base
+    env_file: .env
+    secrets: [pg_password, audit_key, jwt_secret, session_secret, oauth_google, oauth_apple]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      pgbouncer: { condition: service_started }
+      valkey: { condition: service_started }
+      minio: { condition: service_started }
+    networks: [backend, edge]
+
+  worker:
+    image: ghcr.io/quart/worker:${TAG:-latest}
+    <<: *base
+    env_file: .env
+    secrets: [pg_password, audit_key]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      pgbouncer: { condition: service_started }
+      valkey: { condition: service_started }
+    networks: [backend]
+
+  admin:
+    image: ghcr.io/quart/admin:${TAG:-latest}
+    <<: *base
+    env_file: .env
+    secrets: [session_secret]
+    depends_on:
+      api: { condition: service_started }
+    networks: [backend, edge]
+
+  caddy:
+    image: caddy:2.8.1
+    <<: *base
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    ports: ['127.0.0.1:8080:8080']  # Cloudflare Tunnel hits this
+
+  backup:
+    image: ghcr.io/quart/backup:${TAG:-latest}
+    <<: *base
+    secrets: [pg_password, backup_gpg_public_key, minio_root_user, minio_root_password]
+    environment:
+      PGPASSWORD_FILE: /run/secrets/pg_password
+      BACKUP_GPG_PUBLIC_KEY_FILE: /run/secrets/backup_gpg_public_key
+      RCLONE_REMOTE: hetzner-storagebox
+      RCLONE_DEST: backups/quart
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [backend]
+    restart: 'no' # cron triggers this
+
+networks:
+  backend: { driver: bridge }
+  edge: { driver: bridge }
+
+volumes:
+  postgres_data: {}
+  valkey_data: {}
+  minio_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+secrets:
+  pg_password: { file: ./secrets/pg_password.txt }
+  audit_key: { file: ./secrets/audit_key.txt }
+  jwt_secret: { file: ./secrets/jwt_secret.txt }
+  session_secret: { file: ./secrets/session_secret.txt }
+  minio_root_user: { file: ./secrets/minio_root_user.txt }
+  minio_root_password: { file: ./secrets/minio_root_password.txt }
+  backup_gpg_public_key: { file: ./secrets/backup_gpg_public_key.asc }
+  oauth_google: { file: ./secrets/oauth_google.json }
+  oauth_apple: { file: ./secrets/oauth_apple.json }

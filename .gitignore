@@ -2,7 +2,9 @@
 CLAUDE.md
 docs/
 
-.env*
+.env
+.env.*
+!.env.example
 
 node_modules
 .turbo
