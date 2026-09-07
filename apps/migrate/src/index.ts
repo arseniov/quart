@@ -6,7 +6,8 @@ import { Migrator, FileMigrationProvider } from 'kysely';
 
 const migrationsDir =
   process.env.QUART_MIGRATIONS_DIR ??
-  path.resolve(process.cwd(), '../../infrastructure/postgres/migrations');
+  // Dev: from apps/migrate/, walk up to repo root then into infrastructure/postgres/migrations
+  path.resolve(process.cwd(), '..', '..', 'infrastructure', 'postgres', 'migrations');
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL is required');

@@ -76,9 +76,13 @@ services:
     image: ghcr.io/quart/migrate:${TAG:-latest}
     <<: *base
     environment:
-      DATABASE_URL_FILE: /run/secrets/pg_password
+      QUART_MIGRATIONS_DIR: /app/infrastructure/postgres/migrations
     secrets: [pg_password]
-    entrypoint: ['node', 'dist/migrate.js', 'latest']
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        export DATABASE_URL="postgres://quart:$$(cat /run/secrets/pg_password)@pgbouncer:6432/quart"
+        exec node dist/migrate.js latest
     depends_on:
       pgbouncer: { condition: service_started }
     networks: [backend]
