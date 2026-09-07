@@ -128,7 +128,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     networks: [edge]
-    ports: ['127.0.0.1:8080:8080']  # Cloudflare Tunnel hits this
+    ports: ['127.0.0.1:8080:8080'] # Cloudflare Tunnel hits this
 
   backup:
     image: ghcr.io/quart/backup:${TAG:-latest}

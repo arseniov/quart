@@ -14,7 +14,9 @@ export async function encryptPii(
     .where('kv.status', '=', 'active')
     .where('pc.table_name', '=', table)
     .where('pc.column_name', '=', column)
-    .select((eb) => eb.fn('pgp_sym_encrypt', [eb.val(plaintext), eb.ref('kv.dek_encrypted')]).as('cipher'))
+    .select((eb) =>
+      eb.fn('pgp_sym_encrypt', [eb.val(plaintext), eb.ref('kv.dek_encrypted')]).as('cipher'),
+    )
     .executeTakeFirstOrThrow();
   return String((rows as unknown as { cipher: string }).cipher);
 }

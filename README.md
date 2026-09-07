@@ -19,6 +19,7 @@ DATABASE_URL=postgres://quart:quart@127.0.0.1:6432/quart \
 ```
 
 Smoke test:
+
 ```bash
 ./infrastructure/scripts/smoke.sh
 ```

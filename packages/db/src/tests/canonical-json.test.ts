@@ -22,7 +22,10 @@ describe('canonicalJson', () => {
   });
 
   it('handles nested arrays of objects', () => {
-    const a = canonicalJson([{ b: 2, a: 1 }, { d: 4, c: 3 }]);
+    const a = canonicalJson([
+      { b: 2, a: 1 },
+      { d: 4, c: 3 },
+    ]);
     expect(a).toBe('[{"a":1,"b":2},{"c":3,"d":4}]');
   });
 });

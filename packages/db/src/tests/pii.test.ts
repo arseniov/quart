@@ -17,10 +17,9 @@ describe('pgcrypto envelope (integration)', () => {
       const enc = await client.query(
         `SELECT pgp_sym_encrypt('hello-world', 'k', 'compress-algo=1, cipher-algo=aes256') AS c`,
       );
-      const dec = await client.query(
-        `SELECT pgp_sym_decrypt($1::bytea, 'k') AS p`,
-        [enc.rows[0].c],
-      );
+      const dec = await client.query(`SELECT pgp_sym_decrypt($1::bytea, 'k') AS p`, [
+        enc.rows[0].c,
+      ]);
       expect(dec.rows[0].p).toBe('hello-world');
     } finally {
       client.release();
