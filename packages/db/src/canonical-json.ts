@@ -16,8 +16,12 @@ function toCanonical(value: unknown): unknown {
   const obj = value as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(obj).sort()) {
+    // k is a JSON property name being preserved (not a lookup index); output is
+    // a fresh object serialized immediately via JSON.stringify below.
+    // eslint-disable-next-line security/detect-object-injection
     const v = obj[k];
     if (v === undefined) continue;
+    // eslint-disable-next-line security/detect-object-injection
     out[k] = toCanonical(v);
   }
   return out;
