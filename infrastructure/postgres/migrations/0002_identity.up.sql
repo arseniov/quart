@@ -17,7 +17,6 @@ CREATE TABLE users (
 );
 
 CREATE TABLE user_identities (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider text NOT NULL CHECK (provider IN ('email', 'phone', 'google', 'apple', 'invite')),
   provider_subject text NOT NULL,
