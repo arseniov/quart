@@ -9,18 +9,18 @@ INSERT INTO topic_categories (id, code, name_i18n, sort_order, status) VALUES
   ('aaaaaaa1-0000-0000-0000-000000000004', 'culture',   '{"it":"Cultura","en":"Culture"}', 4, 'active')
 ON CONFLICT (id) DO NOTHING;
 
--- Top-level topics
+-- Top-level topics (seeded for Roma; tenants can clone/relabel for other cities)
 INSERT INTO topics (id, city_id, category_id, code, name_i18n, status) VALUES
-  ('bbbbbbb1-0000-0000-0000-000000000001', NULL,
+  ('bbbbbbb1-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222',
    'aaaaaaa1-0000-0000-0000-000000000001', 'roads',
    '{"it":"Strade","en":"Roads"}', 'active'),
-  ('bbbbbbb1-0000-0000-0000-000000000002', NULL,
+  ('bbbbbbb1-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
    'aaaaaaa1-0000-0000-0000-000000000001', 'public_transport',
    '{"it":"Trasporto pubblico","en":"Public transport"}', 'active'),
-  ('bbbbbbb1-0000-0000-0000-000000000003', NULL,
+  ('bbbbbbb1-0000-0000-0000-000000000003', '22222222-2222-2222-2222-222222222222',
    'aaaaaaa1-0000-0000-0000-000000000002', 'air_quality',
    '{"it":"Qualità dell''aria","en":"Air quality"}', 'active'),
-  ('bbbbbbb1-0000-0000-0000-000000000004', NULL,
+  ('bbbbbbb1-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222',
    'aaaaaaa1-0000-0000-0000-000000000003', 'road_safety',
    '{"it":"Sicurezza stradale","en":"Road safety"}', 'active')
 ON CONFLICT (id) DO NOTHING;
