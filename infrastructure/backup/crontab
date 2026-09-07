@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Nightly at 03:30 UTC
+30 3 * * * root /usr/local/bin/backup.sh >> /var/log/quart-backup.log 2>&1
