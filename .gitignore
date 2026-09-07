@@ -5,6 +5,10 @@ docs/
 .env*
 
 node_modules
+.turbo
+dist
+build
+coverage
 __pycache__
 .venv
 venv
