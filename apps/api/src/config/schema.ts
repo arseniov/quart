@@ -1,0 +1,33 @@
+import { z } from 'zod';
+
+export const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  DATABASE_URL: z.string().min(1),
+  VALKEY_URL: z.string().min(1),
+  MINIO_ENDPOINT: z.string().min(1),
+  MINIO_ACCESS_KEY: z.string().min(1),
+  MINIO_SECRET_KEY: z.string().min(1),
+  MINIO_BUCKET_PRIVATE: z.string().min(1),
+  MINIO_BUCKET_PUBLIC: z.string().min(1),
+
+  BETTER_AUTH_SECRET: z.string().min(32),
+  BETTER_AUTH_URL: z.string().url(),
+
+  JWT_SIGNING_KEY: z.string().min(32), // hex-encoded 32 bytes
+  JWT_ISSUER: z.string().min(1),
+
+  AUDIT_HMAC_KEY: z.string().regex(/^[0-9a-f]{64}$/i),
+
+  SENTRY_DSN: z.string().default(''),
+  SENTRY_ENVIRONMENT: z.string().default('development'),
+
+  QUART_ALLOW_FREE_TSA: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true'),
+  TSA_URL: z.string().url(),
+
+  LOG_LEVEL: z.string().default('info'),
+});
+
+export type Env = z.infer<typeof EnvSchema>;
