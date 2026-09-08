@@ -37,6 +37,19 @@ export const redactionPaths: readonly string[] = [
   '*.hmac_key',
   '*.signing_key',
   '*.better_auth_secret',
+  // PII — request body
+  'req.body.email',
+  'req.body.phone',
+  'req.body.location',
+  // PII — DB / object wildcard patterns
+  '*.email',
+  '*.phone_e164',
+  '*.phone',
+  '*.ip',
+  '*.user_agent',
+  '*.lat',
+  '*.lng',
+  '*.address',
 ];
 
 export function buildLoggerOptions(config: ConfigService): LoggerOptions {
