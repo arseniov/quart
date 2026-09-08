@@ -23,4 +23,20 @@ describe('ZodValidationPipe', () => {
   it('returns value unchanged when no schema provided', () => {
     expect(pipe.transform('x', { type: 'param', metatype: String, data: 'k' })).toBe('x');
   });
+
+  it('throws BadRequestException on missing required field', () => {
+    const schema = z.object({ name: z.string() });
+    const p = new ZodValidationPipe(schema);
+    expect(() =>
+      p.transform({}, { type: 'body', metatype: undefined, data: '' }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('throws BadRequestException on type mismatch', () => {
+    const schema = z.object({ count: z.number() });
+    const p = new ZodValidationPipe(schema);
+    expect(() =>
+      p.transform({ count: 'abc' }, { type: 'body', metatype: undefined, data: '' }),
+    ).toThrow(BadRequestException);
+  });
 });
