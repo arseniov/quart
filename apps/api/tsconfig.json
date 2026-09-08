@@ -1,0 +1,12 @@
+{
+  "extends": "@quart/config/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts"]
+}
