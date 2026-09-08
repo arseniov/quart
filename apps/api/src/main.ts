@@ -5,6 +5,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
+import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { ZodValidationPipe } from './common/zod-validation.pipe.js';
 import { ConfigService } from './config/config.service.js';
 
@@ -15,6 +16,7 @@ async function bootstrap(): Promise<void> {
   });
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ZodValidationPipe());
+  app.useGlobalFilters(new AllExceptionsFilter());
   const config = app.get(ConfigService);
   await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
 }
