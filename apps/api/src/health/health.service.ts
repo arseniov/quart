@@ -13,6 +13,16 @@ export interface ProbeResult {
   minio: ProbeStatus;
 }
 
+const PROBE_TIMEOUT_MS = 5000;
+
+const withTimeout = <T>(p: Promise<T>): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS),
+    ),
+  ]);
+
 // @Inject keeps constructor DI working under vitest's esbuild transformer,
 // which does not emit `design:paramtypes` metadata.
 @Injectable()
@@ -48,7 +58,7 @@ export class HealthService {
   private async checkPg(): Promise<ProbeStatus> {
     const db = createDb({ connectionString: this.config.env.DATABASE_URL });
     try {
-      await sql`select 1`.execute(db);
+      await withTimeout(sql`select 1`.execute(db));
       return 'ok';
     } catch {
       return 'down';
@@ -59,7 +69,7 @@ export class HealthService {
 
   private async checkValkey(): Promise<ProbeStatus> {
     try {
-      const pong = await this.redis.ping();
+      const pong = await withTimeout(this.redis.ping());
       return pong === 'PONG' ? 'ok' : 'down';
     } catch {
       return 'down';
@@ -68,7 +78,7 @@ export class HealthService {
 
   private async checkMinio(): Promise<ProbeStatus> {
     try {
-      const exists = await this.minio.bucketExists(this.bucket);
+      const exists = await withTimeout(this.minio.bucketExists(this.bucket));
       return exists ? 'ok' : 'down';
     } catch {
       return 'down';
