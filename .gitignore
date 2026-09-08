@@ -15,3 +15,27 @@ __pycache__
 .venv
 venv
 
+# Secrets mount dir (compose resolves ./secrets/* at runtime)
+infrastructure/secrets/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Tool caches
+.eslintcache
+.prettiercache
+
+# TypeScript incremental
+*.tsbuildinfo
