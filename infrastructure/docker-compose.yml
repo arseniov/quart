@@ -82,7 +82,7 @@ services:
     command:
       - |
         export DATABASE_URL="postgres://quart:$$(cat /run/secrets/pg_password)@pgbouncer:6432/quart"
-        exec node dist/migrate.js latest
+        exec node dist/index.js
     depends_on:
       pgbouncer: { condition: service_started }
     networks: [backend]

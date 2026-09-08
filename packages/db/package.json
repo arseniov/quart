@@ -8,10 +8,6 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
-    },
-    "./migrate": {
-      "types": "./src/migrate.ts",
-      "default": "./dist/migrate.js"
     }
   },
   "scripts": {
@@ -20,7 +16,6 @@
     "test": "vitest run --pool=forks",
     "test:integration": "vitest run --pool=forks src/tests/pii.test.ts",
     "lint": "eslint src",
-    "migrate": "tsx src/migrate.ts",
     "generate-types": "tsx scripts/generate-types.ts"
   },
   "dependencies": {

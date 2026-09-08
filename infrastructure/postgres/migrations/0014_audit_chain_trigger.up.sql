@@ -10,6 +10,10 @@
 --
 -- Concurrency: a per-city advisory xact_lock serializes chain appends so two
 -- concurrent INSERTs cannot fork the chain.
+--
+-- Trigger name: `audit_log_stamp_z_chain` — alphabetically after
+-- `audit_log_stamp_city` (0012) so city_id is populated from `app.city_id`
+-- GUC before the chain stamp reads NEW.city_id.
 
 SET search_path = public, quart_security;
 
@@ -42,9 +46,13 @@ BEGIN
   END IF;
 
   -- 3. Resolve the active HMAC key. Single global active key (no per-city keys).
+  -- ORDER BY version DESC ensures deterministic selection if multiple active rows
+  -- exist (defensive — invariant is one active row, but the trigger must not
+  -- produce non-reproducible hashes if a migration slip violates that).
   SELECT id, hmac_key_encrypted INTO active_key_id, active_key_bytes
   FROM quart_security.audit_key_versions
   WHERE status = 'active'
+  ORDER BY version DESC
   LIMIT 1;
 
   IF active_key_bytes IS NULL THEN
@@ -67,8 +75,8 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS audit_log_chain_stamp ON audit_log;
-CREATE TRIGGER audit_log_chain_stamp
+DROP TRIGGER IF EXISTS audit_log_stamp_z_chain ON audit_log;
+CREATE TRIGGER audit_log_stamp_z_chain
   BEFORE INSERT ON audit_log
   FOR EACH ROW
   EXECUTE FUNCTION quart_security.audit_log_chain_stamp();
