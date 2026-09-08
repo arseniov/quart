@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
 import { ConfigService } from './config/config.service.js';
@@ -11,12 +12,12 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
   });
+  app.useLogger(app.get(Logger));
   const config = app.get(ConfigService);
   await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
 }
 
 bootstrap().catch((err: unknown) => {
-   
   console.error('Fatal bootstrap error', err);
   process.exit(1);
 });
