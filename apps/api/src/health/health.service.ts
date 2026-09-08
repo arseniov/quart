@@ -1,0 +1,81 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { createDb, sql } from '@quart/db';
+import { Redis } from 'ioredis';
+import { Client as MinioClient } from 'minio';
+
+import { ConfigService } from '../config/config.service.js';
+
+export type ProbeStatus = 'ok' | 'down';
+
+export interface ProbeResult {
+  postgres: ProbeStatus;
+  valkey: ProbeStatus;
+  minio: ProbeStatus;
+}
+
+// @Inject keeps constructor DI working under vitest's esbuild transformer,
+// which does not emit `design:paramtypes` metadata.
+@Injectable()
+export class HealthService {
+  private readonly redis: Redis;
+  private readonly minio: MinioClient;
+  private readonly bucket: string;
+
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
+    this.redis = new Redis(config.env.VALKEY_URL, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    this.minio = new MinioClient({
+      endPoint: config.env.MINIO_ENDPOINT,
+      useSSL: false,
+      accessKey: config.env.MINIO_ACCESS_KEY,
+      secretKey: config.env.MINIO_SECRET_KEY,
+    });
+    this.bucket = config.env.MINIO_BUCKET_PRIVATE;
+  }
+
+  async probe(): Promise<ProbeResult> {
+    const [pg, vk, mn] = await Promise.all([
+      this.checkPg(),
+      this.checkValkey(),
+      this.checkMinio(),
+    ]);
+    return { postgres: pg, valkey: vk, minio: mn };
+  }
+
+  private async checkPg(): Promise<ProbeStatus> {
+    const db = createDb({ connectionString: this.config.env.DATABASE_URL });
+    try {
+      await sql`select 1`.execute(db);
+      return 'ok';
+    } catch {
+      return 'down';
+    } finally {
+      await db.destroy();
+    }
+  }
+
+  private async checkValkey(): Promise<ProbeStatus> {
+    try {
+      const pong = await this.redis.ping();
+      return pong === 'PONG' ? 'ok' : 'down';
+    } catch {
+      return 'down';
+    }
+  }
+
+  private async checkMinio(): Promise<ProbeStatus> {
+    try {
+      const exists = await this.minio.bucketExists(this.bucket);
+      return exists ? 'ok' : 'down';
+    } catch {
+      return 'down';
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.redis.disconnect();
+  }
+}
