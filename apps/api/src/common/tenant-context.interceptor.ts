@@ -36,9 +36,11 @@ function headerString(
 
 /**
  * Builds a `TenantContext` from the request-id middleware (`req.id`) and
- * the X-City-Id / X-User-Id / X-Is-Super-Admin headers. Returns `null`
- * when no tenant headers are present (passthrough) or when the only
- * candidate city id is malformed.
+ * the X-City-Id / X-User-Id / X-Is-Super-Admin headers. Requires a valid
+ * X-City-Id UUID as the gate — partial headers (e.g. only X-Is-Super-Admin)
+ * and missing city ids pass through with no context, since the 0011 RLS
+ * migration grants catalog write purely on `app.is_super_admin` without a
+ * city predicate.
  *
  * Phase 3 replaces this with a JwtAuthGuard that populates `req.tenant`
  * before the interceptor runs.
@@ -65,16 +67,15 @@ export class TenantContextInterceptor implements NestInterceptor {
     const userIdRaw = headerString(req.headers, 'x-user-id');
     const isSuperAdminRaw = headerString(req.headers, 'x-is-super-admin');
 
-    // No headers at all → passthrough. Downstream falls back to per-controller
-    // defaults (or rejects, depending on the route).
-    if (!cityId && !userIdRaw && !isSuperAdminRaw) return null;
-
-    // If any UUID-shaped header is present, it must be valid.
-    if (cityId && !UUID_RE.test(cityId)) return null;
+    // cityId is the gate. Without a valid UUID we never produce a context:
+    // partial headers (e.g. only X-Is-Super-Admin: true) must not be
+    // enough to escalate, because RLS grants catalog write purely on
+    // `app.is_super_admin` with no city predicate.
+    if (!cityId || !UUID_RE.test(cityId)) return null;
     if (userIdRaw && !UUID_RE.test(userIdRaw)) return null;
 
     return {
-      cityId: cityId ?? '',
+      cityId,
       userId: userIdRaw ?? null,
       isSuperAdmin: isSuperAdminRaw === 'true',
       requestId: req.id ?? '',
