@@ -39,21 +39,15 @@ class CaptureDriver implements Driver {
   }
 
   beginTransaction(conn: DatabaseConnection): Promise<void> {
-    return conn
-      .executeQuery(CompiledQuery.raw('begin'))
-      .then(() => undefined);
+    return conn.executeQuery(CompiledQuery.raw('begin')).then(() => undefined);
   }
 
   commitTransaction(conn: DatabaseConnection): Promise<void> {
-    return conn
-      .executeQuery(CompiledQuery.raw('commit'))
-      .then(() => undefined);
+    return conn.executeQuery(CompiledQuery.raw('commit')).then(() => undefined);
   }
 
   rollbackTransaction(conn: DatabaseConnection): Promise<void> {
-    return conn
-      .executeQuery(CompiledQuery.raw('rollback'))
-      .then(() => undefined);
+    return conn.executeQuery(CompiledQuery.raw('rollback')).then(() => undefined);
   }
 
   releaseConnection(): Promise<void> {
@@ -95,18 +89,10 @@ describe('runInTenantTx', () => {
     );
 
     expect(driver.calls[0]).toMatch(/begin/i);
-    expect(driver.calls.some((c) => c.includes('SET LOCAL app.city_id'))).toBe(
-      true,
-    );
-    expect(driver.calls.some((c) => c.includes('SET LOCAL app.user_id'))).toBe(
-      true,
-    );
-    expect(
-      driver.calls.some((c) => c.includes('SET LOCAL app.is_super_admin')),
-    ).toBe(true);
-    expect(driver.calls.some((c) => c.includes('SET LOCAL app.request_id'))).toBe(
-      true,
-    );
+    expect(driver.calls.some((c) => c.includes('SET LOCAL app.city_id'))).toBe(true);
+    expect(driver.calls.some((c) => c.includes('SET LOCAL app.user_id'))).toBe(true);
+    expect(driver.calls.some((c) => c.includes('SET LOCAL app.is_super_admin'))).toBe(true);
+    expect(driver.calls.some((c) => c.includes('SET LOCAL app.request_id'))).toBe(true);
     expect(driver.calls[driver.calls.length - 1]).toMatch(/commit/i);
   });
 

@@ -27,9 +27,9 @@ describe('ZodValidationPipe', () => {
   it('throws BadRequestException on missing required field', () => {
     const schema = z.object({ name: z.string() });
     const p = new ZodValidationPipe(schema);
-    expect(() =>
-      p.transform({}, { type: 'body', metatype: undefined, data: '' }),
-    ).toThrow(BadRequestException);
+    expect(() => p.transform({}, { type: 'body', metatype: undefined, data: '' })).toThrow(
+      BadRequestException,
+    );
   });
 
   it('throws BadRequestException on type mismatch', () => {

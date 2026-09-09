@@ -10,9 +10,7 @@ import { LoggerModule } from './logger/logger.module.js';
 
 @Module({
   imports: [ConfigModule, LoggerModule, HealthModule, DbModule],
-  providers: [
-    { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
-  ],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

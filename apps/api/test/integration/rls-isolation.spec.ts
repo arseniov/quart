@@ -74,7 +74,9 @@ beforeAll(async () => {
   // Seed two cities. The bootstrap connection owns the tables and is a
   // superuser, so RLS doesn't apply to seeding.
   const seed = createDb({ connectionString: connectionUri });
-  await sql`INSERT INTO countries (id, code, name) VALUES (gen_random_uuid(), 'IT', 'Italia')`.execute(seed);
+  await sql`INSERT INTO countries (id, code, name) VALUES (gen_random_uuid(), 'IT', 'Italia')`.execute(
+    seed,
+  );
   // Allow the quart_app role to be assumed by anyone GRANTed.
   await sql`GRANT quart_app TO quart`.execute(seed);
 
@@ -130,30 +132,30 @@ afterAll(async () => {
 });
 
 describe('RLS isolation via runInTenantTx', () => {
-    const ctx = (cityId: string, isSuperAdmin: boolean): TenantContext => ({
-      cityId,
-      userId: '00000000-0000-0000-0000-000000000000',
-      isSuperAdmin,
-      requestId: 'rls-isolation-test',
-    });
+  const ctx = (cityId: string, isSuperAdmin: boolean): TenantContext => ({
+    cityId,
+    userId: '00000000-0000-0000-0000-000000000000',
+    isSuperAdmin,
+    requestId: 'rls-isolation-test',
+  });
 
-    it('city A scope reads only city A issues', async () => {
-      const db = createDb(dbOptions());
-      const rows = await runInTenantTx(db, ctx(cityAId, false), async (trx) =>
-        trx.selectFrom('issues').selectAll().execute(),
-      );
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((r) => r.city_id === cityAId)).toBe(true);
-      await db.destroy();
-    });
+  it('city A scope reads only city A issues', async () => {
+    const db = createDb(dbOptions());
+    const rows = await runInTenantTx(db, ctx(cityAId, false), async (trx) =>
+      trx.selectFrom('issues').selectAll().execute(),
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.city_id === cityAId)).toBe(true);
+    await db.destroy();
+  });
 
-    it('city B scope reads only city B issues', async () => {
-      const db = createDb(dbOptions());
-      const rows = await runInTenantTx(db, ctx(cityBId, false), async (trx) =>
-        trx.selectFrom('issues').selectAll().execute(),
-      );
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((r) => r.city_id === cityBId)).toBe(true);
-      await db.destroy();
-    });
+  it('city B scope reads only city B issues', async () => {
+    const db = createDb(dbOptions());
+    const rows = await runInTenantTx(db, ctx(cityBId, false), async (trx) =>
+      trx.selectFrom('issues').selectAll().execute(),
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.city_id === cityBId)).toBe(true);
+    await db.destroy();
+  });
 });

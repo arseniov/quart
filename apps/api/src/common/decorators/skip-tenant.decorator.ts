@@ -8,5 +8,4 @@ export const SKIP_TENANT = 'skip_tenant';
  * Used for routes that run before auth is wired (e.g. /health, /login) —
  * the global `TenantContextInterceptor` will leave `req.tenant` unset.
  */
-export const SkipTenant = (): MethodDecorator & ClassDecorator =>
-  SetMetadata(SKIP_TENANT, true);
+export const SkipTenant = (): MethodDecorator & ClassDecorator => SetMetadata(SKIP_TENANT, true);

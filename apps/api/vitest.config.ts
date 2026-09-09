@@ -22,9 +22,7 @@ function decoratorMetadataPlugin(): Plugin {
     resolve(configFile, '..'),
   );
   if (!parsed.options.emitDecoratorMetadata) {
-    throw new Error(
-      'apps/api/tsconfig.json must have emitDecoratorMetadata: true',
-    );
+    throw new Error('apps/api/tsconfig.json must have emitDecoratorMetadata: true');
   }
   // Force ESM output regardless of tsconfig module so transpileModule never
   // emits require() into a type:module package.
@@ -58,10 +56,6 @@ export default defineConfig({
     // Integration + e2e suites spin up Docker via testcontainers and are run
     // via dedicated scripts (`test:integration`, `test:e2e`). The default
     // `pnpm test` run is unit-only and must not require Docker.
-    exclude: [
-      '**/node_modules/**',
-      'test/integration/**',
-      'test/e2e/**',
-    ],
+    exclude: ['**/node_modules/**', 'test/integration/**', 'test/e2e/**'],
   },
 });

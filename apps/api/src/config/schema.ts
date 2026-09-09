@@ -22,9 +22,7 @@ export const EnvSchema = z.object({
   SENTRY_DSN: z.string().default(''),
   SENTRY_ENVIRONMENT: z.string().default('development'),
 
-  QUART_ALLOW_FREE_TSA: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true'),
+  QUART_ALLOW_FREE_TSA: z.enum(['true', 'false']).transform((v) => v === 'true'),
   TSA_URL: z.string().url(),
 
   LOG_LEVEL: z.string().default('info'),

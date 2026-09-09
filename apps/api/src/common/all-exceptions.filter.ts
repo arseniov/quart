@@ -34,9 +34,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const res = ctx.getResponse<FastifyLikeReply>();
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const body = this.buildBody(exception, req);
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {

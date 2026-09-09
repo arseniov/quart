@@ -19,9 +19,7 @@ const PROBE_TIMEOUT_MS = 5000;
 const withTimeout = <T>(p: Promise<T>): Promise<T> =>
   Promise.race([
     p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS),
-    ),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS)),
   ]);
 
 @Injectable()
@@ -46,11 +44,7 @@ export class HealthService {
   }
 
   async probe(): Promise<ProbeResult> {
-    const [pg, vk, mn] = await Promise.all([
-      this.checkPg(),
-      this.checkValkey(),
-      this.checkMinio(),
-    ]);
+    const [pg, vk, mn] = await Promise.all([this.checkPg(), this.checkValkey(), this.checkMinio()]);
     return { postgres: pg, valkey: vk, minio: mn };
   }
 
