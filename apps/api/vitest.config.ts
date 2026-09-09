@@ -55,5 +55,13 @@ export default defineConfig({
   plugins: [decoratorMetadataPlugin()],
   test: {
     pool: 'forks',
+    // Integration + e2e suites spin up Docker via testcontainers and are run
+    // via dedicated scripts (`test:integration`, `test:e2e`). The default
+    // `pnpm test` run is unit-only and must not require Docker.
+    exclude: [
+      '**/node_modules/**',
+      'test/integration/**',
+      'test/e2e/**',
+    ],
   },
 });

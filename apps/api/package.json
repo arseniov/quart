@@ -54,6 +54,7 @@
     "@nestjs/cli": "10.4.7",
     "@nestjs/testing": "10.4.6",
     "@quart/config": "workspace:*",
+    "@testcontainers/postgresql": "11.14.0",
     "@types/node": "22.10.2",
     "@types/pg": "8.11.10",
     "@types/supertest": "6.0.2",
