@@ -1,6 +1,9 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 
-import type { HealthService } from './health.service.js';
+// Value (not `import type`) so vitest's decorator-metadata plugin can emit
+// `design:paramtypes` for the constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { HealthService } from './health.service.js';
 
 interface ReplyLike {
   status(code: number): unknown;

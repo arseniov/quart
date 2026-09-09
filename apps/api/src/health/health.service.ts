@@ -1,8 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { createDb, sql } from '@quart/db';
 import { Redis } from 'ioredis';
 import { Client as MinioClient } from 'minio';
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ConfigService } from '../config/config.service.js';
 
 export type ProbeStatus = 'ok' | 'down';
@@ -23,15 +24,13 @@ const withTimeout = <T>(p: Promise<T>): Promise<T> =>
     ),
   ]);
 
-// @Inject keeps constructor DI working under vitest's esbuild transformer,
-// which does not emit `design:paramtypes` metadata.
 @Injectable()
 export class HealthService {
   private readonly redis: Redis;
   private readonly minio: MinioClient;
   private readonly bucket: string;
 
-  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
+  constructor(private readonly config: ConfigService) {
     this.redis = new Redis(config.env.VALKEY_URL, {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
