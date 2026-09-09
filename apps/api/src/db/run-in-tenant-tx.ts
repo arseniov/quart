@@ -22,16 +22,12 @@ export async function runInTenantTx<DB, T>(
 ): Promise<T> {
   return db.transaction().execute(async (trx) => {
     await sql`SET LOCAL ROLE quart_app`.execute(trx);
-    await sql`SET LOCAL app.city_id = ${sql.literal(ctx.cityId)}`.execute(trx);
-    await sql`SET LOCAL app.user_id = ${sql.literal(ctx.userId ?? '')}`.execute(
-      trx,
-    );
+    await sql`SET LOCAL app.city_id = ${ctx.cityId}`.execute(trx);
+    await sql`SET LOCAL app.user_id = ${ctx.userId ?? ''}`.execute(trx);
     await sql`SET LOCAL app.is_super_admin = ${ctx.isSuperAdmin ? 'true' : 'false'}`.execute(
       trx,
     );
-    await sql`SET LOCAL app.request_id = ${sql.literal(ctx.requestId)}`.execute(
-      trx,
-    );
+    await sql`SET LOCAL app.request_id = ${ctx.requestId}`.execute(trx);
     return fn(trx);
   });
 }
