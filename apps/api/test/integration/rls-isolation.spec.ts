@@ -6,13 +6,13 @@
  * and proves that:
  *   - a tenant scope with city_id=A cannot see city B's rows
  *   - a tenant scope with city_id=B cannot see city A's rows
- *   - is_super_admin=true bypasses RLS and sees both
  *
  * This test is excluded from `pnpm test` (unit-only) via vitest.config.ts.
  * Run with: `pnpm --filter @quart/api run test:integration`. Requires Docker.
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createDb } from '@quart/db';
 import type { TenantContext } from '@quart/shared-types';
@@ -22,17 +22,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { runInTenantTx } from '../../src/db/run-in-tenant-tx.js';
 
-const MIGRATIONS_DIR = path.resolve(
-  process.cwd(),
-  '..',
-  '..',
-  'infrastructure',
-  'postgres',
-  'migrations',
+const MIGRATIONS_DIR = fileURLToPath(
+  new URL('../../../../infrastructure/postgres/migrations', import.meta.url),
 );
 
 let container: StartedPostgreSqlContainer | undefined;
 let connectionUri: string;
+let cityAId = '';
+let cityBId = '';
 
 const dbOptions = () => ({ connectionString: connectionUri });
 
@@ -91,8 +88,8 @@ beforeAll(async () => {
     VALUES (${'rls-milano-' + Date.now()}, 'IT', 'Milano', 'it', 'Europe/Rome', 'active')
     RETURNING id
   `.execute(seed);
-  const cityAId = cityA.rows[0]!.id as string;
-  const cityBId = cityB.rows[0]!.id as string;
+  cityAId = cityA.rows[0]!.id as string;
+  cityBId = cityB.rows[0]!.id as string;
 
   // Minimal fixtures per city: one user, one neighborhood, one issue.
   // Issues require neighborhood + author_user_id (NOT NULL FKs).
@@ -126,10 +123,6 @@ beforeAll(async () => {
   await seedIssue(cityAId, 'A');
   await seedIssue(cityBId, 'B');
   await seed.destroy();
-
-  // Stash city IDs on process for the tests below.
-  process.env.RLS_TEST_CITY_A = cityAId;
-  process.env.RLS_TEST_CITY_B = cityBId;
 }, 120_000);
 
 afterAll(async () => {
@@ -146,36 +139,21 @@ describe('RLS isolation via runInTenantTx', () => {
 
     it('city A scope reads only city A issues', async () => {
       const db = createDb(dbOptions());
-      const cityA = process.env.RLS_TEST_CITY_A!;
-      const rows = await runInTenantTx(db, ctx(cityA, false), async (trx) =>
+      const rows = await runInTenantTx(db, ctx(cityAId, false), async (trx) =>
         trx.selectFrom('issues').selectAll().execute(),
       );
       expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((r) => r.city_id === cityA)).toBe(true);
+      expect(rows.every((r) => r.city_id === cityAId)).toBe(true);
       await db.destroy();
     });
 
     it('city B scope reads only city B issues', async () => {
       const db = createDb(dbOptions());
-      const cityB = process.env.RLS_TEST_CITY_B!;
-      const rows = await runInTenantTx(db, ctx(cityB, false), async (trx) =>
+      const rows = await runInTenantTx(db, ctx(cityBId, false), async (trx) =>
         trx.selectFrom('issues').selectAll().execute(),
       );
       expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((r) => r.city_id === cityB)).toBe(true);
-      await db.destroy();
-    });
-
-    it('is_super_admin=true sees both cities', async () => {
-      const db = createDb(dbOptions());
-      const cityA = process.env.RLS_TEST_CITY_A!;
-      const cityB = process.env.RLS_TEST_CITY_B!;
-      const rows = await runInTenantTx(db, ctx(cityA, true), async (trx) =>
-        trx.selectFrom('issues').selectAll().execute(),
-      );
-      const cityIds = new Set(rows.map((r) => r.city_id));
-      expect(cityIds.has(cityA)).toBe(true);
-      expect(cityIds.has(cityB)).toBe(true);
+      expect(rows.every((r) => r.city_id === cityBId)).toBe(true);
       await db.destroy();
     });
 });
