@@ -1,12 +1,8 @@
-import type { Kysely, Transaction} from 'kysely';
+import type { TenantContext } from '@quart/shared-types';
+import type { Kysely, Transaction } from 'kysely';
 import { sql } from 'kysely';
 
-export interface TenantContext {
-  cityId: string;
-  userId: string | null;
-  isSuperAdmin: boolean;
-  requestId: string;
-}
+export type { TenantContext };
 
 /**
  * Runs `fn` inside a Postgres transaction with per-request RLS settings
