@@ -19,7 +19,7 @@ describe('AppModule', () => {
         MINIO_BUCKET_PUBLIC: 'quart-public',
         BETTER_AUTH_SECRET: 'a'.repeat(32),
         BETTER_AUTH_URL: 'http://localhost:3000',
-        JWT_SIGNING_KEY: 'b'.repeat(32),
+        JWT_SIGNING_KEY: 'b'.repeat(64),
         JWT_ISSUER: 'quart.app',
         AUDIT_HMAC_KEY: 'c'.repeat(64),
         SENTRY_DSN: '',

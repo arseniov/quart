@@ -14,7 +14,9 @@ export const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
 
-  JWT_SIGNING_KEY: z.string().min(32), // hex-encoded 32 bytes
+  JWT_SIGNING_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, 'Ed25519 hex key expected (64 hex chars = 32 bytes)'),
   JWT_ISSUER: z.string().min(1),
 
   AUDIT_HMAC_KEY: z.string().regex(/^[0-9a-f]{64}$/i),
