@@ -10,14 +10,12 @@
  * This test is excluded from `pnpm test` (unit-only) via vitest.config.ts.
  * Run with: `pnpm --filter @quart/api run test:integration`. Requires Docker.
  */
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createDb } from '@quart/db';
+import { createDb, SqlFileMigrationProvider } from '@quart/db';
 import type { TenantContext } from '@quart/shared-types';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { FileMigrationProvider, Migrator, sql } from 'kysely';
+import { Migrator, sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { runInTenantTx } from '../../src/db/run-in-tenant-tx.js';
@@ -59,11 +57,7 @@ beforeAll(async () => {
 
   // Apply the RLS-critical migrations 0001-0014 via Kysely's Migrator.
   const db = createDb({ connectionString: connectionUri });
-  const provider = new FileMigrationProvider({
-    fs,
-    path,
-    migrationFolder: MIGRATIONS_DIR,
-  });
+  const provider = new SqlFileMigrationProvider(MIGRATIONS_DIR);
   const migrator = new Migrator({ db, provider });
   const result = await migrator.migrateToLatest();
   if (result.error) throw result.error;

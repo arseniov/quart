@@ -1,8 +1,7 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { createDb } from '@quart/db';
-import { Migrator, FileMigrationProvider } from 'kysely';
+import { createDb, SqlFileMigrationProvider } from '@quart/db';
+import { Migrator } from 'kysely';
 
 const migrationsDir =
   process.env.QUART_MIGRATIONS_DIR ??
@@ -14,7 +13,7 @@ if (!url) throw new Error('DATABASE_URL is required');
 
 const db = createDb({ connectionString: url });
 
-const provider = new FileMigrationProvider({ fs, path, migrationFolder: migrationsDir });
+const provider = new SqlFileMigrationProvider(migrationsDir);
 const migrator = new Migrator({ db, provider });
 
 const result = await migrator.migrateToLatest();
