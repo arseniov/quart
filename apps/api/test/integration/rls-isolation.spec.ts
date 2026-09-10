@@ -158,4 +158,17 @@ describe('RLS isolation via runInTenantTx', () => {
     expect(rows.every((r) => r.city_id === cityBId)).toBe(true);
     await db.destroy();
   });
+
+  it('is_super_admin=true reads across cities (0015 bypass)', async () => {
+    const db = createDb(dbOptions());
+    const rows = await runInTenantTx(
+      db,
+      { cityId: cityAId, userId: '00000000-0000-0000-0000-000000000000', isSuperAdmin: true, requestId: 'rls-isolation-test' },
+      async (trx) => trx.selectFrom('issues').selectAll().execute(),
+    );
+    const cityIds = new Set(rows.map((r) => r.city_id));
+    expect(cityIds.has(cityAId)).toBe(true);
+    expect(cityIds.has(cityBId)).toBe(true);
+    await db.destroy();
+  });
 });
