@@ -15,7 +15,7 @@ SET search_path = public, quart_security;
 -- City-scoped tables (carry their own city_id column)
 -- ============================================================================
 DO $$
-DECLARE t text;
+DECLARE t text; col text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'city_areas','neighborhoods','user_neighborhoods',
@@ -26,15 +26,16 @@ BEGIN
     'pii_key_versions',
     'notifications','push_subscriptions'
   ] LOOP
+    col := CASE WHEN t = 'users' THEN 'default_city_id' ELSE 'city_id' END;
     EXECUTE format('DROP POLICY IF EXISTS %I_scope ON %I', t, t);
     EXECUTE format($p$
       CREATE POLICY %I_scope ON %I
         FOR ALL TO quart_app
-        USING      (city_id::text = current_setting('app.city_id', true)
+        USING      (%I::text = current_setting('app.city_id', true)
                     OR current_setting('app.is_super_admin', true) = 'true')
-        WITH CHECK (city_id::text = current_setting('app.city_id', true)
+        WITH CHECK (%I::text = current_setting('app.city_id', true)
                     OR current_setting('app.is_super_admin', true) = 'true')
-    $p$, t, t);
+    $p$, t, t, col, col);
   END LOOP;
 END $$;
 
@@ -45,6 +46,7 @@ END $$;
 -- issue_photos → issues
 ALTER TABLE issue_photos        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE issue_photos        FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS issue_photos_scope ON issue_photos;
 CREATE POLICY issue_photos_scope ON issue_photos FOR ALL TO quart_app
   USING (current_setting('app.is_super_admin', true) = 'true'
          OR EXISTS (
@@ -60,6 +62,7 @@ CREATE POLICY issue_photos_scope ON issue_photos FOR ALL TO quart_app
 -- issue_events → issues
 ALTER TABLE issue_events        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE issue_events        FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS issue_events_scope ON issue_events;
 CREATE POLICY issue_events_scope ON issue_events FOR ALL TO quart_app
   USING (current_setting('app.is_super_admin', true) = 'true'
          OR EXISTS (
@@ -75,6 +78,7 @@ CREATE POLICY issue_events_scope ON issue_events FOR ALL TO quart_app
 -- poll_options → polls
 ALTER TABLE poll_options         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE poll_options         FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS poll_options_scope ON poll_options;
 CREATE POLICY poll_options_scope ON poll_options FOR ALL TO quart_app
   USING (current_setting('app.is_super_admin', true) = 'true'
          OR EXISTS (
@@ -90,6 +94,7 @@ CREATE POLICY poll_options_scope ON poll_options FOR ALL TO quart_app
 -- comment_reactions → comments
 ALTER TABLE comment_reactions         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comment_reactions         FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS comment_reactions_scope ON comment_reactions;
 CREATE POLICY comment_reactions_scope ON comment_reactions FOR ALL TO quart_app
   USING (current_setting('app.is_super_admin', true) = 'true'
          OR EXISTS (
@@ -105,6 +110,7 @@ CREATE POLICY comment_reactions_scope ON comment_reactions FOR ALL TO quart_app
 -- notification_deliveries → notifications
 ALTER TABLE notification_deliveries         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_deliveries         FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notification_deliveries_scope ON notification_deliveries;
 CREATE POLICY notification_deliveries_scope ON notification_deliveries FOR ALL TO quart_app
   USING (current_setting('app.is_super_admin', true) = 'true'
          OR EXISTS (
