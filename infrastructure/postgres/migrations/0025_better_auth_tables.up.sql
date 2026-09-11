@@ -12,6 +12,8 @@ CREATE TABLE "user" (
   email text NOT NULL UNIQUE,
   "emailVerified" boolean NOT NULL DEFAULT false,
   image text,
+  "phoneNumber" text UNIQUE,
+  "phoneNumberVerified" boolean NOT NULL DEFAULT false,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
@@ -46,6 +48,10 @@ CREATE TABLE "account" (
 );
 
 CREATE INDEX account_user_id_idx ON "account"("userId");
+
+-- Better Auth's OAuth linkAccount flow looks up by (providerId, accountId);
+-- without this index every OAuth sign-in does a sequential scan.
+CREATE INDEX account_provider_account_idx ON "account"("providerId", "accountId");
 
 CREATE TABLE "verification" (
   id text PRIMARY KEY,
