@@ -36,7 +36,15 @@ export class AuthController {
     }
     const response = await this.auth.instance.handler(new Request('http://internal' + url, init));
     res.status(response.status);
-    response.headers.forEach((value, key) => res.header(key, value));
+    // Multi-value Set-Cookie must be forwarded as an array; res.header() replaces.
+    const setCookies = response.headers.getSetCookie();
+    if (setCookies.length > 0) {
+      res.header('set-cookie', setCookies);
+    }
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'set-cookie') return; // already handled above
+      res.header(key, value);
+    });
     res.send(await response.text());
   }
 }
