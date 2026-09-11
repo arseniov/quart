@@ -18,7 +18,10 @@ export class SqlFileMigrationProvider implements MigrationProvider {
   constructor(private readonly migrationsDir: string) {}
 
   async getMigrations(): Promise<Record<string, Migration>> {
-    const entries = await fs.readdir(this.migrationsDir);
+    // fs.readdir order is filesystem-specific (not alphabetical). Sort so the
+    // returned Record iterates alphabetically — Kysely validates
+    // kysely_migration rows alphabetically on subsequent runs.
+    const entries = (await fs.readdir(this.migrationsDir)).sort();
     const out: Record<string, Migration> = {};
 
     for (const entry of entries) {
