@@ -37,6 +37,7 @@ export const redactionPaths: readonly string[] = [
   '*.hmac_key',
   '*.signing_key',
   '*.better_auth_secret',
+  '*.BETTER_AUTH_SECRET',
   // PII — request body
   'req.body.email',
   'req.body.phone',
