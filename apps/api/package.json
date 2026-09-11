@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --pool=forks",
     "test:watch": "vitest",
-    "test:integration": "vitest run --pool=forks test/integration",
+    "test:integration": "vitest run --mode=integration --pool=forks test/integration",
     "lint": "eslint src test",
-    "test:e2e": "vitest run --pool=forks test/e2e"
+    "test:e2e": "vitest run --mode=e2e --pool=forks test/e2e"
   },
   "dependencies": {
     "@fastify/cookie": "9.4.0",
