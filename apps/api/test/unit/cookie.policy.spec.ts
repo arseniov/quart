@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mobileApiCookieName, adminCookieName, buildCookieAttrs } from '../../src/auth/cookie.policy.js';
+import { mobileApiCookieName, adminCookieName, buildCookieAttrs, cookieNameFor } from '../../src/auth/cookie.policy.js';
 
 describe('cookie.policy', () => {
   it('returns distinct names for mobile vs admin (no shared namespace)', () => {
@@ -17,5 +17,7 @@ describe('cookie.policy', () => {
     expect(m.httpOnly).toBe(true);
     expect(m.secure).toBe(true);
     expect(m.path).toBe('/');
+    expect(cookieNameFor('mobile')).toBe('__Host-quart-api-session');
+    expect(cookieNameFor('admin')).toBe('__Host-quart-admin-session');
   });
 });
