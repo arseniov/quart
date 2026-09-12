@@ -110,15 +110,21 @@ describe('MfaController', () => {
 
     it('returns 200 with verified=true when TOTP matches', async () => {
       const mfa = makeMfa({ verifyTotp: vi.fn(async () => true) });
-      const c = new MfaController(mfa, makeJwt());
+      const jwt = makeJwt();
+      const c = new MfaController(mfa, jwt);
       const r = await c.verify({ totp_code: '123456' }, makeReq({
         id: 'u-1',
         cityId: 'c-1',
         isSuperAdmin: false,
         roleSnapshot: [],
         mfaSecret: 'JBSWY3DPEHPK3PXP',
+        mfaEnrolledAt: Date.now() - 60_000,
       }) as never);
-      expect(r).toEqual({ verified: true });
+      expect(r.verified).toBe(true);
+      expect(typeof r.token).toBe('string');
+      const claims = await jwt.verify(r.token!);
+      expect(typeof claims.mfaVerifiedAt).toBe('number');
+      expect(Date.now() - (claims.mfaVerifiedAt as number)).toBeLessThan(5_000);
       expect(mfa.verifyTotp).toHaveBeenCalledWith('u-1', 'c-1', 'JBSWY3DPEHPK3PXP', '123456');
     });
 

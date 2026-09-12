@@ -6,10 +6,13 @@ export interface AuthUser {
   isSuperAdmin: boolean;
   roleSnapshot: string[];
   // T17: TOTP secret + enroll timestamp carried in the JWT after enrollment.
+  // T18: `mfaVerifiedAt` is stamped by /verify and gates officer endpoints
+  // (MfaGuard's 5-min freshness window).
   // `undefined` pre-enrollment, populated post-enrollment once MfaService
   // re-mints the bearer.
   mfaSecret?: string;
   mfaEnrolledAt?: number;
+  mfaVerifiedAt?: number;
 }
 
 const currentUserFactory = (_data: unknown, ctx: ExecutionContext): AuthUser | null => {

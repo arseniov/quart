@@ -184,8 +184,10 @@ export class JwtAuthGuard implements CanActivate {
     // T17: optional TOTP claims populated by MfaService after enrollment.
     // `mfaSecret` is base32-encoded; `mfaEnrolledAt` is epoch-ms. Spread
     // to satisfy `exactOptionalPropertyTypes`.
+    // T18: `mfaVerifiedAt` is stamped by /verify and gates officer endpoints.
     if (claims.mfaSecret !== undefined) user.mfaSecret = claims.mfaSecret;
     if (claims.mfaEnrolledAt !== undefined) user.mfaEnrolledAt = claims.mfaEnrolledAt;
+    if (claims.mfaVerifiedAt !== undefined) user.mfaVerifiedAt = claims.mfaVerifiedAt;
     const tenant: TenantContext = {
       cityId: claims.city_id,
       userId: claims.sub,

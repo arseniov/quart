@@ -72,7 +72,7 @@ export class MfaController {
   async verify(
     @Body() body: z.infer<typeof VerifySchema>,
     @Req() req: ReqWithAuth,
-  ): Promise<{ verified: boolean }> {
+  ): Promise<{ verified: boolean; token?: string }> {
     const user = req.user;
     if (!user.mfaSecret) {
       throw new UnauthorizedException({
@@ -85,7 +85,28 @@ export class MfaController {
       user.mfaSecret,
       body.totp_code,
     );
-    return { verified: ok };
+    if (!ok) return { verified: false };
+
+    // Re-mint the bearer with mfaVerifiedAt so the MfaGuard's 5-minute
+    // freshness window starts now. Pattern matches /enroll: spread all
+    // claims, attach the new timestamp, mint a fresh jti.
+    const mfaVerifiedAt = Date.now();
+    const claims: Parameters<JwtService['sign']>[0] = {
+      sub: user.id,
+      city_id: user.cityId,
+      scope_type: 'city',
+      scope_id: user.cityId,
+      role_snapshot: user.roleSnapshot,
+      device_fingerprint: null,
+      mfaSecret: user.mfaSecret,
+      mfaVerifiedAt,
+    };
+    if (user.mfaEnrolledAt !== undefined) claims.mfaEnrolledAt = user.mfaEnrolledAt;
+    const token = await this.jwt.sign(claims, {
+      jti: randomUUID(),
+      ttlSeconds: 60 * 60 * 24,
+    });
+    return { verified: true, token };
   }
 
   @Post('backup-code')

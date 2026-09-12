@@ -20,9 +20,12 @@ export interface JwtClaims {
   // T17: TOTP secret (base32) carried in the verified JWT after MFA
   // enrollment. `mfaEnrolledAt` is the ISO timestamp of the enroll call,
   // so consumers can tell a freshly enrolled factor from an old one.
-  // Both claims are optional — pre-enrollment tokens omit them.
+  // T18: `mfaVerifiedAt` is stamped on /verify so the MfaGuard can gate
+  // officer endpoints on a 5-minute freshness window.
+  // All three claims are optional — pre-enrollment tokens omit them.
   mfaSecret?: string;
   mfaEnrolledAt?: number;
+  mfaVerifiedAt?: number;
 }
 
 export interface SignOptions {
