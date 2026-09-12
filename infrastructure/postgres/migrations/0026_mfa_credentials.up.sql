@@ -27,7 +27,13 @@ CREATE TABLE mfa_credentials (
   last_used_step timestamptz
 );
 
-CREATE INDEX mfa_credentials_user_id_idx ON mfa_credentials(user_id);
+-- Composite unique index serves both the enrollment upsert
+-- (Kysely `onConflict((oc) => oc.column('user_id')…)` requires a unique
+-- target) AND equality lookups in verify/consume, since Postgres uses a
+-- unique index for non-unique scans too. Composite on (user_id, type)
+-- reserves room for future non-totp credential types (e.g. webauthn)
+-- that share a user_id but a different `type` value.
+CREATE UNIQUE INDEX mfa_credentials_user_id_uniq ON mfa_credentials(user_id, type);
 
 -- ============================================================================
 -- RLS — city-scoped + owner-only (matches the 0016 pattern).
