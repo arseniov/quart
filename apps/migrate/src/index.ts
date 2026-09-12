@@ -122,6 +122,27 @@ for (let pass = 0; pass < MAX_PASSES; pass += 1) {
 
 const finalExecuted = await getExecuted(db as AnyDb);
 
+// ponytail: a migration that fails on the first pass (e.g. 0021 hitting a
+// CHECK constraint that 0024 widens) is inserted in `kysely_migration` only
+// when it eventually succeeds — so rows end up in INSERT order, not name
+// order. Kysely's Migrator validates name order at the start of every run,
+// which would otherwise reject the table. Re-sort at the end.
+if (finalExecuted.size > 1) {
+  const sortedNames = [...finalExecuted].sort();
+  await (db as AnyDb).transaction().execute(async (trx) => {
+    await (trx as unknown as AnyDb)
+      .executeQuery(
+        CompiledQuery.raw('DELETE FROM kysely_migration'),
+      );
+    for (const name of sortedNames) {
+      await (trx as unknown as AnyDb)
+        .insertInto('kysely_migration')
+        .values({ name, timestamp: new Date().toISOString() })
+        .execute();
+    }
+  });
+}
+
 if (failures.size > 0) {
   process.stderr.write(`\n✗ ${failures.size} migration(s) failed:\n`);
   for (const [name, message] of failures) {

@@ -35,13 +35,18 @@ describe('AuthService Kysely adapter (integration)', () => {
 
   it('signs up, persists the user, and re-reads via the adapter', async () => {
     const email = `x-${Date.now()}-${Math.random().toString(36).slice(2)}-${process.pid}@example.com`;
-    const svc = new AuthService({
-      env: {
-        BETTER_AUTH_SECRET: 'a'.repeat(32),
-        BETTER_AUTH_URL: 'http://localhost:3000',
-        DATABASE_URL: connectionUri,
-      },
-    } as never);
+    const svc = new AuthService(
+      {
+        env: {
+          BETTER_AUTH_SECRET: 'a'.repeat(32),
+          BETTER_AUTH_URL: 'http://localhost:3000',
+          DATABASE_URL: connectionUri,
+        },
+      } as never,
+      // ponytail: kysely isn't used in the sign-up flow's adapter (BA builds
+      // its own internal calls) — passing a fresh handle keeps DI happy.
+      { kysely: createDb({ connectionString: connectionUri }) } as never,
+    );
 
     const result = await svc.instance.api.signUpEmail({
       body: { email, password: 'password123', name: 'X' },
