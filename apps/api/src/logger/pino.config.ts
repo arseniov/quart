@@ -41,11 +41,13 @@ export const redactionPaths: readonly string[] = [
   // PII — request body
   'req.body.email',
   'req.body.phone',
+  'req.body.phoneNumber',
   'req.body.location',
   // PII — DB / object wildcard patterns
   '*.email',
   '*.phone_e164',
   '*.phone',
+  '*.phoneNumber',
   '*.ip',
   '*.user_agent',
   '*.lat',
