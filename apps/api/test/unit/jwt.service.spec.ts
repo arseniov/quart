@@ -54,4 +54,15 @@ describe('JwtService', () => {
     );
     await expect(svcB.verify(token)).rejects.toThrow();
   });
+
+  it('rejects an expired token', async () => {
+    const svc = new JwtService({
+      env: { JWT_SIGNING_KEY: privHex, JWT_ISSUER: 'quart.app' },
+    } as never);
+    const token = await svc.sign(
+      { sub: 'u', city_id: 'c', scope_type: 'city', scope_id: 'c', role_snapshot: [], device_fingerprint: null },
+      { jti: 'j', ttlSeconds: -1 },
+    );
+    await expect(svc.verify(token)).rejects.toThrow(/exp|expir/i);
+  });
 });

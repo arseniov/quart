@@ -26,8 +26,7 @@ export interface SignOptions {
 
 export type VerifiedJwt = JWTPayload & JwtClaims;
 
-// RFC 8410 PKCS#8 prefix for an Ed25519 private key (30 bytes), immediately
-// followed by the 32-byte seed. Wrapping the raw seed lets us hand Node a
+// RFC 8410 PKCS#8 prefix for an Ed25519 private key (16 bytes), immediately followed by the 32-byte seed. Wrapping the raw seed lets us hand Node a
 // real `KeyObject` instead of an OKP JWK, which `jose` does not accept for
 // sign() (it requires both `d` and `x`). Public `x` is then derived via
 // `createPublicKey()` for the JWK `jose` does accept.
