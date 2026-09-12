@@ -12,12 +12,29 @@ import { TenantContextInterceptor } from './common/tenant-context.interceptor.js
 import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
+import { IdeasModule } from './ideas/ideas.module.js';
+import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
+import { PollsModule } from './polls/polls.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { TopicsModule } from './topics/topics.module.js';
 
 @Module({
-  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule, RbacModule, CitiesModule, TopicsModule, CommentsModule],
+  imports: [
+    ConfigModule,
+    LoggerModule,
+    HealthModule,
+    DbModule,
+    AuthModule,
+    AuditModule,
+    RbacModule,
+    CitiesModule,
+    TopicsModule,
+    CommentsModule,
+    IssuesModule,
+    IdeasModule,
+    PollsModule,
+  ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
