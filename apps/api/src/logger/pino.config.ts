@@ -38,6 +38,8 @@ export const redactionPaths: readonly string[] = [
   '*.signing_key',
   '*.better_auth_secret',
   '*.BETTER_AUTH_SECRET',
+  '*.JWT_SIGNING_KEY',
+  '*.JWT_ISSUER',
   // PII — request body
   'req.body.email',
   'req.body.phone',
