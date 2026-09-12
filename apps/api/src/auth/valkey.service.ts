@@ -26,11 +26,11 @@ export class ValkeyService implements OnModuleDestroy {
   }
 
   async getSession(jti: string): Promise<unknown> {
-    return await this.client.get(`session:${jti}`);
+    return await this.client.get(`sess:${jti}`);
   }
 
   async setSession(jti: string, value: string, ttlSeconds: number): Promise<void> {
-    await this.client.set(`session:${jti}`, value, 'EX', ttlSeconds);
+    await this.client.set(`sess:${jti}`, value, 'EX', ttlSeconds);
   }
 
   async close(): Promise<void> {

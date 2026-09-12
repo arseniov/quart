@@ -1,15 +1,19 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 
+/* eslint-disable import/order */
+import { Public } from '../auth/public.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { HealthService } from './health.service.js';
+/* eslint-enable import/order */
 
 interface ReplyLike {
   status(code: number): unknown;
 }
 
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly svc: HealthService) {}
 

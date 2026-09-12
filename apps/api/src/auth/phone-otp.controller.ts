@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { z } from 'zod';
 
+import { Public } from './public.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -25,6 +26,7 @@ const verifySchema = phoneSchema.extend({
  * a logged-in user context is available.
  */
 @Controller('auth/phone')
+@Public()
 export class PhoneOtpController {
   constructor(private readonly twilio: TwilioService) {}
 

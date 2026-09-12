@@ -7,16 +7,19 @@ import { SkipTenant } from '../common/decorators/skip-tenant.decorator.js';
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service.js';
+import { Public } from './public.decorator.js';
 
 /**
  * Mounts Better Auth's HTTP handler at /auth/*.
  *
  * Fastify receives the request, we translate to a Web Request, hand off to
  * Better Auth's `handler`, and proxy status/headers/body back. Runs before
- * `TenantContextInterceptor` (which is skipped via `@SkipTenant`) because
- * sign-in cannot depend on tenant context.
+ * `TenantContextInterceptor` (which is skipped via `@SkipTenant`) and the
+ * global JwtAuthGuard (which is bypassed via `@Public`) because sign-in
+ * cannot depend on tenant context or an existing JWT.
  */
 @Controller('auth')
+@Public()
 @SkipTenant()
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

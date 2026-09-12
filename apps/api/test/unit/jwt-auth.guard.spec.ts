@@ -1,9 +1,41 @@
+import type { ExecutionContext } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
+import type { Reflector } from '@nestjs/core';
 import { describe, it, expect, vi } from 'vitest';
 
 import { JwtAuthGuard } from '../../src/auth/jwt-auth.guard.js';
 import type { JwtService } from '../../src/auth/jwt.service.js';
+import { IS_PUBLIC_KEY } from '../../src/auth/public.decorator.js';
 import type { ValkeyService } from '../../src/auth/valkey.service.js';
 import type { DbService } from '../../src/db/db.service.js';
+
+class StubReflector {
+  constructor(private readonly publicFlag: boolean) {}
+
+  getAllAndOverride<T>(key: string, _targets: unknown[]): T | undefined {
+    if (key === IS_PUBLIC_KEY) return (this.publicFlag ? true : undefined) as T;
+    return undefined;
+  }
+}
+
+function makeCtx(req: unknown): ExecutionContext {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => req,
+      getResponse: () => ({ status: () => undefined }),
+    }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
+    getArgs: () => [],
+    getArgByIndex: () => undefined,
+    switchToRpc: () => ({}) as never,
+    switchToWs: () => ({}) as never,
+    getType: () => 'http',
+  } as unknown as ExecutionContext;
+}
+
+const future = new Date(Date.now() + 60_000);
+const past = new Date(Date.now() - 60_000);
 
 describe('JwtAuthGuard', () => {
   const claims = {
@@ -15,77 +47,193 @@ describe('JwtAuthGuard', () => {
     device_fingerprint: null,
   };
   const validToken = 'valid.jwt.token';
-  const req: unknown = { headers: { authorization: `Bearer ${validToken}` } };
+  const req: unknown = {
+    id: 'r-1',
+    headers: { authorization: `Bearer ${validToken}` },
+  };
 
-  function build(svc: JwtService, db: DbService, valkey: ValkeyService): JwtAuthGuard {
-    return new JwtAuthGuard(svc, db, valkey);
+  function build(
+    svc: JwtService,
+    db: DbService,
+    valkey: ValkeyService,
+    reflector: Reflector = new StubReflector(false) as never,
+  ): JwtAuthGuard {
+    return new JwtAuthGuard(reflector, svc, db, valkey);
   }
 
-  function makeCtx(request: unknown): { switchToHttp: () => { getRequest: () => unknown; getResponse: () => unknown } } {
-    return {
-      switchToHttp: () => ({
-        getRequest: () => request,
-        getResponse: () => ({ status: () => undefined }),
-      }),
-    };
-  }
-
-  it('rejects when Authorization header is missing', async () => {
-    const g = build({ verify: vi.fn() } as never, {} as never, {} as never);
-    await expect(g.canActivate(makeCtx({ headers: {}, url: '/x' }))).resolves.toBe(false);
-  });
-
-  it('rejects when JWT verify throws', async () => {
-    const jwt = { verify: vi.fn(async () => { throw new Error('bad sig'); }) } as unknown as JwtService;
+  it('skips auth when @Public() is set on the handler/class', async () => {
+    const jwt = { verify: vi.fn() } as unknown as JwtService;
     const db = {} as DbService;
     const valkey = {} as ValkeyService;
-    const g = build(jwt, db, valkey);
-    await expect(g.canActivate(makeCtx(req))).resolves.toBe(false);
+    const g = build(jwt, db, valkey, new StubReflector(true) as never);
+    await expect(g.canActivate(makeCtx({ headers: {} }))).resolves.toBe(true);
+    expect(jwt.verify).not.toHaveBeenCalled();
   });
 
-  it('rejects when session is revoked in DB', async () => {
-    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-1' })) } as unknown as JwtService;
+  it('throws auth.missing when Authorization header is absent', async () => {
+    const g = build({ verify: vi.fn() } as never, {} as never, {} as never);
+    const err = await g.canActivate(makeCtx({ headers: {} })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.missing');
+  });
+
+  it('throws auth.invalid when JWT verify throws', async () => {
+    const jwt = { verify: vi.fn(async () => { throw new Error('bad sig'); }) } as unknown as JwtService;
+    const g = build(jwt, {} as DbService, {} as ValkeyService);
+    const err = await g.canActivate(makeCtx(req)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.invalid');
+  });
+
+  it('throws auth.session_revoked when DB returns no session', async () => {
+    // Covers the realistic case: SQL `where revoked_at is null` has already
+    // filtered out any revoked rows, so a null result means the session is
+    // either missing or revoked.
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-x' })) } as unknown as JwtService;
     const db = {
       kysely: {
         selectFrom: vi.fn(() => ({
           selectAll: vi.fn(() => ({
             where: vi.fn(() => ({
               where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => ({ id: 'sess-1', revoked_at: new Date() })),
+                executeTakeFirst: vi.fn(async () => null),
               })),
             })),
           })),
         })),
       },
     } as unknown as DbService;
-    const valkey = {} as ValkeyService;
+    const valkey = {
+      getSession: vi.fn(async () => null),
+      setSession: vi.fn(async () => undefined),
+    } as unknown as ValkeyService;
     const g = build(jwt, db, valkey);
-    await expect(g.canActivate(makeCtx(req))).resolves.toBe(false);
+    const err = await g.canActivate(makeCtx(req)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.session_revoked');
   });
 
-  it('rejects when Valkey throws (fail-closed)', async () => {
-    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-2' })) } as unknown as JwtService;
+  it('throws auth.session_expired when absolute_expires_at is in the past', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-e' })) } as unknown as JwtService;
+    const db = {
+      kysely: {
+        selectFrom: vi.fn(() => ({
+          selectAll: vi.fn(() => ({
+            where: vi.fn(() => ({
+              where: vi.fn(() => ({
+                executeTakeFirst: vi.fn(async () => ({ id: 'sess-e', revoked_at: null, absolute_expires_at: past })),
+              })),
+            })),
+          })),
+        })),
+      },
+    } as unknown as DbService;
+    const valkey = {
+      getSession: vi.fn(async () => null),
+      setSession: vi.fn(async () => undefined),
+    } as unknown as ValkeyService;
+    const g = build(jwt, db, valkey);
+    const err = await g.canActivate(makeCtx(req)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.session_expired');
+  });
+
+  it('throws auth.session_revoked when Valkey cached "revoked"', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-r' })) } as unknown as JwtService;
+    const db = {} as DbService;
+    const valkey = { getSession: vi.fn(async () => 'revoked') } as unknown as ValkeyService;
+    const g = build(jwt, db, valkey);
+    const err = await g.canActivate(makeCtx(req)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.session_revoked');
+  });
+
+  it('throws auth.cache_unavailable when Valkey throws (fail-closed)', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-c' })) } as unknown as JwtService;
     const db = {} as DbService;
     const valkey = { getSession: vi.fn(async () => { throw new Error('valkey down'); }) } as unknown as ValkeyService;
     const g = build(jwt, db, valkey);
-    await expect(g.canActivate(makeCtx(req))).resolves.toBe(false);
+    const err = await g.canActivate(makeCtx(req)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.cache_unavailable');
   });
 
-  it('accepts a valid token with valid session', async () => {
-    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-3' })) } as unknown as JwtService;
+  it('throws auth.fingerprint_mismatch when device_fingerprint claim differs from header', async () => {
+    const claimsWithFp = { ...claims, jti: 'sess-f', device_fingerprint: 'fp-original' };
+    const jwt = { verify: vi.fn(async () => claimsWithFp) } as unknown as JwtService;
     const db = {
       kysely: {
         selectFrom: vi.fn(() => ({
           selectAll: vi.fn(() => ({
             where: vi.fn(() => ({
               where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => ({ id: 'sess-3', revoked_at: null })),
+                executeTakeFirst: vi.fn(async () => ({ id: 'sess-f', revoked_at: null, absolute_expires_at: future })),
               })),
             })),
           })),
         })),
       },
     } as unknown as DbService;
+    const valkey = {
+      getSession: vi.fn(async () => null),
+      setSession: vi.fn(async () => undefined),
+    } as unknown as ValkeyService;
+    const g = build(jwt, db, valkey);
+    const fpReq = { id: 'r-1', headers: { authorization: 'Bearer t', 'x-device-fingerprint': 'fp-other' } };
+    const err = await g.canActivate(makeCtx(fpReq)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    const resp = (err as UnauthorizedException).getResponse() as { error: { code: string } };
+    expect(resp.error.code).toBe('auth.fingerprint_mismatch');
+  });
+
+  it('attaches req.user and req.tenant on success', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-ok' })) } as unknown as JwtService;
+    const db = {
+      kysely: {
+        selectFrom: vi.fn(() => ({
+          selectAll: vi.fn(() => ({
+            where: vi.fn(() => ({
+              where: vi.fn(() => ({
+                executeTakeFirst: vi.fn(async () => ({ id: 'sess-ok', revoked_at: null, absolute_expires_at: future })),
+              })),
+            })),
+          })),
+        })),
+      },
+    } as unknown as DbService;
+    const valkey = {
+      getSession: vi.fn(async () => null),
+      setSession: vi.fn(async () => undefined),
+    } as unknown as ValkeyService;
+    const g = build(jwt, db, valkey);
+    const requestObj: { headers: Record<string, string>; id: string; user?: unknown; tenant?: unknown } = {
+      id: 'r-abc',
+      headers: { authorization: 'Bearer t' },
+    };
+    await expect(g.canActivate(makeCtx(requestObj))).resolves.toBe(true);
+    expect(requestObj.user).toEqual({
+      id: 'u-1',
+      cityId: 'c-1',
+      isSuperAdmin: false,
+      roleSnapshot: ['citizen'],
+    });
+    expect(requestObj.tenant).toEqual({
+      cityId: 'c-1',
+      userId: 'u-1',
+      isSuperAdmin: false,
+      requestId: 'r-abc',
+    });
+  });
+
+  it('accepts a valid token with valid session (cache "ok" path)', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-3' })) } as unknown as JwtService;
+    const db = {} as DbService;
     const valkey = { getSession: vi.fn(async () => 'ok') } as unknown as ValkeyService;
     const g = build(jwt, db, valkey);
     await expect(g.canActivate(makeCtx(req))).resolves.toBe(true);
