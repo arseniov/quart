@@ -63,6 +63,14 @@ export const redactionPaths: readonly string[] = [
   '*.lat',
   '*.lng',
   '*.address',
+  // Audit chain — HMAC key, payloads, and hashes (T19/T20)
+  '*.AUDIT_HMAC_KEY',
+  '*.payload',
+  '*.payload.*',
+  '*.payload_redacted',
+  '*.payload_canonical_sha256',
+  '*.row_hash',
+  '*.prev_hash',
 ];
 
 export function buildLoggerOptions(config: ConfigService): LoggerOptions {
