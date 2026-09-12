@@ -1,6 +1,7 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
+import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
 import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -13,10 +14,15 @@ import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IdeasModule } from './ideas/ideas.module.js';
+import { I18nModule } from './i18n/i18n.module.js';
 import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { PollsModule } from './polls/polls.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
+import { SavedItemsModule } from './saved-items/saved-items.module.js';
+import { SearchModule } from './search/search.module.js';
+import { SelfModule } from './self/self.module.js';
 import { TopicsModule } from './topics/topics.module.js';
 
 @Module({
@@ -32,8 +38,14 @@ import { TopicsModule } from './topics/topics.module.js';
     TopicsModule,
     CommentsModule,
     IssuesModule,
+    AdminIssuesModule,
     IdeasModule,
     PollsModule,
+    SearchModule,
+    I18nModule,
+    NotificationsModule,
+    SavedItemsModule,
+    SelfModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
