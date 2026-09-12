@@ -11,7 +11,9 @@ function makeDb(rows: unknown[]) {
     selectFrom: () => ({
       select: () => ({
         orderBy: () => ({
-          execute: vi.fn(async () => rows),
+          limit: () => ({
+            execute: vi.fn(async () => rows),
+          }),
         }),
       }),
     }),
@@ -42,6 +44,6 @@ describe('VerifyController.verify', () => {
     const c = new VerifyController(db as never, { env: { AUDIT_HMAC_KEY: 'k'.repeat(64) } } as never);
     const r = await c.verify();
     expect(r.status).toBe('broken');
-    expect(r.broken_at_id).toBe('2');
+    expect(r.brokenAtId).toBe('2');
   });
 });
