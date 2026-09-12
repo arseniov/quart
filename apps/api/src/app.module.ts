@@ -11,9 +11,10 @@ import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LoggerModule } from './logger/logger.module.js';
+import { RbacModule } from './rbac/rbac.module.js';
 
 @Module({
-  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule],
+  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule, RbacModule],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
