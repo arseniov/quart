@@ -1,6 +1,8 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
+import { AuditInterceptor } from './audit/audit.interceptor.js';
+import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { JwtAuthGuard } from './auth/jwt-auth.guard.js';
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
@@ -11,9 +13,10 @@ import { HealthModule } from './health/health.module.js';
 import { LoggerModule } from './logger/logger.module.js';
 
 @Module({
-  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule],
+  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     // Global JwtAuthGuard — controllers opt out with @Public(). Future
     // protected controllers opt IN with @UseGuards(JwtAuthGuard) on the
     // specific handler(s) that need the user attached.
