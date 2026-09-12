@@ -5,6 +5,7 @@ import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { JwtAuthGuard } from './auth/jwt-auth.guard.js';
+import { CitiesModule } from './cities/cities.module.js';
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
 import { TenantContextInterceptor } from './common/tenant-context.interceptor.js';
 import { ConfigModule } from './config/config.module.js';
@@ -14,7 +15,7 @@ import { LoggerModule } from './logger/logger.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 
 @Module({
-  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule, RbacModule],
+  imports: [ConfigModule, LoggerModule, HealthModule, DbModule, AuthModule, AuditModule, RbacModule, CitiesModule],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
