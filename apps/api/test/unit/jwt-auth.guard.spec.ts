@@ -37,6 +37,22 @@ function makeCtx(req: unknown): ExecutionContext {
 const future = new Date(Date.now() + 60_000);
 const past = new Date(Date.now() - 60_000);
 
+function kyselyStub(row: unknown): DbService {
+  return {
+    kysely: {
+      selectFrom: () => ({
+        selectAll: () => ({
+          where: () => ({
+            where: () => ({
+              executeTakeFirst: async () => row,
+            }),
+          }),
+        }),
+      }),
+    },
+  } as unknown as DbService;
+}
+
 describe('JwtAuthGuard', () => {
   const claims = {
     sub: 'u-1',
@@ -56,16 +72,21 @@ describe('JwtAuthGuard', () => {
     svc: JwtService,
     db: DbService,
     valkey: ValkeyService,
-    reflector: Reflector = new StubReflector(false) as never,
+    isPublic = false,
   ): JwtAuthGuard {
-    return new JwtAuthGuard(reflector, svc, db, valkey);
+    return new JwtAuthGuard(
+      new StubReflector(isPublic) as unknown as Reflector,
+      svc,
+      db,
+      valkey,
+    );
   }
 
   it('skips auth when @Public() is set on the handler/class', async () => {
     const jwt = { verify: vi.fn() } as unknown as JwtService;
     const db = {} as DbService;
     const valkey = {} as ValkeyService;
-    const g = build(jwt, db, valkey, new StubReflector(true) as never);
+    const g = build(jwt, db, valkey, true);
     await expect(g.canActivate(makeCtx({ headers: {} }))).resolves.toBe(true);
     expect(jwt.verify).not.toHaveBeenCalled();
   });
@@ -92,19 +113,7 @@ describe('JwtAuthGuard', () => {
     // filtered out any revoked rows, so a null result means the session is
     // either missing or revoked.
     const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-x' })) } as unknown as JwtService;
-    const db = {
-      kysely: {
-        selectFrom: vi.fn(() => ({
-          selectAll: vi.fn(() => ({
-            where: vi.fn(() => ({
-              where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => null),
-              })),
-            })),
-          })),
-        })),
-      },
-    } as unknown as DbService;
+    const db = kyselyStub(null);
     const valkey = {
       getSession: vi.fn(async () => null),
       setSession: vi.fn(async () => undefined),
@@ -118,19 +127,7 @@ describe('JwtAuthGuard', () => {
 
   it('throws auth.session_expired when absolute_expires_at is in the past', async () => {
     const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-e' })) } as unknown as JwtService;
-    const db = {
-      kysely: {
-        selectFrom: vi.fn(() => ({
-          selectAll: vi.fn(() => ({
-            where: vi.fn(() => ({
-              where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => ({ id: 'sess-e', revoked_at: null, absolute_expires_at: past })),
-              })),
-            })),
-          })),
-        })),
-      },
-    } as unknown as DbService;
+    const db = kyselyStub({ id: 'sess-e', revoked_at: null, absolute_expires_at: past });
     const valkey = {
       getSession: vi.fn(async () => null),
       setSession: vi.fn(async () => undefined),
@@ -167,19 +164,7 @@ describe('JwtAuthGuard', () => {
   it('throws auth.fingerprint_mismatch when device_fingerprint claim differs from header', async () => {
     const claimsWithFp = { ...claims, jti: 'sess-f', device_fingerprint: 'fp-original' };
     const jwt = { verify: vi.fn(async () => claimsWithFp) } as unknown as JwtService;
-    const db = {
-      kysely: {
-        selectFrom: vi.fn(() => ({
-          selectAll: vi.fn(() => ({
-            where: vi.fn(() => ({
-              where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => ({ id: 'sess-f', revoked_at: null, absolute_expires_at: future })),
-              })),
-            })),
-          })),
-        })),
-      },
-    } as unknown as DbService;
+    const db = kyselyStub({ id: 'sess-f', revoked_at: null, absolute_expires_at: future });
     const valkey = {
       getSession: vi.fn(async () => null),
       setSession: vi.fn(async () => undefined),
@@ -194,19 +179,7 @@ describe('JwtAuthGuard', () => {
 
   it('attaches req.user and req.tenant on success', async () => {
     const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-ok' })) } as unknown as JwtService;
-    const db = {
-      kysely: {
-        selectFrom: vi.fn(() => ({
-          selectAll: vi.fn(() => ({
-            where: vi.fn(() => ({
-              where: vi.fn(() => ({
-                executeTakeFirst: vi.fn(async () => ({ id: 'sess-ok', revoked_at: null, absolute_expires_at: future })),
-              })),
-            })),
-          })),
-        })),
-      },
-    } as unknown as DbService;
+    const db = kyselyStub({ id: 'sess-ok', revoked_at: null, absolute_expires_at: future });
     const valkey = {
       getSession: vi.fn(async () => null),
       setSession: vi.fn(async () => undefined),
@@ -237,5 +210,15 @@ describe('JwtAuthGuard', () => {
     const valkey = { getSession: vi.fn(async () => 'ok') } as unknown as ValkeyService;
     const g = build(jwt, db, valkey);
     await expect(g.canActivate(makeCtx(req))).resolves.toBe(true);
+  });
+
+  it('accepts when device fingerprint matches', async () => {
+    const claimsWithFp = { ...claims, jti: 'sess-fp', device_fingerprint: 'deadbeef' };
+    const jwt = { verify: vi.fn(async () => claimsWithFp) } as unknown as JwtService;
+    const db = kyselyStub({ id: 'sess-fp', revoked_at: null, absolute_expires_at: future });
+    const valkey = { getSession: vi.fn(async () => null) } as unknown as ValkeyService;
+    const fpReq = { headers: { authorization: 'Bearer valid', 'x-device-fingerprint': 'deadbeef' }, id: 'req-1' };
+    const g = build(jwt, db, valkey, false);
+    await expect(g.canActivate(makeCtx(fpReq))).resolves.toBe(true);
   });
 });

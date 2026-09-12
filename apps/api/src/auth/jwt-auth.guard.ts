@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import {
   type CanActivate,
   type ExecutionContext,
@@ -33,6 +35,9 @@ interface RequestWithAuth {
 }
 
 type FastifyLikeRequest = FastifyRequest & RequestWithAuth;
+
+// Short TTL — JWT lifetime bounds the true expiry.
+const SESSION_CACHE_TTL_SECONDS = 60;
 
 // Ponytail: JWT `jti` IS the `auth_sessions.id` (UUID). Documented constraint
 // in the T16 plan; the guard joins claims->session via this single key. If a
@@ -120,40 +125,50 @@ export class JwtAuthGuard implements CanActivate {
     if (!session) {
       // Negative cache so a revoked/missing session short-circuits subsequent
       // requests. TTL kept short; absolute_expires_at is the source of truth.
-      try { await this.valkey.setSession(jti, 'revoked', 60); } catch { /* ignore */ }
+      await this.cacheNegative(jti);
       throw new UnauthorizedException({
         error: { code: 'auth.session_revoked', message: 'session has been revoked' },
       });
     }
 
     if (session.absolute_expires_at.getTime() < Date.now()) {
-      try { await this.valkey.setSession(jti, 'revoked', 60); } catch { /* ignore */ }
+      await this.cacheNegative(jti);
       throw new UnauthorizedException({
         error: { code: 'auth.session_expired', message: 'session has expired' },
       });
     }
 
     // Device fingerprint check (mobile clients bind the token to a device).
-    const fpHeader = (req.headers['x-device-fingerprint'] ??
-      req.headers['X-Device-Fingerprint']) as string | undefined;
-    if (
-      claims.device_fingerprint &&
-      fpHeader &&
-      claims.device_fingerprint !== fpHeader
-    ) {
-      throw new UnauthorizedException({
-        error: {
-          code: 'auth.fingerprint_mismatch',
-          message: 'device fingerprint does not match session',
-        },
-      });
+    // Fastify lowercases header names; the uppercase form is unreachable in
+    // practice but the docs allow `string | string[] | undefined`.
+    const fpHeader = req.headers['x-device-fingerprint'] as string | string[] | undefined;
+    const fpHeaderStr = Array.isArray(fpHeader) ? fpHeader[0] : fpHeader;
+    if (claims.device_fingerprint && fpHeaderStr) {
+      const a = Buffer.from(claims.device_fingerprint);
+      const b = Buffer.from(fpHeaderStr);
+      if (a.length !== b.length || !timingSafeEqual(a, b)) {
+        throw new UnauthorizedException({
+          error: {
+            code: 'auth.fingerprint_mismatch',
+            message: 'device fingerprint does not match session',
+          },
+        });
+      }
     }
 
     // Positive cache. Short TTL — JWT lifetime bounds the true expiry.
-    try { await this.valkey.setSession(jti, 'ok', 60); } catch { /* ignore */ }
+    try { await this.valkey.setSession(jti, 'ok', SESSION_CACHE_TTL_SECONDS); } catch { /* ignore */ }
 
     this.attachUserAndTenant(req, claims);
     return true;
+  }
+
+  private async cacheNegative(jti: string): Promise<void> {
+    try {
+      await this.valkey.setSession(jti, 'revoked', SESSION_CACHE_TTL_SECONDS);
+    } catch {
+      // best-effort cache write; fail-closed already happened at lookup
+    }
   }
 
   private attachUserAndTenant(req: RequestWithAuth, claims: VerifiedJwt): void {
