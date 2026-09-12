@@ -17,6 +17,12 @@ export interface JwtClaims {
   scope_id: string | null;
   role_snapshot: string[];
   device_fingerprint: string | null;
+  // T17: TOTP secret (base32) carried in the verified JWT after MFA
+  // enrollment. `mfaEnrolledAt` is the ISO timestamp of the enroll call,
+  // so consumers can tell a freshly enrolled factor from an old one.
+  // Both claims are optional — pre-enrollment tokens omit them.
+  mfaSecret?: string;
+  mfaEnrolledAt?: number;
 }
 
 export interface SignOptions {

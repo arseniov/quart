@@ -181,6 +181,11 @@ export class JwtAuthGuard implements CanActivate {
       isSuperAdmin: false,
       roleSnapshot: claims.role_snapshot ?? [],
     };
+    // T17: optional TOTP claims populated by MfaService after enrollment.
+    // `mfaSecret` is base32-encoded; `mfaEnrolledAt` is epoch-ms. Spread
+    // to satisfy `exactOptionalPropertyTypes`.
+    if (claims.mfaSecret !== undefined) user.mfaSecret = claims.mfaSecret;
+    if (claims.mfaEnrolledAt !== undefined) user.mfaEnrolledAt = claims.mfaEnrolledAt;
     const tenant: TenantContext = {
       cityId: claims.city_id,
       userId: claims.sub,

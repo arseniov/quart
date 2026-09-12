@@ -1,51 +1,96 @@
+import { randomUUID } from 'node:crypto';
+
 import {
-  Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards,
+  Body, Controller, HttpCode, HttpStatus, Post, Req, UnauthorizedException, UseGuards, UsePipes,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+
+import type { AuthUser } from './decorators/current-user.decorator.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
-// `design:paramtypes` for the `MfaService` constructor parameter.
+// `design:paramtypes` for the constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { JwtService } from './jwt.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { MfaService } from './mfa.service.js';
 
-const EnrollSchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
+const EnrollSchema = z.object({}).strict(); // body shape only — verify happens after QR scan
 const VerifySchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
-const BackupSchema = z.object({ code: z.string().min(6).max(20) });
+const BackupSchema = z.object({ code: z.string().regex(/^[0-9a-f]{32}$/) });
 
-// Ponytail: T17 carries the TOTP secret in the verified JWT (via `mfaSecret`
-// claim attached by the T11 issuer post-enroll). The DB-backed credential
-// table arrives in a later task once Better Auth's MFA flow is wired.
+interface ReqWithAuth extends FastifyRequest {
+  user: AuthUser;
+}
+
+// Ponytail: T17 carries the TOTP secret in the verified JWT (`mfaSecret`
+// claim attached post-enroll). Backup codes + replay prevention live in
+// `mfa_credentials` (migration 0026).
 @Controller('auth/mfa')
 @UseGuards(JwtAuthGuard)
 export class MfaController {
-  constructor(private readonly mfa: MfaService) {}
+  constructor(
+    private readonly mfa: MfaService,
+    private readonly jwt: JwtService,
+  ) {}
 
   @Post('enroll')
   @HttpCode(HttpStatus.OK)
-  enroll(@Body() body: unknown) {
-    EnrollSchema.parse(body); // shape only; verification happens after the QR scan
-    return this.mfa.enroll('user');
+  @UsePipes(new ZodValidationPipe(EnrollSchema))
+  async enroll(@Body() _body: z.infer<typeof EnrollSchema>, @Req() req: ReqWithAuth) {
+    const r = this.mfa.enroll(req.user.id);
+    // Persist backup-code hashes (idempotent — replays overwrite).
+    await this.mfa.persistBackupCodes(req.user.id, req.user.cityId, r.backupCodesHash);
+    // Re-mint the bearer so downstream /verify can read `mfaSecret`.
+    const claims = {
+      sub: req.user.id,
+      city_id: req.user.cityId,
+      scope_type: 'city' as const,
+      scope_id: req.user.cityId,
+      role_snapshot: req.user.roleSnapshot,
+      device_fingerprint: null,
+      mfaSecret: r.secret,
+      mfaEnrolledAt: Date.now(),
+    };
+    const token = await this.jwt.sign(claims, {
+      jti: randomUUID(),
+      ttlSeconds: 60 * 60 * 24,
+    });
+    return {
+      secret: r.secret,
+      otpauthUrl: r.otpauthUrl,
+      backupCodes: r.backupCodes,
+      token,
+    };
   }
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
-  verify(@Body() body: unknown, @Req() req: FastifyRequest) {
-    const { totp_code } = VerifySchema.parse(body);
-    const user = (req as unknown as { user: { mfaSecret: string } }).user;
-    const ok = this.mfa.verifyTotp(user.mfaSecret, totp_code);
-    if (!ok) return { verified: false };
-    (req as unknown as { mfaVerifiedAt: number }).mfaVerifiedAt = Date.now();
-    return { verified: true };
+  @UsePipes(new ZodValidationPipe(VerifySchema))
+  async verify(
+    @Body() body: z.infer<typeof VerifySchema>,
+    @Req() req: ReqWithAuth,
+  ): Promise<{ verified: boolean }> {
+    const user = req.user;
+    if (!user.mfaSecret) {
+      throw new UnauthorizedException({
+        error: { code: 'mfa.not_enrolled', message: 'no mfaSecret claim on bearer' },
+      });
+    }
+    const ok = await this.mfa.verifyTotp(user.id, user.mfaSecret, body.totp_code);
+    return { verified: ok };
   }
 
   @Post('backup-code')
   @HttpCode(HttpStatus.OK)
-  backupCode(@Body() body: unknown) {
-    BackupSchema.parse(body);
-    // Ponytail: backup-code consume table arrives with the DB-backed
-    // enrollment task. T17 is stateless; the schema gate is the contract.
-    return { consumed: true };
+  @UsePipes(new ZodValidationPipe(BackupSchema))
+  async backupCode(
+    @Body() body: z.infer<typeof BackupSchema>,
+    @Req() req: ReqWithAuth,
+  ): Promise<{ verified: boolean; remaining: number }> {
+    const r = await this.mfa.consumeBackupCode(req.user.id, body.code);
+    return { verified: r.verified, remaining: r.remaining };
   }
 }

@@ -109,6 +109,22 @@ export interface MfaChallengesTable {
   consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
+// 0026 — backup codes + TOTP replay protection.
+// The TOTP secret itself is carried in the verified JWT (stateless), so
+// this row holds only backup-code hashes and a last_used_step timestamp.
+export interface MfaCredentialsTable {
+  id: Generated<string>;
+  user_id: string;
+  city_id: string;
+  type: 'totp';
+  label: string;
+  backup_codes_hash: string[];
+  backup_codes_used_at: ColumnType<unknown, unknown | undefined, unknown>; // jsonb
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+  enrolled_at: ColumnType<Date, Date | string | undefined, never>;
+  last_used_step: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+}
+
 // ============================================================================
 // 0003 RBAC
 // ============================================================================
@@ -492,6 +508,7 @@ export interface DB {
   auth_sessions: AuthSessionsTable;
   mfa_factors: MfaFactorsTable;
   mfa_challenges: MfaChallengesTable;
+  mfa_credentials: MfaCredentialsTable;
 
   permissions: PermissionsTable;
   roles: RolesTable;

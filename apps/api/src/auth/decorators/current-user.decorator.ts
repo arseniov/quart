@@ -5,6 +5,11 @@ export interface AuthUser {
   cityId: string;
   isSuperAdmin: boolean;
   roleSnapshot: string[];
+  // T17: TOTP secret + enroll timestamp carried in the JWT after enrollment.
+  // `undefined` pre-enrollment, populated post-enrollment once MfaService
+  // re-mints the bearer.
+  mfaSecret?: string;
+  mfaEnrolledAt?: number;
 }
 
 const currentUserFactory = (_data: unknown, ctx: ExecutionContext): AuthUser | null => {

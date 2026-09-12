@@ -45,6 +45,14 @@ export const redactionPaths: readonly string[] = [
   'req.body.phone',
   'req.body.phoneNumber',
   'req.body.location',
+  // T17 MFA — backup codes are auth credentials (single-use recovery
+  // tokens). Plaintext lives only in the enroll response; never log it.
+  'req.body.code',
+  'req.body.backup_code',
+  '*.backupCodes',
+  '*.backup_codes',
+  '*.backupCodesHash',
+  '*.backup_codes_hash',
   // PII — DB / object wildcard patterns
   '*.email',
   '*.phone_e164',
