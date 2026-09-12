@@ -40,9 +40,9 @@ export class MfaController {
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ZodValidationPipe(EnrollSchema))
   async enroll(@Body() _body: z.infer<typeof EnrollSchema>, @Req() req: ReqWithAuth) {
-    const r = this.mfa.enroll(req.user.id);
-    // Persist backup-code hashes (idempotent — replays overwrite).
-    await this.mfa.persistBackupCodes(req.user.id, req.user.cityId, r.backupCodesHash);
+    // enroll() persists the mfa_credentials row (with cityId for the RLS
+    // WITH CHECK) in addition to generating the TOTP secret + backup codes.
+    const r = await this.mfa.enroll(req.user.id, req.user.cityId);
     // Re-mint the bearer so downstream /verify can read `mfaSecret`.
     const claims = {
       sub: req.user.id,
@@ -79,7 +79,12 @@ export class MfaController {
         error: { code: 'mfa.not_enrolled', message: 'no mfaSecret claim on bearer' },
       });
     }
-    const ok = await this.mfa.verifyTotp(user.id, user.mfaSecret, body.totp_code);
+    const ok = await this.mfa.verifyTotp(
+      user.id,
+      user.cityId,
+      user.mfaSecret,
+      body.totp_code,
+    );
     return { verified: ok };
   }
 
@@ -90,7 +95,7 @@ export class MfaController {
     @Body() body: z.infer<typeof BackupSchema>,
     @Req() req: ReqWithAuth,
   ): Promise<{ verified: boolean; remaining: number }> {
-    const r = await this.mfa.consumeBackupCode(req.user.id, body.code);
+    const r = await this.mfa.consumeBackupCode(req.user.id, req.user.cityId, body.code);
     return { verified: r.verified, remaining: r.remaining };
   }
 }

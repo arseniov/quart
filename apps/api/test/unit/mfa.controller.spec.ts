@@ -27,7 +27,7 @@ function makeReq(user: {
 
 function makeMfa(overrides: Partial<MfaService> = {}): MfaService {
   return {
-    enroll: vi.fn((id: string) => ({
+    enroll: vi.fn(async (id: string, _cityId: string) => ({
       secret: 'JBSWY3DPEHPK3PXP',
       otpauthUrl: `otpauth://totp/Quart:${id}?secret=JBSWY3DPEHPK3PXP`,
       backupCodes: ['a'.repeat(32), 'b'.repeat(32), 'c'.repeat(32)],
@@ -35,7 +35,6 @@ function makeMfa(overrides: Partial<MfaService> = {}): MfaService {
     })),
     verifyTotp: vi.fn(async () => true),
     consumeBackupCode: vi.fn(async () => ({ verified: true, remaining: 9 })),
-    persistBackupCodes: vi.fn(async () => undefined),
     currentTotp: vi.fn(() => '123456'),
     ...overrides,
   } as unknown as MfaService;
@@ -52,7 +51,7 @@ describe('MfaController', () => {
         isSuperAdmin: false,
         roleSnapshot: ['citizen'],
       }) as never);
-      expect(mfa.enroll).toHaveBeenCalledWith('real-user-id');
+      expect(mfa.enroll).toHaveBeenCalledWith('real-user-id', 'city-1');
       expect(r.otpauthUrl).toContain('real-user-id');
       expect(r.otpauthUrl).not.toContain(':user?');
     });
@@ -75,7 +74,7 @@ describe('MfaController', () => {
       expect(typeof claims.mfaEnrolledAt).toBe('number');
     });
 
-    it('persists backup-code hashes for the credential row', async () => {
+    it('passes cityId to enroll (which persists the credential row)', async () => {
       const mfa = makeMfa();
       const c = new MfaController(mfa, makeJwt());
       await c.enroll({}, makeReq({
@@ -84,11 +83,10 @@ describe('MfaController', () => {
         isSuperAdmin: false,
         roleSnapshot: ['citizen'],
       }) as never);
-      expect(mfa.persistBackupCodes).toHaveBeenCalledWith(
-        'real-user-id',
-        'city-1',
-        ['h1', 'h2', 'h3'],
-      );
+      // enroll() now owns row creation (Gap 2 fix) — verifyTotp only
+      // reads/updates. The mock returns fixed backupCodesHash, so we
+      // assert the controller threads cityId through.
+      expect(mfa.enroll).toHaveBeenCalledWith('real-user-id', 'city-1');
     });
   });
 
@@ -121,7 +119,7 @@ describe('MfaController', () => {
         mfaSecret: 'JBSWY3DPEHPK3PXP',
       }) as never);
       expect(r).toEqual({ verified: true });
-      expect(mfa.verifyTotp).toHaveBeenCalledWith('u-1', 'JBSWY3DPEHPK3PXP', '123456');
+      expect(mfa.verifyTotp).toHaveBeenCalledWith('u-1', 'c-1', 'JBSWY3DPEHPK3PXP', '123456');
     });
 
     it('returns 200 with verified=false on TOTP mismatch', async () => {

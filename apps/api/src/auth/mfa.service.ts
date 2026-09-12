@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
+import type { TenantContext } from '@quart/shared-types';
 import { authenticator } from 'otplib';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin can
@@ -37,8 +38,9 @@ function sha256(s: string): string {
 }
 
 // ponytail: T17 keeps the TOTP secret in the verified JWT (stateless — per
-// T17 plan). `mfa_credentials` only persists backup-code hashes + the
-// replay-prevention timestamp.
+// T17 plan). `mfa_credentials` persists backup-code hashes + the
+// replay-prevention timestamp; RLS is city+owner scoped (migration 0026),
+// so every DB call must run inside a tenant tx to satisfy the WITH CHECK.
 @Injectable()
 export class MfaService {
   constructor(private readonly db: DbService) {
@@ -47,7 +49,13 @@ export class MfaService {
     authenticator.options = { window: 1, step: 30 };
   }
 
-  enroll(userId: string): MfaEnrollResult {
+  /**
+   * Issue a fresh TOTP secret + 10 backup codes AND persist the credential
+   * row. The row is created here (not lazily on first verify) so the
+   * replay-marker update in `verifyTotp` always has a real `city_id` to
+   * pass the WITH CHECK (migration 0026).
+   */
+  async enroll(userId: string, cityId: string): Promise<MfaEnrollResult> {
     // 20 random bytes → 32-char base32 secret (160 bits, RFC 6238 §5.1 floor).
     const secret = authenticator.generateSecret(20);
     // 128 bits per backup code (32 hex chars), 10 codes.
@@ -55,6 +63,26 @@ export class MfaService {
       randomBytes(BACKUP_CODE_BYTES).toString('hex'),
     );
     const backupCodesHash = backupCodes.map(sha256);
+
+    await this.db.runInTenantTx(
+      this.tenantCtx(cityId, userId),
+      async (trx) => {
+        await trx
+          .insertInto('mfa_credentials')
+          .values({
+            user_id: userId,
+            city_id: cityId,
+            type: 'totp',
+            label: 'default',
+            backup_codes_hash: backupCodesHash,
+          })
+          .onConflict((oc) =>
+            oc.column('user_id').doUpdateSet({ backup_codes_hash: backupCodesHash }),
+          )
+          .execute();
+      },
+    );
+
     return {
       secret,
       otpauthUrl: authenticator.keyuri(userId, 'Quart', secret),
@@ -68,12 +96,21 @@ export class MfaService {
   }
 
   /**
-   * Verify a 6-digit TOTP code. Replay-protected at step granularity:
-   * if the supplied code matches a step we've already consumed, reject.
-   * Per-user (not per-session): an attacker who phishes a code can use it
-   * once within ±1 window (~90s), then can't replay.
+   * Verify a 6-digit TOTP code. Replay-protected at step granularity via
+   * `mfa_credentials.last_used_step`: a code whose step matches the
+   * recorded last_used_step is a replay → reject.
+   *
+   * Read + update run inside one tenant tx so the SELECT and the UPDATE
+   * see the same RLS-scoped view. If the update fails (RLS rejection, FK
+   * violation, lost connection) we return `false` — the caller can retry,
+   * but we never silently allow a verify that we couldn't durably mark.
    */
-  async verifyTotp(userId: string, secret: string, code: string): Promise<boolean> {
+  async verifyTotp(
+    userId: string,
+    cityId: string,
+    secret: string,
+    code: string,
+  ): Promise<boolean> {
     if (!/^\d{6}$/.test(code)) return false;
     const valid = authenticator.verify({ token: code, secret });
     if (!valid) return false;
@@ -81,53 +118,41 @@ export class MfaService {
     const step = Math.floor(Date.now() / 30000);
     const stepDate = new Date(step * 30000);
 
-    // Look up the credential row for replay check. Missing row = no
-    // enrollment recorded; allow verification but skip the dedup check
-    // (the secret+window already filtered the code).
-    const cred = await this.db.kysely
-      .selectFrom('mfa_credentials')
-      .select(['last_used_step'])
-      .where('user_id', '=', userId)
-      .where('type', '=', 'totp')
-      .executeTakeFirst();
+    try {
+      return await this.db.runInTenantTx(
+        this.tenantCtx(cityId, userId),
+        async (trx) => {
+          const cred = await trx
+            .selectFrom('mfa_credentials')
+            .select(['last_used_step'])
+            .where('user_id', '=', userId)
+            .where('type', '=', 'totp')
+            .executeTakeFirst();
 
-    if (cred?.last_used_step) {
-      const last = cred.last_used_step.getTime();
-      // Same step (within 30s): the same code is being replayed. Reject.
-      if (stepDate.getTime() - last === 0) return false;
-    }
+          // No row = nothing to dedup against. The secret+window already
+          // filtered the code; we can't persist a marker either, so
+          // accept and move on (callers in production will hit this only
+          // when the row was deleted out from under us).
+          if (!cred) return true;
 
-    // Persist replay marker. Insert-if-absent (first verify) or update.
-    if (!cred) {
-      this.db.kysely
-        .insertInto('mfa_credentials')
-        .values({
-          user_id: userId,
-          city_id: '00000000-0000-0000-0000-000000000000',
-          type: 'totp',
-          label: 'default',
-          backup_codes_hash: [],
-          last_used_step: stepDate,
-        })
-        .onConflict((oc) =>
-          oc.column('user_id').doUpdateSet({ last_used_step: stepDate }),
-        )
-        .execute()
-        .catch(() => {
-          // ponytail: best-effort; if city_id FK or RLS rejects, the
-          // verification result still stands. Add proper city lookup
-          // when we wire the /enroll endpoint through the controller.
-        });
-    } else {
-      this.db.kysely
-        .updateTable('mfa_credentials')
-        .set({ last_used_step: stepDate })
-        .where('user_id', '=', userId)
-        .where('type', '=', 'totp')
-        .execute()
-        .catch(() => undefined);
+          const last = cred.last_used_step?.getTime();
+          // Same step (within 30s): the same code is being replayed. Reject.
+          if (last != null && stepDate.getTime() - last === 0) return false;
+
+          await trx
+            .updateTable('mfa_credentials')
+            .set({ last_used_step: stepDate })
+            .where('user_id', '=', userId)
+            .where('type', '=', 'totp')
+            .execute();
+          return true;
+        },
+      );
+    } catch {
+      // Tenant tx failed (RLS rejected, conn dropped, etc). Don't claim
+      // success when we couldn't durably mark the step — caller retries.
+      return false;
     }
-    return true;
   }
 
   /**
@@ -137,56 +162,43 @@ export class MfaService {
    */
   async consumeBackupCode(
     userId: string,
+    cityId: string,
     code: string,
   ): Promise<BackupCodeConsumeResult> {
     const hash = sha256(code);
 
-    const row = await this.db.kysely
-      .selectFrom('mfa_credentials')
-      .select(['id', 'backup_codes_hash', 'backup_codes_used_at'])
-      .where('user_id', '=', userId)
-      .where('type', '=', 'totp')
-      .executeTakeFirst();
+    return this.db.runInTenantTx(this.tenantCtx(cityId, userId), async (trx) => {
+      const row = await trx
+        .selectFrom('mfa_credentials')
+        .select(['id', 'backup_codes_hash', 'backup_codes_used_at'])
+        .where('user_id', '=', userId)
+        .where('type', '=', 'totp')
+        .executeTakeFirst();
 
-    if (!row) return { verified: false, remaining: 0 };
-    if (!row.backup_codes_hash.includes(hash)) {
-      return { verified: false, remaining: row.backup_codes_hash.length };
-    }
+      if (!row) return { verified: false, remaining: 0 };
+      if (!row.backup_codes_hash.includes(hash)) {
+        return { verified: false, remaining: row.backup_codes_hash.length };
+      }
 
-    const usedAt = (row.backup_codes_used_at ?? {}) as Record<string, string>;
-    if (usedAt[hash]) return { verified: false, remaining: row.backup_codes_hash.length };
+      const usedAt = (row.backup_codes_used_at ?? {}) as Record<string, string>;
+      if (usedAt[hash]) {
+        return { verified: false, remaining: row.backup_codes_hash.length };
+      }
 
-    const next = { ...usedAt, [hash]: new Date().toISOString() };
-    await this.db.kysely
-      .updateTable('mfa_credentials')
-      .set({ backup_codes_used_at: next })
-      .where('id', '=', row.id)
-      .execute();
-    return { verified: true, remaining: row.backup_codes_hash.length - 1 };
+      const next = { ...usedAt, [hash]: new Date().toISOString() };
+      await trx
+        .updateTable('mfa_credentials')
+        .set({ backup_codes_used_at: next })
+        .where('id', '=', row.id)
+        .execute();
+      return { verified: true, remaining: row.backup_codes_hash.length - 1 };
+    });
   }
 
-  /**
-   * Persist backup-code hashes for a freshly enrolled credential. Called
-   * by MfaController after the user scans the QR + sends their first TOTP.
-   * Idempotent: re-enrollment updates the existing row.
-   */
-  async persistBackupCodes(
-    userId: string,
-    cityId: string,
-    backupCodesHash: string[],
-  ): Promise<void> {
-    await this.db.kysely
-      .insertInto('mfa_credentials')
-      .values({
-        user_id: userId,
-        city_id: cityId,
-        type: 'totp',
-        label: 'default',
-        backup_codes_hash: backupCodesHash,
-      })
-      .onConflict((oc) =>
-        oc.column('user_id').doUpdateSet({ backup_codes_hash: backupCodesHash }),
-      )
-      .execute();
+  // The MFA endpoints don't carry a request id down to the service layer —
+  // the controller is responsible for log scoping. Pass empty string so the
+  // GUC still satisfies NOT NULL checks (the column is text-typed).
+  private tenantCtx(cityId: string, userId: string): TenantContext {
+    return { cityId, userId, isSuperAdmin: false, requestId: '' };
   }
 }
