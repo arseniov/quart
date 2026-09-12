@@ -464,6 +464,19 @@ export interface NotificationDeliveriesTable {
 }
 
 // ============================================================================
+// 0027 Saved items
+// ============================================================================
+
+export interface SavedItemsTable {
+  id: Generated<string>;
+  city_id: string;
+  user_id: string;
+  kind: 'issue' | 'idea' | 'poll';
+  target_id: string;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+}
+
+// ============================================================================
 // 0009 KV / FTS / DSAR
 // ============================================================================
 
@@ -544,6 +557,7 @@ export interface DB {
   notifications: NotificationsTable;
   push_subscriptions: PushSubscriptionsTable;
   notification_deliveries: NotificationDeliveriesTable;
+  saved_items: SavedItemsTable;
 
   dsar_requests: DsarRequestsTable;
   feature_flags: FeatureFlagsTable;

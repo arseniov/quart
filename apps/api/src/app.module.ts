@@ -2,6 +2,7 @@ import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
+import { AdminModule } from './admin/admin.module.js';
 import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -46,6 +47,7 @@ import { TopicsModule } from './topics/topics.module.js';
     NotificationsModule,
     SavedItemsModule,
     SelfModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },

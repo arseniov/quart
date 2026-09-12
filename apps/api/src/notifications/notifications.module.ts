@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+
+import { AuditModule } from '../audit/audit.module.js';
+import { AuthModule } from '../auth/auth.module.js';
+
+import { NotificationsController } from './notifications.controller.js';
+import { NotificationsService } from './notifications.service.js';
+
+@Module({
+  imports: [AuthModule, AuditModule],
+  controllers: [NotificationsController],
+  providers: [NotificationsService],
+})
+export class NotificationsModule {}
