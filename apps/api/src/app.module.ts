@@ -19,6 +19,7 @@ import { I18nModule } from './i18n/i18n.module.js';
 import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { SseModule } from './notifications/sse.module.js';
 import { PollsModule } from './polls/polls.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
@@ -48,6 +49,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
     SearchModule,
     I18nModule,
     NotificationsModule,
+    SseModule,
     SavedItemsModule,
     SelfModule,
     AdminModule,

@@ -78,6 +78,10 @@ export const redactionPaths: readonly string[] = [
   // T37 — push tokens identify a physical device; redact the `to` field on
   // any Expo-style payload (`{to, title, body, ...}`).
   '*.to',
+  // T39 — SSE event payloads can carry notification bodies (title/body/targetUrl)
+  // which are user-visible PII. Redact `data` on any wrapped payload shape so a
+  // stray `logger.info({ data: evt }, ...)` doesn't leak content to stdout.
+  '*.data',
 ];
 
 export function buildLoggerOptions(config: ConfigService): LoggerOptions {
