@@ -11,7 +11,10 @@ import { ConfigService } from '../config/config.service.js';
 export const MINIO_CLIENT = Symbol('MINIO_CLIENT');
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/heic', 'image/webp']);
+// sharp's metadata().format — used as the trusted signal of the actual image
+// format (client-supplied Content-Type is untrusted). HEIC files are reported
+// by sharp as 'heif'.
+const ALLOWED_FORMATS = new Set(['jpeg', 'png', 'heif', 'webp']);
 const OUTPUT_MIME = 'image/jpeg';
 const MAX_WIDTH = 1024;
 
@@ -36,24 +39,37 @@ export class UploadsService {
     @Optional() private readonly sharpImpl: typeof sharp = sharp,
   ) {}
 
-  async process(input: Buffer, mime: string): Promise<ProcessedUpload> {
-    if (!ALLOWED_MIME.has(mime)) {
-      throw new BadRequestException({
-        error: { code: 'upload.mime_unsupported', message: 'Image required (jpeg, png, heic, webp)' },
-      });
-    }
+  async process(input: Buffer): Promise<ProcessedUpload> {
     if (input.byteLength > MAX_BYTES) {
       throw new BadRequestException({
         error: { code: 'upload.too_large', message: 'Max 10MB' },
       });
     }
 
-    const bytes = await this.sharpImpl(input)
-      .rotate()                                  // honor EXIF orientation
-      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-      .withMetadata({ exif: {} })                // strip ALL EXIF (GPS, device, etc.)
-      .jpeg({ quality: 82, mozjpeg: true })
-      .toBuffer();
+    // Real MIME sniff — client-supplied Content-Type is untrusted. We run
+    // sharp's metadata() first (it reads only the header, not the whole
+    // buffer) so a declared `image/jpeg` blob of plaintext is rejected
+    // before any decode work happens.
+    const meta = await this.sharpImpl(input).metadata();
+    if (!meta.format || !ALLOWED_FORMATS.has(meta.format)) {
+      throw new BadRequestException({
+        error: { code: 'upload.mime_unsupported', message: 'Image required (jpeg, png, heic, webp)' },
+      });
+    }
+
+    let bytes: Buffer;
+    try {
+      bytes = await this.sharpImpl(input)
+        .rotate()                                  // honor EXIF orientation
+        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+        .withMetadata({ exif: {} })                // strip ALL EXIF (GPS, device, etc.)
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException({
+        error: { code: 'upload.decode_failed', message: 'malformed image' },
+      });
+    }
 
     const objectKey = `processed/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.jpg`;
     await this.minio.putObject(

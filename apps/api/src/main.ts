@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import multipart from '@fastify/multipart';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
@@ -14,6 +15,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
   });
+  // Global multipart — `attachFieldsToBody: false` keeps body untouched so
+  // each route pulls its part via `req.file({ limits })` and decides limits
+  // per-route (DoS surface: 10MB enforced mid-stream, not after buffering).
+  await app.register(multipart, { attachFieldsToBody: false });
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
