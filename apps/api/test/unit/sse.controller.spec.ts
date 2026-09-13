@@ -2,13 +2,16 @@ import { firstValueFrom, isObservable, Observable, Subject } from 'rxjs';
 import { take, toArray } from 'rxjs/operators';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AuthUser } from '../../src/auth/decorators/current-user.decorator.js';
 import type {
   NotificationsSubscriber,
   NotificationSubscription,
 } from '../../src/notifications/notifications-subscriber.service.js';
 import { SseController } from '../../src/notifications/sse.controller.js';
 
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 25_000;
+
+const user = (id: string): AuthUser => ({ id, cityId: '', isSuperAdmin: false, roleSnapshot: [] });
 
 function makeSubscriber(
   opts: {
@@ -16,15 +19,20 @@ function makeSubscriber(
     cleanup?: () => Promise<void>;
     onSubscribe?: (userId: string) => void;
   } = {},
-): NotificationsSubscriber {
-  const subscribe = vi.fn((userId: string): NotificationSubscription => {
-    opts.onSubscribe?.(userId);
-    return {
-      events: opts.events ?? new Observable<string>(),
-      cleanup: opts.cleanup ?? (async () => undefined),
-    };
-  });
-  return { subscribe } as unknown as NotificationsSubscriber;
+): NotificationsSubscriber & { capturedOnError?: (err: unknown) => void } {
+  const mock: NotificationsSubscriber & { capturedOnError?: (err: unknown) => void } = {
+    subscribe: vi.fn(
+      (calledUserId: string, onError?: (err: unknown) => void): NotificationSubscription => {
+        opts.onSubscribe?.(calledUserId);
+        mock.capturedOnError = onError;
+        return {
+          events: opts.events ?? new Observable<string>(),
+          cleanup: opts.cleanup ?? (async () => undefined),
+        };
+      },
+    ),
+  };
+  return mock;
 }
 
 describe('SseController.stream', () => {
@@ -38,7 +46,7 @@ describe('SseController.stream', () => {
   it('returns an Observable (Nest @Sse contract)', () => {
     const sub = makeSubscriber();
     const ctrl = new SseController(sub);
-    const obs = ctrl.stream({ id: 'u-1' } as never);
+    const obs = ctrl.stream(user('u-1'));
     expect(isObservable(obs)).toBe(true);
   });
 
@@ -46,10 +54,11 @@ describe('SseController.stream', () => {
     let captured: string | undefined;
     const sub = makeSubscriber({ onSubscribe: (u) => { captured = u; } });
     const ctrl = new SseController(sub);
-    // take(0) subscribes (which triggers the subscriber factory) then
-    // immediately completes without consuming the underlying Observable.
-    void ctrl.stream({ id: 'user-42' } as never).pipe(take(0)).subscribe();
+    // subscribe (triggers the subscriber factory) then unsubscribe — take(0)
+    // short-circuits and never reaches the source, so it can't be used here.
+    const inner = ctrl.stream(user('user-42')).subscribe();
     expect(captured).toBe('user-42');
+    inner.unsubscribe();
   });
 
   it('emits a typed MessageEvent per subscriber event', async () => {
@@ -57,7 +66,7 @@ describe('SseController.stream', () => {
     const sub = makeSubscriber({ events: subject.asObservable() });
     const ctrl = new SseController(sub);
 
-    const out$ = ctrl.stream({ id: 'u-1' } as never).pipe(take(2), toArray());
+    const out$ = ctrl.stream(user('u-1')).pipe(take(2), toArray());
     const done = firstValueFrom(out$);
 
     subject.next(JSON.stringify({ id: '1', event: 'notification.created', data: { title: 'hi' } }));
@@ -75,7 +84,7 @@ describe('SseController.stream', () => {
     const sub = makeSubscriber({ events: subject.asObservable() });
     const ctrl = new SseController(sub);
 
-    const out$ = ctrl.stream({ id: 'u-1' } as never).pipe(take(1), toArray());
+    const out$ = ctrl.stream(user('u-1')).pipe(take(1), toArray());
     const done = firstValueFrom(out$);
 
     subject.next('not-json');
@@ -87,7 +96,7 @@ describe('SseController.stream', () => {
     ]);
   });
 
-  it('emits a heartbeat MessageEvent every 30s and cleans up on disconnect', async () => {
+  it('emits a heartbeat MessageEvent every 25s and cleans up on disconnect', async () => {
     const cleanup = vi.fn(async () => undefined);
     const sub = makeSubscriber({
       events: new Observable<string>(), // never emits, never completes
@@ -96,13 +105,13 @@ describe('SseController.stream', () => {
     const ctrl = new SseController(sub);
 
     const collected: unknown[] = [];
-    const inner = ctrl.stream({ id: 'u-1' } as never).subscribe((v) => collected.push(v));
+    const inner = ctrl.stream(user('u-1')).subscribe((v) => collected.push(v));
 
-    // First heartbeat at +30s.
+    // First heartbeat at +25s.
     await vi.advanceTimersByTimeAsync(HEARTBEAT_MS + 10);
     expect(collected).toEqual([{ type: 'heartbeat', data: {} }]);
 
-    // Second heartbeat at +60s.
+    // Second heartbeat at +50s.
     await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
     expect(collected).toEqual([
       { type: 'heartbeat', data: {} },
@@ -117,5 +126,28 @@ describe('SseController.stream', () => {
     const before = collected.length;
     await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 2);
     expect(collected.length).toBe(before);
+  });
+
+  it('forwards a mid-stream valkey error into the Observable error channel', async () => {
+    const sub = makeSubscriber({ events: new Subject<string>().asObservable() });
+    const ctrl = new SseController(sub);
+
+    let received: unknown;
+    const done = new Promise<void>((resolve) => {
+      ctrl.stream(user('u-1')).subscribe({
+        error: (err) => {
+          received = err;
+          resolve();
+        },
+      });
+    });
+
+    // The subscriber service would normally wire this through `sub.on('error', ...)`
+    // from ioredis whenever a mid-stream Valkey disconnect fires.
+    sub.capturedOnError?.(new Error('ECONNRESET'));
+
+    await done;
+    expect(received).toBeInstanceOf(Error);
+    expect((received as Error).message).toBe('ECONNRESET');
   });
 });

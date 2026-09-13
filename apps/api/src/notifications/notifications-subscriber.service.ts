@@ -32,14 +32,12 @@ export interface NotificationSubscription {
 export class NotificationsSubscriber {
   constructor(@Inject(VALKEY_URL) private readonly valkeyUrl: string) {}
 
-  subscribe(userId: string): NotificationSubscription {
+  subscribe(userId: string, onError: (err: unknown) => void): NotificationSubscription {
     const sub = new Redis(this.valkeyUrl, { lazyConnect: false });
-    sub.on('error', () => {
-      // Swallow at the source — the Observable forwards the first error to the
-      // consumer, which will tear down the SSE stream. Logging here would
-      // double-log per stream event and adds no signal beyond what the
-      // consumer already gets.
-    });
+    // Forward mid-stream Valkey disconnects (ioredis 'error' event) to the
+    // consumer. Without this the SSE stream hangs until client timeout —
+    // ioredis retries forever and the Observable never sees a terminal event.
+    sub.on('error', onError);
     const events$ = new Observable<string>((observer) => {
       const onMessage = (_ch: string, msg: string): void => observer.next(msg);
       sub.on('message', onMessage);

@@ -10,18 +10,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { NotificationsSubscriber } from './notifications-subscriber.service.js';
 
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 25_000;
 
 /** `GET /me/notifications/stream` — Server-Sent Events feed of
  *  `notif:${userId}` Valkey pub/sub messages, framed as typed
  *  `{ id, type, data }` MessageEvents.
  *
  *  Heartbeat: a typed MessageEvent with `type: 'heartbeat'` and `data: {}`
- *  every 30s. We deliberately emit it AS an event (not an SSE comment line)
+ *  every 25s. We deliberately emit it AS an event (not an SSE comment line)
  *  so the whole stream goes through the `Observable` contract — the
  *  alternative (raw `reply.raw.write(':heartbeat\n\n')`) bypasses Nest's
  *  `@Sse()` serialization and would couple the controller to the HTTP
- *  transport. Clients filter by `type === 'heartbeat'` and ignore. */
+ *  transport. Clients filter by `type === 'heartbeat'` and ignore.
+ *  ponytail: 25s ceiling — kept under the 30s proxy-idle-timeout (nginx
+ *  default `proxy_read_timeout` / envoy `idle_timeout`) so intermediate
+ *  proxies never close an idle SSE connection before we keep it alive. */
 @Controller('me/notifications')
 @UseGuards(JwtAuthGuard)
 export class SseController {
@@ -30,8 +33,13 @@ export class SseController {
   @Sse('stream')
   stream(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
     const userId = user.id;
-    const { events, cleanup } = this.subscriber.subscribe(userId);
     return new Observable<MessageEvent>((observer) => {
+      // onError forwards mid-stream Valkey disconnects (ioredis 'error' event)
+      // straight into the Observable's error channel — Nest then closes the
+      // SSE response. Without this the stream hangs until client timeout.
+      const { events, cleanup } = this.subscriber.subscribe(userId, (err) =>
+        observer.error(err as Error),
+      );
       const inner = events.subscribe({
         next: (raw) => {
           try {
