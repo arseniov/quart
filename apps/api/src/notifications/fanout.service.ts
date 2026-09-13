@@ -14,10 +14,13 @@ import type { QueueService } from '../queue/queue.service.js';
 const ALLOWED_HOSTS: ReadonlySet<string> = new Set(['quart.app', 'www.quart.app']);
 
 /** target_url must be either a same-origin relative path (`/...`) or an
- *  absolute URL pointing at an allow-listed host. */
+ *  absolute URL pointing at an allow-listed host. Protocol-relative (`//host/...`)
+ *  and backslash-prefixed (`/\host/...`) variants are rejected because the
+ *  browser would treat them as cross-origin absolute URLs. */
 const targetUrl = z
   .string()
   .refine((u) => {
+    if (u.startsWith('//') || u.startsWith('/\\')) return false;
     if (u.startsWith('/')) return true;
     try {
       const parsed = new URL(u);

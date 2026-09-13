@@ -159,6 +159,15 @@ describe('FanoutService.fanout', () => {
     ).rejects.toThrow(/target_url/);
   });
 
+  it('rejects protocol-relative target_url (//evil.com/x)', async () => {
+    await expect(
+      svc.fanout(
+        { userId: USER_UUID, type: 'poll', title: 't', body: 'b', targetUrl: '//evil.com/x', payload: {} },
+        tenant,
+      ),
+    ).rejects.toThrow(/target_url/);
+  });
+
   it('accepts a same-host absolute target_url', async () => {
     await expect(
       svc.fanout(

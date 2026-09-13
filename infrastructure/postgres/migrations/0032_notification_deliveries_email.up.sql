@@ -14,6 +14,16 @@ ALTER TABLE notification_deliveries
   ADD COLUMN recipient_email citext NULL,
   ALTER COLUMN push_subscription_id DROP NOT NULL;
 
+-- Cross-column invariant: each channel populates exactly one of the recipient
+-- columns. Without this, app bugs could land an `email` row with a NULL
+-- recipient_email or a `push` row with a NULL push_subscription_id, and the
+-- worker would silently no-op.
+ALTER TABLE notification_deliveries
+  ADD CONSTRAINT notification_deliveries_channel_recipient_chk CHECK (
+    (channel = 'email'   AND recipient_email IS NOT NULL AND push_subscription_id IS NULL)
+    OR (channel = 'push' AND push_subscription_id IS NOT NULL AND recipient_email IS NULL)
+  );
+
 -- ponytail: covering index for "show me every email delivery for this
 -- notification" — small per-notification scans, no need for a wider index.
 CREATE INDEX IF NOT EXISTS notification_deliveries_notification_channel_idx
