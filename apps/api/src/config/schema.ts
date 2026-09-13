@@ -44,6 +44,11 @@ export const EnvSchema = z.object({
   EXPO_ACCESS_TOKEN: z.string().min(1),
   // Per-request timeout. Default 10s covers the slow path of Expo's HTTP API.
   EXPO_TIMEOUT_MS: z.coerce.number().int().min(1).max(60_000).default(10_000),
+
+  // SES sender address (T38). Optional — empty means the email worker logs
+  // every send (dev / test) and the SES provider is never wired. Production
+  // sets SES_FROM_ADDRESS once SES + the verified sender are configured.
+  SES_FROM_ADDRESS: z.string().default(''),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

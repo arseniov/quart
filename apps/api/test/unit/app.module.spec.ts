@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 
 import { AppModule } from '../../src/app.module.js';
 import { ConfigService } from '../../src/config/config.service.js';
+import { FanoutService } from '../../src/notifications/fanout.service.js';
+import { EmailService } from '../../src/queue/email.service.js';
 import { PushService } from '../../src/queue/push.service.js';
 import { QueueService } from '../../src/queue/queue.service.js';
 
@@ -32,6 +34,7 @@ describe('AppModule', () => {
         EXPO_ACCESS_TOKEN: 't',
         EXPO_TIMEOUT_MS: 10_000,
         KEK_BASE64: Buffer.alloc(32, 7).toString('base64'),
+        SES_FROM_ADDRESS: '',
       },
     } as unknown as ConfigService;
     const queueStub = {
@@ -40,6 +43,8 @@ describe('AppModule', () => {
       onApplicationShutdown: async () => undefined,
     } as unknown as QueueService;
     const pushStub = { send: async () => undefined } as unknown as PushService;
+    const emailStub = { send: async () => undefined } as unknown as EmailService;
+    const fanoutStub = { fanout: async () => undefined } as unknown as FanoutService;
     const mod = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
       .useValue(stub)
@@ -47,6 +52,10 @@ describe('AppModule', () => {
       .useValue(queueStub)
       .overrideProvider(PushService)
       .useValue(pushStub)
+      .overrideProvider(EmailService)
+      .useValue(emailStub)
+      .overrideProvider(FanoutService)
+      .useValue(fanoutStub)
       .compile();
     expect(mod).toBeDefined();
   });

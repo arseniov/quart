@@ -9,6 +9,8 @@ import { DbService } from '../db/db.service.js';
 
 import { startAuditAnchorWorker } from './audit-anchor.worker.js';
 import { parseValkeyUrl } from './connection.js';
+import { EmailService } from './email.service.js';
+import { startEmailWorker } from './email.worker.js';
 import { startPiiRotationWorker } from './pii-rotation.worker.js';
 import { PushService } from './push.service.js';
 import { startPushWorker } from './push.worker.js';
@@ -99,6 +101,31 @@ export class PushWorkerHost implements OnModuleInit, OnApplicationShutdown {
   }
 }
 
+/** Owns the SES email BullMQ worker (T38). One job per
+ *  `notification_deliveries` row — payload carries the recipient + delivery id
+ *  so the worker is stateless. Exported so tests can override it via
+ *  Test.createTestingModule (otherwise constructing a Worker would race to
+ *  talk to Valkey). */
+@Injectable()
+export class EmailWorkerHost implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(EmailWorkerHost.name);
+  private worker!: Worker;
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly email: EmailService,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    this.worker = startEmailWorker({ config: this.config, email: this.email });
+    this.logger.log('email worker started');
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.worker) await this.worker.close();
+  }
+}
+
 @Global()
 @Module({
   providers: [
@@ -109,10 +136,12 @@ export class PushWorkerHost implements OnModuleInit, OnApplicationShutdown {
       inject: [ConfigService],
     },
     PushService,
+    EmailService,
     AuditAnchorWorkerHost,
     PiiRotationWorkerHost,
     PushWorkerHost,
+    EmailWorkerHost,
   ],
-  exports: [QueueService, PushService],
+  exports: [QueueService, PushService, EmailService],
 })
 export class QueueModule {}

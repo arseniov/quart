@@ -468,7 +468,14 @@ export interface PushSubscriptionsTable {
 export interface NotificationDeliveriesTable {
   id: Generated<string>;
   notification_id: string;
-  push_subscription_id: string;
+  // Nullable from migration 0032 onward: email-channel rows don't reference a
+  // push_subscription. Channel discriminates push vs email rows.
+  push_subscription_id: string | null;
+  // Per-channel fan-out (T38): 'push' for Expo, 'email' for SES.
+  channel: Generated<'push' | 'email'>;
+  // Captured at fan-out time so the email worker is stateless and a later
+  // user.email change can't invalidate a pending retry.
+  recipient_email: string | null;
   status: 'pending' | 'delivered' | 'failed';
   error_code: string | null;
   attempts: Generated<number>;
