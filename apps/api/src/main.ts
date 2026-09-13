@@ -9,8 +9,14 @@ import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { ZodValidationPipe } from './common/zod-validation.pipe.js';
 import { ConfigService } from './config/config.service.js';
+import { EnvSchema } from './config/schema.js';
+import { initSentry } from './observability/sentry.js';
 
 async function bootstrap(): Promise<void> {
+  // Init Sentry BEFORE NestFactory.create() so bootstrap errors are captured.
+  // We parse env directly (ConfigService is a Nest provider, not available yet).
+  // ConfigService re-validates the same process.env when Nest instantiates it.
+  initSentry(EnvSchema.parse(process.env));
   const adapter = new FastifyAdapter({ trustProxy: true, logger: false });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
