@@ -71,6 +71,9 @@ export const redactionPaths: readonly string[] = [
   '*.payload_canonical_sha256',
   '*.row_hash',
   '*.prev_hash',
+  // T37 — push tokens identify a physical device; redact the `to` field on
+  // any Expo-style payload (`{to, title, body, ...}`).
+  '*.to',
 ];
 
 export function buildLoggerOptions(config: ConfigService): LoggerOptions {

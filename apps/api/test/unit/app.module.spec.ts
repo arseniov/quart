@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 
 import { AppModule } from '../../src/app.module.js';
 import { ConfigService } from '../../src/config/config.service.js';
+import { PushService } from '../../src/queue/push.service.js';
 import { QueueService } from '../../src/queue/queue.service.js';
 
 describe('AppModule', () => {
@@ -28,6 +29,9 @@ describe('AppModule', () => {
         QUART_ALLOW_FREE_TSA: false,
         TSA_URL: 'https://api.freetsa.org/tsr',
         LOG_LEVEL: 'silent',
+        EXPO_ACCESS_TOKEN: 't',
+        EXPO_TIMEOUT_MS: 10_000,
+        KEK_BASE64: Buffer.alloc(32, 7).toString('base64'),
       },
     } as unknown as ConfigService;
     const queueStub = {
@@ -35,11 +39,14 @@ describe('AppModule', () => {
       addRepeatable: async () => undefined,
       onApplicationShutdown: async () => undefined,
     } as unknown as QueueService;
+    const pushStub = { send: async () => undefined } as unknown as PushService;
     const mod = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
       .useValue(stub)
       .overrideProvider(QueueService)
       .useValue(queueStub)
+      .overrideProvider(PushService)
+      .useValue(pushStub)
       .compile();
     expect(mod).toBeDefined();
   });

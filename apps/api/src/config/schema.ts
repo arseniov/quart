@@ -38,6 +38,12 @@ export const EnvSchema = z.object({
   TSA_URL: z.string().url(),
 
   LOG_LEVEL: z.string().default('info'),
+
+  // Expo push delivery. EXPO_ACCESS_TOKEN is required — fail-fast at boot
+  // rather than silently POSTing unauthenticated (T37 deviation #1).
+  EXPO_ACCESS_TOKEN: z.string().min(1),
+  // Per-request timeout. Default 10s covers the slow path of Expo's HTTP API.
+  EXPO_TIMEOUT_MS: z.coerce.number().int().min(1).max(60_000).default(10_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

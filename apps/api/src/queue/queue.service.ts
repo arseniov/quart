@@ -14,6 +14,14 @@ const JOB_NAME: Record<QueueName, string> = {
   webhooks: 'deliver_webhook',
 };
 
+// ponytail: 5 attempts with 5s exponential base = ~5s, 10s, 20s, 40s, 80s of
+// backoff. Transient Expo outages get covered without pinning the worker
+// queue. Promote to per-env tuning once volume justifies it.
+const PUSH_RETRY = {
+  attempts: 5,
+  backoff: { type: 'exponential' as const, delay: 5_000 },
+};
+
 @Injectable()
 export class QueueService implements OnApplicationShutdown {
   private readonly logger = new Logger(QueueService.name);
@@ -23,7 +31,16 @@ export class QueueService implements OnApplicationShutdown {
     private readonly connection: RedisOptions,
     queues?: Partial<Record<QueueName, Queue>>,
   ) {
-    const ctor = (name: QueueName): Queue => queues?.[name] ?? new Queue(name, { connection });
+    const ctor = (name: QueueName): Queue => {
+      if (queues?.[name]) return queues[name]!;
+      // exactOptionalPropertyTypes won't accept `defaultJobOptions: undefined`;
+      // build the options object conditionally instead.
+      const opts: { connection: RedisOptions; defaultJobOptions?: typeof PUSH_RETRY } = {
+        connection,
+      };
+      if (name === 'push') opts.defaultJobOptions = PUSH_RETRY;
+      return new Queue(name, opts);
+    };
     this.queues = {
       push: ctor('push'),
       email: ctor('email'),

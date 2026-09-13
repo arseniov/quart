@@ -10,6 +10,8 @@ import { DbService } from '../db/db.service.js';
 import { startAuditAnchorWorker } from './audit-anchor.worker.js';
 import { parseValkeyUrl } from './connection.js';
 import { startPiiRotationWorker } from './pii-rotation.worker.js';
+import { PushService } from './push.service.js';
+import { startPushWorker } from './push.worker.js';
 import { QueueService } from './queue.service.js';
 
 /** Owns the audit-anchor BullMQ worker + its repeatable schedule.
@@ -72,6 +74,31 @@ export class PiiRotationWorkerHost implements OnModuleInit, OnApplicationShutdow
   }
 }
 
+/** Owns the Expo push BullMQ worker. No repeatable — pushes are platform-
+ *  initiated via the fan-out worker (T38). The worker stays attached so an
+ *  enqueued `send_push` job is drained immediately. Exported so tests can
+ *  override it via Test.createTestingModule (otherwise constructing a Worker
+ *  would race to talk to Valkey). */
+@Injectable()
+export class PushWorkerHost implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(PushWorkerHost.name);
+  private worker!: Worker;
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly push: PushService,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    this.worker = startPushWorker({ config: this.config, push: this.push });
+    this.logger.log('push worker started');
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.worker) await this.worker.close();
+  }
+}
+
 @Global()
 @Module({
   providers: [
@@ -81,9 +108,11 @@ export class PiiRotationWorkerHost implements OnModuleInit, OnApplicationShutdow
         new QueueService(parseValkeyUrl(config.env.VALKEY_URL)),
       inject: [ConfigService],
     },
+    PushService,
     AuditAnchorWorkerHost,
     PiiRotationWorkerHost,
+    PushWorkerHost,
   ],
-  exports: [QueueService],
+  exports: [QueueService, PushService],
 })
 export class QueueModule {}

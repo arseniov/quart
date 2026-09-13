@@ -455,6 +455,12 @@ export interface PushSubscriptionsTable {
   locale: string;
   app_version: string;
   device_platform: 'ios' | 'android' | 'web';
+  // 'invalid' is set by the push worker when Expo rejects the token
+  // (DeviceNotRegistered / InvalidCredentials). Default 'active' for new rows.
+  status: Generated<'active' | 'invalid'>;
+  // Tracks when the worker last marked the token invalid (0031).
+  // Revocation (`revoked_at`) is user-initiated and orthogonal.
+  invalidated_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   revoked_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
