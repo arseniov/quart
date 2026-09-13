@@ -9,9 +9,14 @@ import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { ZodValidationPipe } from './common/zod-validation.pipe.js';
 import { ConfigService } from './config/config.service.js';
+import { OtelShutdownHook, startOtel } from './observability/otel.js';
 import { initSentry, SentryEnvSchema } from './observability/sentry.js';
 
 async function bootstrap(): Promise<void> {
+  // Init OTel BEFORE Sentry and BEFORE NestFactory.create() so the SDK
+  // catches bootstrap-time spans and the Prometheus exporter is up while
+  // the API is still coming up. No-op when OTEL_ENABLED=false.
+  const otelHandle = startOtel();
   // Init Sentry BEFORE NestFactory.create() so bootstrap errors are captured.
   // We parse ONLY the Sentry keys (narrow SentryEnvSchema), so contexts
   // without full app config (workers, scripts) can still log to Sentry.
@@ -20,6 +25,12 @@ async function bootstrap(): Promise<void> {
   const adapter = new FastifyAdapter({ trustProxy: true, logger: false });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
+  });
+  // Hand the OTel lifecycle to Nest's shutdown chain. Belt-and-suspenders
+  // SIGTERM so a hard-stop still flushes spans + metrics.
+  app.get(OtelShutdownHook).setHandle(otelHandle);
+  process.on('SIGTERM', () => {
+    void otelHandle.shutdown();
   });
   // Global multipart — `attachFieldsToBody: false` keeps body untouched so
   // each route pulls its part via `req.file({ limits })` and decides limits
