@@ -345,6 +345,9 @@ export interface CommentReactionsTable {
 // ============================================================================
 
 export interface AuditLogTable {
+  // pg returns int8 (bigserial) as a JS string at runtime, even though this is
+  // typed `number` for the Kysely builder. Callers cast through `as never` /
+  // `String(...)` when they need a stable representation.
   id: Generated<number>; // bigserial
   city_id: string;
   actor_user_id: string | null;
@@ -368,9 +371,12 @@ export interface AuditLogTable {
 
 export interface AuditAnchorsTable {
   id: Generated<string>;
-  merkle_root: string; // char(64)
-  row_range_start: number; // bigint
-  row_range_end: number; // bigint
+  // SHA-256 concatenation hash of the latest audit_log row_hash sequence.
+  // Renamed from `merkle_root` in 0029: it's not a Merkle tree root.
+  // pg returns int8 (bigserial) as a JS string — see the audit_log.id comment above.
+  anchor_hash: string; // char(64)
+  row_range_start: string; // bigint — pg returns int8 as string
+  row_range_end: string; // bigint — pg returns int8 as string
   tsa_response: Buffer;
   tsa_url: string;
   tsa_cert_sha256: string; // char(64)

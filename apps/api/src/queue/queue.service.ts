@@ -56,6 +56,19 @@ export class QueueService implements OnApplicationShutdown {
     }
     return job;
   }
+
+  /** Register a BullMQ repeatable job — the right primitive for cron-like
+   *  schedules because it survives process restarts (the cadence lives in
+   *  Valkey) and the worker drains missed ticks on boot. BullMQ deduplicates
+   *  by `jobId`; one row per (queue, jobId). */
+  async addRepeatable(
+    name: QueueName,
+    jobName: string,
+    data: unknown,
+    opts: { repeat: { pattern: string; tz?: string }; jobId: string },
+  ) {
+    return this.queues[name].add(jobName, data, opts);
+  }
 }
 
 /** Structural equality for plain JSON-ish payloads (no Date/Map/Set gymnastics). */

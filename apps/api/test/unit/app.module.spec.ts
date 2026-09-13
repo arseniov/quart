@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 
 import { AppModule } from '../../src/app.module.js';
 import { ConfigService } from '../../src/config/config.service.js';
+import { QueueService } from '../../src/queue/queue.service.js';
 
 describe('AppModule', () => {
   it('compiles without missing provider errors', async () => {
@@ -29,9 +30,16 @@ describe('AppModule', () => {
         LOG_LEVEL: 'silent',
       },
     } as unknown as ConfigService;
+    const queueStub = {
+      enqueue: async () => undefined,
+      addRepeatable: async () => undefined,
+      onApplicationShutdown: async () => undefined,
+    } as unknown as QueueService;
     const mod = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
       .useValue(stub)
+      .overrideProvider(QueueService)
+      .useValue(queueStub)
       .compile();
     expect(mod).toBeDefined();
   });
