@@ -22,6 +22,11 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
+  // Required for OnApplicationShutdown hooks (e.g. QueueService closes
+  // BullMQ queues, AuditAnchorWorkerHost closes the Worker) to fire on
+  // SIGTERM/SIGINT. Without this, Nest silently tears down without running
+  // any shutdown lifecycle.
+  app.enableShutdownHooks();
   const config = app.get(ConfigService);
   await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
 }
