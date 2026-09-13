@@ -422,7 +422,7 @@ export interface PiiKeyVersionsTable {
   id: Generated<string>;
   city_id: string;
   version: number;
-  status: 'active' | 'rotating' | 'retired' | 'pending';
+  status: 'active' | 'retiring' | 'retired'; // quart_security.key_status
   dek_encrypted: Buffer;
   kek_id: string;
   created_at: ColumnType<Date, Date | string | undefined, never>;

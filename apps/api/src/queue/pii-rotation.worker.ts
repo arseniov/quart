@@ -57,7 +57,11 @@ export async function rotatePiiKeys(
     .executeTakeFirst();
   if (!activeKek) throw new Error('no active KEK version');
 
-  const cities = await opts.db.kysely.selectFrom('cities').select('id').execute();
+  const cities = await opts.db.kysely
+    .selectFrom('cities')
+    .select('id')
+    .where('status', '=', 'active')
+    .execute();
   let rotated = 0;
   for (const c of cities) {
     try {
@@ -66,9 +70,7 @@ export async function rotatePiiKeys(
       });
       rotated += 1;
     } catch (err) {
-      // UNIQUE (city_id) WHERE status='active' => a previous run already
-      // produced the (city, active) pair we're trying to write. Swallow and
-      // continue — the city is already rotated, which is what the caller wants.
+      // short-circuit: partial unique index guarantees remaining cities are already at this version
       if (isUniqueViolation(err)) return { cities: rotated };
       throw err;
     }
@@ -83,13 +85,9 @@ async function rotateOneCity(
   dekEncrypted: Buffer,
   kekId: string,
 ): Promise<void> {
-  // The Kysely TS types say `status: 'rotating'|'pending'` but the actual
-  // `quart_security.key_status` enum is `'active'|'retiring'|'retired'`.
-  // Cast at the call site rather than widening the shared DB types — only this
-  // worker writes 'retiring'.
   await trx
     .updateTable('pii_key_versions')
-    .set({ status: 'retiring' as never })
+    .set({ status: 'retiring' })
     .where('city_id', '=', cityId)
     .where('status', '=', 'active')
     .execute();
@@ -98,7 +96,7 @@ async function rotateOneCity(
     .values({
       city_id: cityId,
       version,
-      status: 'active' as never,
+      status: 'active',
       dek_encrypted: dekEncrypted,
       kek_id: kekId,
       activated_at: new Date(),

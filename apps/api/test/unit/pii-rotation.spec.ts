@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { decryptDek, encryptDek } from '../../src/pii/envelope.js';
 import type * as WorkerModule from '../../src/queue/pii-rotation.worker.js';
@@ -116,16 +116,6 @@ vi.mock('../../src/queue/pii-rotation.worker.js', async (importOriginal) => {
 });
 
 describe('rotatePiiKeys', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
-
   it('updates each city active->retiring and inserts a new active row in one transaction per city', async () => {
     const db = makeDb({ cities: ['c1', 'c2'], activeKekId: 'kek-1' });
     const result = await rotatePiiKeys({ db: db as never, kekBase64: KEK_B64 }, ARGS);
@@ -157,9 +147,10 @@ describe('rotatePiiKeys', () => {
     expect(first.version).toBe(2);
     expect(first.status).toBe('active');
     expect(first.kek_id).toBe('kek-1');
-    // Stored DEK is a Buffer (not the raw plaintext hex) and 12+ > 16 bytes (iv||ct||tag).
+    // Stored DEK is a Buffer (not the raw plaintext hex). Layout: 12-byte iv
+    // + ciphertext + 16-byte tag; plaintext was 32 bytes, so total = 60.
     expect(Buffer.isBuffer(first.dek_encrypted)).toBe(true);
-    expect((first.dek_encrypted as Buffer).length).toBeGreaterThan(28);
+    expect((first.dek_encrypted as Buffer).length).toBe(60);
   });
 
   it('is idempotent: a second run with the same version hits the active-unique constraint but does not duplicate', async () => {
