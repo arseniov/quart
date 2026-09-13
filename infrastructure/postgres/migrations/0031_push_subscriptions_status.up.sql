@@ -14,5 +14,8 @@ ALTER TABLE push_subscriptions
 -- ponytail: (status='invalid') is the new "filter active subs" predicate;
 -- drop the (city_id, revoked_at) index since (city_id, status) covers both
 -- "active subs per city" and "invalidated per city" reads with one index.
-DROP INDEX IF EXISTS push_subscriptions_city_active_idx;
-CREATE INDEX push_subscriptions_city_status_idx ON push_subscriptions (city_id, status);
+-- CONCURRENTLY so push delivery keeps reading the table during the swap;
+-- migrate runner detects the keyword and skips its outer transaction.
+DROP INDEX CONCURRENTLY IF EXISTS push_subscriptions_city_active_idx;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS push_subscriptions_city_status_idx
+  ON push_subscriptions (city_id, status);

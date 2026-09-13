@@ -1,3 +1,4 @@
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { createDb, SqlFileMigrationProvider } from '@quart/db';
@@ -95,16 +96,31 @@ for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     const migration = allMigrations[name];
     if (!migration) continue;
     try {
-      await (db as AnyDb).transaction().execute(async (trx) => {
-        // The provider's `up` function accepts a Kysely instance and runs
-        // the migration SQL against it. Using `trx` keeps the migration's
-        // statements in the same transaction as the kysely_migration insert.
-        await migration.up(trx as unknown as AnyDb);
-        await (trx as unknown as AnyDb)
+      // `CREATE/DROP INDEX CONCURRENTLY` cannot run inside a transaction block
+      // in Postgres — detect via raw SQL and run the migration body outside
+      // the wrapper, then record kysely_migration in its own statement. The
+      // migration is still idempotent because the SQL uses IF EXISTS / IF NOT
+      // EXISTS guards.
+      const sql = await fs.readFile(path.join(migrationsDir, `${name}.up.sql`), 'utf8');
+      const usesConcurrently = /\bCONCURRENTLY\b/i.test(sql);
+      if (usesConcurrently) {
+        await migration.up(db as AnyDb);
+        await (db as AnyDb)
           .insertInto('kysely_migration')
           .values({ name, timestamp: new Date().toISOString() })
           .execute();
-      });
+      } else {
+        await (db as AnyDb).transaction().execute(async (trx) => {
+          // The provider's `up` function accepts a Kysely instance and runs
+          // the migration SQL against it. Using `trx` keeps the migration's
+          // statements in the same transaction as the kysely_migration insert.
+          await migration.up(trx as unknown as AnyDb);
+          await (trx as unknown as AnyDb)
+            .insertInto('kysely_migration')
+            .values({ name, timestamp: new Date().toISOString() })
+            .execute();
+        });
+      }
       process.stdout.write(`✓ ${name}\n`);
       failures.delete(name);
     } catch (err) {

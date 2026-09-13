@@ -40,6 +40,10 @@ export const redactionPaths: readonly string[] = [
   '*.BETTER_AUTH_SECRET',
   '*.JWT_SIGNING_KEY',
   '*.JWT_ISSUER',
+  // T37 — Expo auth material and the push token itself (the bearer token
+  // identifies our Expo project; the push token identifies a device).
+  '*.EXPO_ACCESS_TOKEN',
+  '*.expoPushToken',
   // PII — request body
   'req.body.email',
   'req.body.phone',

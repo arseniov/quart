@@ -128,6 +128,17 @@ describe('PushService.send', () => {
     const svc = new PushService({ env: ENV } as never, db as never, fetchMock as never);
     await expect(svc.send(basePayload)).rejects.toThrow(/expo push 503/);
   });
+
+  it('throws when fetch rejects so BullMQ retries', async () => {
+    fetchMock = vi.fn(async () => {
+      throw Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    });
+    const svc = new PushService({ env: ENV } as never, db as never, fetchMock as never);
+    await expect(svc.send(basePayload)).rejects.toThrow(/ECONNRESET/);
+    // Network failures must NOT mark the subscription invalid — the request
+    // never reached Expo, so we have no signal about the token's health.
+    expect(db.updates).toHaveLength(0);
+  });
 });
 
 describe('EnvSchema — EXPO_ACCESS_TOKEN is required', () => {

@@ -99,7 +99,8 @@ export class PushService {
     if (transient.length > 0) {
       // Throw the first transient error so BullMQ logs it; the rest ride along
       // in the message so an operator can see all the receipts in one go.
-      const first = transient[0]!;
+      const first = transient.at(0);
+      if (!first) return;
       const tail = transient.length > 1 ? ` (+${transient.length - 1} more)` : '';
       throw new Error(`expo push transient error: ${first.message ?? 'unknown'}${tail}`);
     }
