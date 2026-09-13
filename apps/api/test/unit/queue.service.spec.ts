@@ -4,7 +4,19 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { QueueService } from '../../src/queue/queue.service.js';
 
-const makeQueue = () => ({ add: vi.fn(async (_name: string, _data: unknown, _opts?: unknown) => ({ id: 'job-1' })) });
+const makeQueue = () => {
+  let persistedData: unknown;
+  return {
+    add: vi.fn(async (_name: string, data: unknown, _opts?: unknown) => {
+      // First add stores the payload; subsequent adds with the same jobId return
+      // the persisted payload (mirroring BullMQ's duplicate-jobId behaviour).
+      if (persistedData === undefined) persistedData = data;
+      return { id: 'job-1', data: persistedData };
+    }),
+    close: vi.fn(async () => undefined),
+  };
+};
+
 const makeSvc = () => {
   const queues = {
     push: makeQueue(),
@@ -32,13 +44,23 @@ describe('QueueService', () => {
     expect(queues['audit-anchor'].add).not.toHaveBeenCalled();
   });
 
-  it('idempotent retries: a second enqueue with the same jobId does not throw', async () => {
+  it('idempotent retries: a second enqueue with the same jobId returns the persisted payload', async () => {
+    const { svc } = makeSvc();
+    const firstPayload = { payload: { x: 1 } };
+    await svc.enqueue('push', { entity_id: 'n1', delivery_channel: 'apns' }, firstPayload);
+    // BullMQ returns the existing job for duplicate jobIds — the test verifies the
+    // *persisted* payload (from the first add) survives, not the newly supplied one.
+    const second = await svc.enqueue('push', { entity_id: 'n1', delivery_channel: 'apns' }, { payload: { x: 2 } });
+    expect(second).toBeDefined();
+    expect(second?.data).toEqual(firstPayload);
+    expect(second?.data).not.toEqual({ payload: { x: 2 } });
+  });
+
+  it('onApplicationShutdown closes every queue', async () => {
     const { svc, queues } = makeSvc();
-    await svc.enqueue('push', { entity_id: 'n1', delivery_channel: 'apns' }, { payload: { x: 1 } });
-    // BullMQ returns the existing job for duplicate jobIds — no throw expected.
-    await expect(
-      svc.enqueue('push', { entity_id: 'n1', delivery_channel: 'apns' }, { payload: { x: 2 } }),
-    ).resolves.toBeDefined();
-    expect(queues.push.add).toHaveBeenCalledTimes(2);
+    await svc.onApplicationShutdown();
+    for (const q of Object.values(queues)) {
+      expect(q.close).toHaveBeenCalledTimes(1);
+    }
   });
 });
