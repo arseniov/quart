@@ -82,6 +82,15 @@ export const redactionPaths: readonly string[] = [
   // which are user-visible PII. Redact `data` on any wrapped payload shape so a
   // stray `logger.info({ data: evt }, ...)` doesn't leak content to stdout.
   '*.data',
+  // T42 — slow-query observability. SQL bodies and parameter arrays must
+  // never reach stdout, even when an operator enables SLOW_QUERY_LOG_PARAMS
+  // for a debug session. Defense-in-depth: the slow-query plugin never
+  // attaches raw params to begin with, but a future regression must not
+  // silently leak.
+  '*.sql',
+  '*.params',
+  'slow_query.sql',
+  'slow_query.params',
 ];
 
 export function buildLoggerOptions(config: ConfigService): LoggerOptions {
