@@ -21,6 +21,7 @@ import { LoggerModule } from './logger/logger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { SseModule } from './notifications/sse.module.js';
 import { ObservabilityModule } from './observability/observability.module.js';
+import { SlowQueryMiddleware } from './observability/slow-query.middleware.js';
 import { PollsModule } from './polls/polls.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
@@ -68,6 +69,10 @@ import { UploadsModule } from './uploads/uploads.module.js';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    // RequestId runs first so req.id is set when SlowQuery logs; SlowQuery
+    // runs second so its `res.on('finish')` observer is registered before
+    // downstream handlers can flush the response. Nest 10 doesn't expose
+    // `.after()` on the consumer — pass both in order to a single apply().
+    consumer.apply(RequestIdMiddleware, SlowQueryMiddleware).forRoutes('*');
   }
 }
