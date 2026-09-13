@@ -20,6 +20,7 @@ import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PollsModule } from './polls/polls.module.js';
+import { QueueModule } from './queue/queue.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { SavedItemsModule } from './saved-items/saved-items.module.js';
 import { SearchModule } from './search/search.module.js';
@@ -43,6 +44,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
     AdminIssuesModule,
     IdeasModule,
     PollsModule,
+    QueueModule,
     SearchModule,
     I18nModule,
     NotificationsModule,
