@@ -25,6 +25,7 @@ import { SavedItemsModule } from './saved-items/saved-items.module.js';
 import { SearchModule } from './search/search.module.js';
 import { SelfModule } from './self/self.module.js';
 import { TopicsModule } from './topics/topics.module.js';
+import { UploadsModule } from './uploads/uploads.module.js';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { TopicsModule } from './topics/topics.module.js';
     SavedItemsModule,
     SelfModule,
     AdminModule,
+    UploadsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
