@@ -9,6 +9,7 @@ import { DbService } from '../db/db.service.js';
 
 import { startAuditAnchorWorker } from './audit-anchor.worker.js';
 import { parseValkeyUrl } from './connection.js';
+import { startPiiRotationWorker } from './pii-rotation.worker.js';
 import { QueueService } from './queue.service.js';
 
 /** Owns the audit-anchor BullMQ worker + its repeatable schedule.
@@ -45,6 +46,32 @@ export class AuditAnchorWorkerHost implements OnModuleInit, OnApplicationShutdow
   }
 }
 
+/** Owns the PII key-rotation BullMQ worker. Unlike AuditAnchorWorkerHost
+ *  this does NOT register a repeatable — rotation is platform-initiated
+ *  (admin endpoint / CLI), not cron-driven. The worker stays attached so a
+ *  manually-enqueued `rotate_pii_keys` job is drained immediately.
+ *  Exported so tests can override it via Test.createTestingModule (otherwise
+ *  constructing a Worker would race to talk to Valkey). */
+@Injectable()
+export class PiiRotationWorkerHost implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(PiiRotationWorkerHost.name);
+  private worker!: Worker;
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly db: DbService,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    this.worker = startPiiRotationWorker({ config: this.config, db: this.db });
+    this.logger.log('pii-rotation worker started (manual trigger via cleanup queue)');
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.worker) await this.worker.close();
+  }
+}
+
 @Global()
 @Module({
   providers: [
@@ -55,6 +82,7 @@ export class AuditAnchorWorkerHost implements OnModuleInit, OnApplicationShutdow
       inject: [ConfigService],
     },
     AuditAnchorWorkerHost,
+    PiiRotationWorkerHost,
   ],
   exports: [QueueService],
 })

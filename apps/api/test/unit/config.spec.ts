@@ -22,6 +22,7 @@ describe('EnvSchema', () => {
       SENTRY_DSN: '',
       QUART_ALLOW_FREE_TSA: 'false',
       TSA_URL: 'https://api.freetsa.org/tsr',
+      KEK_BASE64: Buffer.alloc(32, 7).toString('base64'),
     });
     expect(env.NODE_ENV).toBe('development');
     expect(env.PORT).toBe(3000);

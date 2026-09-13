@@ -21,6 +21,16 @@ export const EnvSchema = z.object({
 
   AUDIT_HMAC_KEY: z.string().regex(/^[0-9a-f]{64}$/i),
 
+  // Base64-encoded 32 bytes — the KEK used to wrap per-city DEKs before they
+  // land in `pii_key_versions.dek_encrypted`. Production MUST source this from
+  // KMS at startup; the dev seed (0023) writes the same role into kek_versions.
+  KEK_BASE64: z
+    .string()
+    .refine(
+      (s) => Buffer.from(s, 'base64').length === 32,
+      'KEK_BASE64 must decode to exactly 32 bytes (AES-256)',
+    ),
+
   SENTRY_DSN: z.string().default(''),
   SENTRY_ENVIRONMENT: z.string().default('development'),
 
