@@ -86,6 +86,33 @@ export class QueueService implements OnApplicationShutdown {
   ) {
     return this.queues[name].add(jobName, data, opts);
   }
+
+  /** Live job counts per BullMQ state. Powers the `bullmq_queue_depth`
+   *  Prometheus gauge — the metrics controller calls this once per queue
+   *  per scrape. Throws on Redis errors; the controller is fail-open so a
+   *  blip never takes down /metrics. */
+  async getDepth(name: QueueName): Promise<{
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    completed: number;
+  }> {
+    const counts = await this.queues[name].getJobCounts(
+      'waiting',
+      'active',
+      'delayed',
+      'failed',
+      'completed',
+    );
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+    };
+  }
 }
 
 /** Structural equality for plain JSON-ish payloads (no Date/Map/Set gymnastics). */

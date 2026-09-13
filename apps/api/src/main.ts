@@ -26,12 +26,25 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
   });
+  // Required for OnApplicationShutdown hooks (e.g. QueueService closes
+  // BullMQ queues, AuditAnchorWorkerHost closes the Worker) to fire on
+  // SIGTERM/SIGINT. Without this, Nest silently tears down without running
+  // any shutdown lifecycle. Must be set BEFORE the SIGTERM listener below
+  // so the lifecycle ordering is correct on shutdown.
+  app.enableShutdownHooks();
   // Hand the OTel lifecycle to Nest's shutdown chain. Belt-and-suspenders
-  // SIGTERM so a hard-stop still flushes spans + metrics.
+  // SIGTERM so a hard-stop still flushes spans + metrics. Guard with a
+  // module-level flag — `startOtel()` may return the no-op handle when
+  // OTEL_ENABLED=false or the Prometheus exporter fails to bind, but the
+  // outer `if (!sigtermWired)` check keeps us from stacking duplicate
+  // listeners if bootstrap is ever invoked more than once (test rigs).
   app.get(OtelShutdownHook).setHandle(otelHandle);
-  process.on('SIGTERM', () => {
-    void otelHandle.shutdown();
-  });
+  if (!sigtermWired) {
+    sigtermWired = true;
+    process.on('SIGTERM', () => {
+      void otelHandle.shutdown();
+    });
+  }
   // Global multipart — `attachFieldsToBody: false` keeps body untouched so
   // each route pulls its part via `req.file({ limits })` and decides limits
   // per-route (DoS surface: 10MB enforced mid-stream, not after buffering).
@@ -39,14 +52,12 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
-  // Required for OnApplicationShutdown hooks (e.g. QueueService closes
-  // BullMQ queues, AuditAnchorWorkerHost closes the Worker) to fire on
-  // SIGTERM/SIGINT. Without this, Nest silently tears down without running
-  // any shutdown lifecycle.
-  app.enableShutdownHooks();
   const config = app.get(ConfigService);
   await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
 }
+
+/** Guard against double-wiring the SIGTERM listener (bootstrap re-entry, e.g. test rigs). */
+let sigtermWired = false;
 
 bootstrap().catch((err: unknown) => {
   console.error('Fatal bootstrap error', err);

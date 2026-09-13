@@ -20,7 +20,7 @@ import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { SseModule } from './notifications/sse.module.js';
-import { OtelShutdownHook } from './observability/otel.js';
+import { ObservabilityModule } from './observability/observability.module.js';
 import { PollsModule } from './polls/polls.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
@@ -55,6 +55,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
     SelfModule,
     AdminModule,
     UploadsModule,
+    ObservabilityModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
@@ -63,7 +64,6 @@ import { UploadsModule } from './uploads/uploads.module.js';
     // protected controllers opt IN with @UseGuards(JwtAuthGuard) on the
     // specific handler(s) that need the user attached.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    OtelShutdownHook,
   ],
 })
 export class AppModule implements NestModule {

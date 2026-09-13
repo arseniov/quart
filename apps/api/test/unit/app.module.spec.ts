@@ -41,6 +41,7 @@ describe('AppModule', () => {
       enqueue: async () => undefined,
       addRepeatable: async () => undefined,
       onApplicationShutdown: async () => undefined,
+      getDepth: async () => ({ waiting: 0, active: 0, delayed: 0, failed: 0, completed: 0 }),
     } as unknown as QueueService;
     const pushStub = { send: async () => undefined } as unknown as PushService;
     const emailStub = { send: async () => undefined } as unknown as EmailService;
