@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 
 /* eslint-disable import/order */
 import { Public } from '../auth/public.decorator.js';
@@ -12,8 +13,12 @@ interface ReplyLike {
   status(code: number): unknown;
 }
 
+// Defense-in-depth: the throttler config's `skipIf` already exempts /health
+// and /metrics, but @SkipThrottle() prevents an accidental misconfiguration
+// (someone editing skipIf and forgetting health) from breaking scrapers.
 @Controller('health')
 @Public()
+@SkipThrottle()
 export class HealthController {
   constructor(private readonly svc: HealthService) {}
 

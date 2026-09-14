@@ -1,4 +1,5 @@
 import { Controller, Get, Header } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Counter,
   Gauge,
@@ -76,6 +77,7 @@ export function setBullmqQueueDepthProvider(provider: QueueService | undefined):
 }
 
 @Controller('metrics')
+@SkipThrottle()
 export class MetricsController {
   constructor(private readonly queues: QueueService) {
     setBullmqQueueDepthProvider(queues);
