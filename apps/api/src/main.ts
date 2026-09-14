@@ -1,4 +1,7 @@
 import 'reflect-metadata';
+import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -11,6 +14,9 @@ import { ZodValidationPipe } from './common/zod-validation.pipe.js';
 import { ConfigService } from './config/config.service.js';
 import { OtelShutdownHook, startOtel } from './observability/otel.js';
 import { initSentry, SentryEnvSchema } from './observability/sentry.js';
+import { buildCorsOptions } from './security/cors.js';
+import { buildHelmetOptions } from './security/helmet.js';
+import { SecurityEnvSchema } from './security/security-env.js';
 
 async function bootstrap(): Promise<void> {
   // Init OTel BEFORE Sentry and BEFORE NestFactory.create() so the SDK
@@ -22,7 +28,18 @@ async function bootstrap(): Promise<void> {
   // without full app config (workers, scripts) can still log to Sentry.
   // ConfigService re-validates the full EnvSchema when Nest instantiates it.
   initSentry(SentryEnvSchema.parse(process.env));
-  const adapter = new FastifyAdapter({ trustProxy: true, logger: false });
+  // Narrow security schema — parsed independently so CORS / HSTS / body
+  // limits can be reasoned about without the full app env (DB / Valkey / MinIO).
+  const secEnv = SecurityEnvSchema.parse(process.env);
+  // `trustProxy` is gated on `TRUST_PROXY=true` so a direct exposure doesn't
+  // trust spoofed `X-Forwarded-For` from a malicious client. True only behind
+  // Cloudflare Tunnel or another known reverse proxy.
+  const adapter = new FastifyAdapter({
+    trustProxy: secEnv.TRUST_PROXY,
+    logger: false,
+    // JSON / form body cap. Multipart has its own per-route limit (T33).
+    bodyLimit: secEnv.MAX_REQUEST_BODY_BYTES,
+  });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
   });
@@ -45,6 +62,13 @@ async function bootstrap(): Promise<void> {
       void otelHandle.shutdown();
     });
   }
+  // Security plugin order matters: helmet (headers) → cors (response headers)
+  // → cookie (signed cookies) → multipart (request body). Helmet must run
+  // before cors because cors can short-circuit OPTIONS preflight before
+  // helmet sees it.
+  await app.register(helmet, buildHelmetOptions({ env: secEnv }));
+  await app.register(cors, buildCorsOptions({ env: secEnv }));
+  await app.register(cookie, { secret: secEnv.COOKIE_SECRET });
   // Global multipart — `attachFieldsToBody: false` keeps body untouched so
   // each route pulls its part via `req.file({ limits })` and decides limits
   // per-route (DoS surface: 10MB enforced mid-stream, not after buffering).
