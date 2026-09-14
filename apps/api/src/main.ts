@@ -31,13 +31,14 @@ async function bootstrap(): Promise<void> {
   // Narrow security schema — parsed independently so CORS / HSTS / body
   // limits can be reasoned about without the full app env (DB / Valkey / MinIO).
   const secEnv = SecurityEnvSchema.parse(process.env);
-  // `trustProxy` is gated on `TRUST_PROXY=true` so a direct exposure doesn't
-  // trust spoofed `X-Forwarded-For` from a malicious client. True only behind
-  // Cloudflare Tunnel or another known reverse proxy.
+  // trustProxy: false by default; production behind Cloudflare Tunnel MUST
+  // set TRUST_PROXY=true so req.ip returns the real client IP from
+  // X-Forwarded-For (not the tunnel egress IP). Leaving it false by default
+  // means a direct exposure won't trust spoofed XFF from a malicious client.
   const adapter = new FastifyAdapter({
     trustProxy: secEnv.TRUST_PROXY,
     logger: false,
-    // JSON / form body cap. Multipart has its own per-route limit (T33).
+    // JSON / form body cap. Multipart has its own global 10MB cap below.
     bodyLimit: secEnv.MAX_REQUEST_BODY_BYTES,
   });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
@@ -71,8 +72,13 @@ async function bootstrap(): Promise<void> {
   await app.register(cookie, { secret: secEnv.COOKIE_SECRET });
   // Global multipart — `attachFieldsToBody: false` keeps body untouched so
   // each route pulls its part via `req.file({ limits })` and decides limits
-  // per-route (DoS surface: 10MB enforced mid-stream, not after buffering).
-  await app.register(multipart, { attachFieldsToBody: false });
+  // per-route. The 10MB `fileSize` cap here is the *global* ceiling —
+  // defense-in-depth so a forgotten per-route limit can't stream a 10GB
+  // upload straight into RAM.
+  await app.register(multipart, {
+    attachFieldsToBody: false,
+    limits: { fileSize: 10 * 1024 * 1024 },
+  });
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());

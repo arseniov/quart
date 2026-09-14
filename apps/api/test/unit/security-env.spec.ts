@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SecurityEnvSchema,
+  normalizeOrigin,
   parseAllowedOrigins,
   parseCspDirectives,
 } from '../../src/security/security-env.js';
@@ -26,9 +27,9 @@ describe('SecurityEnvSchema', () => {
     expect(env.CORS_ALLOW_CREDENTIALS).toBe(false);
   });
 
-  it('defaults MAX_REQUEST_BODY_BYTES to 1mb', () => {
+  it('defaults MAX_REQUEST_BODY_BYTES to 12mb per spec', () => {
     const env = SecurityEnvSchema.parse({});
-    expect(env.MAX_REQUEST_BODY_BYTES).toBe(1024 * 1024);
+    expect(env.MAX_REQUEST_BODY_BYTES).toBe(12 * 1024 * 1024);
   });
 
   it('defaults HSTS_MAX_AGE_SECONDS to 1 year (31536000)', () => {
@@ -39,6 +40,16 @@ describe('SecurityEnvSchema', () => {
   it('defaults HSTS_INCLUDE_SUBDOMAINS to true', () => {
     const env = SecurityEnvSchema.parse({});
     expect(env.HSTS_INCLUDE_SUBDOMAINS).toBe(true);
+  });
+
+  it('defaults HSTS_PRELOAD to false', () => {
+    const env = SecurityEnvSchema.parse({});
+    expect(env.HSTS_PRELOAD).toBe(false);
+  });
+
+  it('defaults HELMET_ALLOW_INLINE_STYLES to false', () => {
+    const env = SecurityEnvSchema.parse({});
+    expect(env.HELMET_ALLOW_INLINE_STYLES).toBe(false);
   });
 
   it('defaults TRUST_PROXY to false', () => {
@@ -76,6 +87,16 @@ describe('SecurityEnvSchema', () => {
     expect(SecurityEnvSchema.parse({ TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false);
   });
 
+  it('parses HSTS_PRELOAD from "true" / "false" strings', () => {
+    expect(SecurityEnvSchema.parse({ HSTS_PRELOAD: 'true' }).HSTS_PRELOAD).toBe(true);
+    expect(SecurityEnvSchema.parse({ HSTS_PRELOAD: 'false' }).HSTS_PRELOAD).toBe(false);
+  });
+
+  it('parses HELMET_ALLOW_INLINE_STYLES from "true" / "false" strings', () => {
+    expect(SecurityEnvSchema.parse({ HELMET_ALLOW_INLINE_STYLES: 'true' }).HELMET_ALLOW_INLINE_STYLES).toBe(true);
+    expect(SecurityEnvSchema.parse({ HELMET_ALLOW_INLINE_STYLES: 'false' }).HELMET_ALLOW_INLINE_STYLES).toBe(false);
+  });
+
   it('parses MAX_REQUEST_BODY_BYTES size strings', () => {
     expect(SecurityEnvSchema.parse({ MAX_REQUEST_BODY_BYTES: '512kb' }).MAX_REQUEST_BODY_BYTES).toBe(512 * 1024);
     expect(SecurityEnvSchema.parse({ MAX_REQUEST_BODY_BYTES: '2mb' }).MAX_REQUEST_BODY_BYTES).toBe(2 * 1024 * 1024);
@@ -103,6 +124,25 @@ describe('SecurityEnvSchema', () => {
   });
 });
 
+describe('normalizeOrigin', () => {
+  it('lowercases scheme and host', () => {
+    expect(normalizeOrigin('HTTPS://App.Example')).toBe('https://app.example');
+  });
+
+  it('strips the default port (https:443, http:80)', () => {
+    expect(normalizeOrigin('https://app.example:443')).toBe('https://app.example');
+    expect(normalizeOrigin('http://app.example:80')).toBe('http://app.example');
+  });
+
+  it('preserves non-default ports', () => {
+    expect(normalizeOrigin('https://app.example:8443')).toBe('https://app.example:8443');
+  });
+
+  it('returns a lowercased fallback for malformed input', () => {
+    expect(normalizeOrigin('NOT-A-URL')).toBe('not-a-url');
+  });
+});
+
 describe('parseAllowedOrigins', () => {
   it('returns empty set for empty string', () => {
     expect(parseAllowedOrigins('').size).toBe(0);
@@ -116,6 +156,21 @@ describe('parseAllowedOrigins', () => {
   it('deduplicates repeated origins', () => {
     const set = parseAllowedOrigins('https://x,https://x,https://x');
     expect(set.size).toBe(1);
+  });
+
+  it('normalizes scheme + host case-insensitively (RFC 6454)', () => {
+    const set = parseAllowedOrigins('https://App.Example');
+    // Entries are stored normalized — lookup is case-sensitive on the set
+    // itself; the delegator re-normalizes the incoming origin before
+    // lookup, so case differences resolve at the comparison site (see
+    // cors.spec.ts). Verify the stored value is the lowercased form.
+    expect([...set]).toEqual(['https://app.example']);
+  });
+
+  it('throws on invalid URL entry with the offending value in the message', () => {
+    expect(() => parseAllowedOrigins('not-a-url,https://ok.example')).toThrow(
+      /CORS_ALLOWED_ORIGINS contains invalid URL: not-a-url/,
+    );
   });
 });
 

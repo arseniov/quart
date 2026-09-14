@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ALLOWED_HEADERS,
+  ALLOWED_METHODS,
+  EXPOSED_HEADERS,
+  PREFLIGHT_MAX_AGE_SECONDS,
   buildCorsOptions,
-  describeCorsSurface,
   type CorsBuildOptions,
 } from '../../src/security/cors.js';
 import { type SecurityEnv, SecurityEnvSchema } from '../../src/security/security-env.js';
@@ -24,13 +27,12 @@ const invokeOrigin = async (
     fn(origin, (err, v) => (err ? reject(err) : resolve(v)));
   });
 
-describe('describeCorsSurface', () => {
+describe('CORS surface constants', () => {
   it('exposes the expected methods, headers, max-age', () => {
-    const s = describeCorsSurface();
-    expect(s.methodsAllowed).toEqual(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
-    expect(s.headersAllowed).toEqual(['Authorization', 'Content-Type', 'X-Request-ID', 'X-Trace-Context']);
-    expect(s.headersExposed).toEqual(['X-Request-ID', 'X-Trace-Context', 'Retry-After']);
-    expect(s.preflightMaxAgeSeconds).toBe(600);
+    expect(ALLOWED_METHODS).toEqual(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+    expect(ALLOWED_HEADERS).toEqual(['Authorization', 'Content-Type', 'X-Request-ID', 'X-Trace-Context']);
+    expect(EXPOSED_HEADERS).toEqual(['X-Request-ID', 'X-Trace-Context', 'Retry-After']);
+    expect(PREFLIGHT_MAX_AGE_SECONDS).toBe(600);
   });
 });
 
@@ -105,5 +107,19 @@ describe('buildCorsOptions — allowed origins configured', () => {
     expect(opts.exposedHeaders).toContain('X-Request-ID');
     expect(opts.maxAge).toBe(600);
     expect(opts.optionsSuccessStatus).toBe(204);
+  });
+
+  it('matches origins case-insensitively on scheme+host (RFC 6454)', async () => {
+    const opts = build({ CORS_ALLOWED_ORIGINS: 'https://App.Example' });
+    expect(await invokeOrigin(opts, 'https://app.example')).toBe(true);
+    expect(await invokeOrigin(opts, 'HTTPS://app.example')).toBe(true);
+    expect(await invokeOrigin(opts, 'https://app.example:443')).toBe(true);
+  });
+
+  it('normalizes default port and preserves explicit port', async () => {
+    const opts = build({ CORS_ALLOWED_ORIGINS: 'https://app.example:8443' });
+    expect(await invokeOrigin(opts, 'https://app.example:8443')).toBe(true);
+    // Different port → not equal.
+    expect(await invokeOrigin(opts, 'https://app.example:9000')).toBe(false);
   });
 });

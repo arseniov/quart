@@ -25,6 +25,15 @@ describe('DEFAULT_CSP', () => {
   it('keeps scripts strictly self-hosted', () => {
     expect(DEFAULT_CSP['script-src']).toEqual(["'self'"]);
   });
+
+  it('does NOT include unsafe-inline in style-src by default', () => {
+    expect(DEFAULT_CSP['style-src']).not.toContain("'unsafe-inline'");
+    expect(DEFAULT_CSP['style-src']).toEqual(["'self'"]);
+  });
+
+  it('explicitly pins media-src to self', () => {
+    expect(DEFAULT_CSP['media-src']).toEqual(["'self'"]);
+  });
 });
 
 describe('buildHelmetOptions', () => {
@@ -37,7 +46,7 @@ describe('buildHelmetOptions', () => {
     expect(csp.useDefaults).toBe(false);
   });
 
-  it('wires default-deny CSP directives', () => {
+  it('wires default-deny CSP directives without unsafe-inline', () => {
     const opts = buildHelmetOptions({ env: baseEnv() });
     const directives = (opts.contentSecurityPolicy as {
       directives: Record<string, string[] | null>;
@@ -48,10 +57,28 @@ describe('buildHelmetOptions', () => {
     expect(directives['base-uri']).toEqual(["'self'"]);
     expect(directives['form-action']).toEqual(["'self'"]);
     expect(directives['script-src']).toEqual(["'self'"]);
+    expect(directives['style-src']).toEqual(["'self'"]);
     expect(directives['img-src']).toEqual(["'self'", 'data:', 'blob:']);
     expect(directives['font-src']).toEqual(["'self'", 'data:']);
     expect(directives['connect-src']).toEqual(["'self'"]);
+    expect(directives['media-src']).toEqual(["'self'"]);
     expect(directives['upgrade-insecure-requests']).toEqual([]);
+  });
+
+  it('re-enables unsafe-inline style-src when HELMET_ALLOW_INLINE_STYLES=true', () => {
+    const opts = buildHelmetOptions({ env: baseEnv({ HELMET_ALLOW_INLINE_STYLES: true }) });
+    const directives = (opts.contentSecurityPolicy as {
+      directives: Record<string, string[] | null>;
+    }).directives;
+    expect(directives['style-src']).toEqual(["'self'", "'unsafe-inline'"]);
+  });
+
+  it('keeps style-src locked to self when HELMET_ALLOW_INLINE_STYLES=false (default)', () => {
+    const opts = buildHelmetOptions({ env: baseEnv({ HELMET_ALLOW_INLINE_STYLES: false }) });
+    const directives = (opts.contentSecurityPolicy as {
+      directives: Record<string, string[] | null>;
+    }).directives;
+    expect(directives['style-src']).toEqual(["'self'"]);
   });
 
   it('sets X-Frame-Options to deny', () => {
@@ -79,7 +106,7 @@ describe('buildHelmetOptions', () => {
     expect(opts.strictTransportSecurity).toBeUndefined();
   });
 
-  it('sets strictTransportSecurity in production with default 1y maxAge and includeSubDomains', () => {
+  it('sets strictTransportSecurity in production with default 1y maxAge, includeSubDomains, no preload', () => {
     const opts = buildHelmetOptions({ env: baseEnv({ NODE_ENV: 'production' }) });
     expect(opts.strictTransportSecurity).toEqual({
       maxAge: 31_536_000,
@@ -88,18 +115,19 @@ describe('buildHelmetOptions', () => {
     });
   });
 
-  it('honors custom HSTS_MAX_AGE_SECONDS and HSTS_INCLUDE_SUBDOMAINS=false in prod', () => {
+  it('honors custom HSTS_MAX_AGE_SECONDS + HSTS_INCLUDE_SUBDOMAINS=false + HSTS_PRELOAD=true', () => {
     const opts = buildHelmetOptions({
       env: baseEnv({
         NODE_ENV: 'production',
         HSTS_MAX_AGE_SECONDS: 86_400,
         HSTS_INCLUDE_SUBDOMAINS: false,
+        HSTS_PRELOAD: true,
       }),
     });
     expect(opts.strictTransportSecurity).toEqual({
       maxAge: 86_400,
       includeSubDomains: false,
-      preload: false,
+      preload: true,
     });
   });
 
