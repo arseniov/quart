@@ -16,7 +16,9 @@ import type { TranslationPayload } from './i18n.dto.js';
 import { I18nService } from './i18n.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('i18n')
+@ApiGlobalResponses()
 @ApiTags('i18n')
 @ApiBearerAuth('bearer')
 export class I18nController {

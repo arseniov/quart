@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const PollCreateSchema = z.object({
   cityId: z.string().uuid(),
   titleI18n: z.record(z.string(), z.string()),
@@ -34,6 +35,7 @@ const PollPatchSchema = z.object({
 });
 
 @Controller('admin/polls')
+@ApiGlobalResponses()
 @ApiTags('admin/polls')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

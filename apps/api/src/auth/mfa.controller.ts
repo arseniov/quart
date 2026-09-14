@@ -19,6 +19,7 @@ import { JwtService } from './jwt.service.js';
 import { MfaService } from './mfa.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const EnrollSchema = z.object({}).strict(); // body shape only — verify happens after QR scan
 const VerifySchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
 const BackupSchema = z.object({ code: z.string().regex(/^[0-9a-f]{32}$/) });
@@ -31,6 +32,7 @@ interface ReqWithAuth extends FastifyRequest {
 // claim attached post-enroll). Backup codes + replay prevention live in
 // `mfa_credentials` (migration 0026).
 @Controller('auth/mfa')
+@ApiGlobalResponses()
 @ApiTags('auth/mfa')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)

@@ -16,7 +16,9 @@ import type { SearchHit } from './search.service.js';
 import { SearchService } from './search.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('search')
+@ApiGlobalResponses()
 @ApiTags('search')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

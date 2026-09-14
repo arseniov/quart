@@ -15,6 +15,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const AuditQuerySchema = z.object({
   actor: z.string().uuid().optional(),
   action: z.string().optional(),
@@ -27,6 +28,7 @@ const AuditQuerySchema = z.object({
 });
 
 @Controller('admin/audit')
+@ApiGlobalResponses()
 @ApiTags('admin/audit')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

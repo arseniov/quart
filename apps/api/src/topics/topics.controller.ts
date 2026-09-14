@@ -17,7 +17,9 @@ import type { Topic } from './topics.service.js';
 import { TopicsService } from './topics.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('topics')
+@ApiGlobalResponses()
 @ApiTags('topics')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

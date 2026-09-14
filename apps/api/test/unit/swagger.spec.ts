@@ -140,6 +140,24 @@ describe('setupOpenApi — enabled (NODE_ENV !== production)', () => {
     });
   });
 
+  it('declares both session-cookie security schemes (T45 spec)', async () => {
+    const res = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({ method: 'GET', url: '/openapi.json' });
+    const spec = res.json();
+    expect(spec.components.securitySchemes['__Host-quart-api-session']).toEqual({
+      type: 'apiKey',
+      in: 'cookie',
+      name: '__Host-quart-api-session',
+    });
+    expect(spec.components.securitySchemes['__Host-quart-admin-session']).toEqual({
+      type: 'apiKey',
+      in: 'cookie',
+      name: '__Host-quart-admin-session',
+    });
+  });
+
   it('wires the bearer security requirement onto @ApiBearerAuth-decorated routes', async () => {
     const res = await app
       .getHttpAdapter()

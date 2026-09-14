@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const TopicCategoryPatchSchema = z.object({
   nameI18n: z.record(z.string(), z.string()).optional(),
   sortOrder: z.number().int().min(0).optional(),
@@ -34,6 +35,7 @@ const IssueCategoryPatchSchema = z.object({
 });
 
 @Controller('admin/taxonomies')
+@ApiGlobalResponses()
 @ApiTags('admin/taxonomies')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

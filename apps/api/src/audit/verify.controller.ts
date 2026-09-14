@@ -9,6 +9,7 @@ import { ConfigService } from '../config/config.service.js';
 import { DbService } from '../db/db.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 // ponytail: ceiling for the chain walk — full-table reads are fine until the
 // table grows past this. Bump + paginate if production logs exceed it.
 const AUDIT_VERIFY_MAX_ROWS = 1_000_000;
@@ -20,6 +21,7 @@ const AUDIT_VERIFY_MAX_ROWS = 1_000_000;
 // JwtAuthGuard + MfaGuard-gated and walks the whole table. Add a cityId
 // filter and admin.audit.verify permission check when Phase 5 lands.
 @Controller('admin/audit')
+@ApiGlobalResponses()
 @ApiTags('admin/audit')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard)

@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const UserPatchSchema = z.object({
   roleIds: z.array(z.string().uuid()).optional(),
   status: z.enum(['active', 'suspended', 'deleted']).optional(),
@@ -34,6 +35,7 @@ const ListQuerySchema = z.object({
 });
 
 @Controller('admin/users')
+@ApiGlobalResponses()
 @ApiTags('admin/users')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const PatchKeySchema = z.object({
   locale: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
   value: z.string().min(0).max(10_000),
@@ -36,6 +37,7 @@ const ListQuerySchema = z.object({
 // back feature flags + civic-point rules (see 0009 migration). The 0028
 // migration adds `admin.i18n.write` so writes are gated.
 @Controller('admin/i18n')
+@ApiGlobalResponses()
 @ApiTags('admin/i18n')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const RoleCreateSchema = z.object({
   code: z.string().min(1).max(64),
   name: z.string().min(1).max(120),
@@ -33,6 +34,7 @@ const RolePatchSchema = z.object({
 });
 
 @Controller('admin/roles')
+@ApiGlobalResponses()
 @ApiTags('admin/roles')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

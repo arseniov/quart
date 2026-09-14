@@ -30,12 +30,14 @@ import type { Idea, IdeaComment } from './ideas.service.js';
 import { IdeasService } from './ideas.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 // Class-level guards apply to every route. Public read endpoints (list/get)
 // use @Public-decorated equivalents via @RequirePermission which the
 // RbacGuard treats as "no requirement → allow" when user is set. JwtAuthGuard
 // populates req.user from the bearer token; ideas are scoped per-city via
 // the tenant context the interceptor already wired.
 @Controller('ideas')
+@ApiGlobalResponses()
 @ApiTags('ideas')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

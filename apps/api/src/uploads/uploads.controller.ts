@@ -20,6 +20,7 @@ import { DbService } from '../db/db.service.js';
 import { UploadsService } from './uploads.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 /**
  * Fastify multipart — `main.ts` registers `@fastify/multipart` globally and
  * `req.file()` yields the first part. We pass `limits.fileSize` so busboy
@@ -29,6 +30,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 const TEN_MB = 10 * 1024 * 1024;
 
 @Controller('uploads')
+@ApiGlobalResponses()
 @ApiTags('uploads')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)

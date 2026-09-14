@@ -21,6 +21,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const InviteSchema = z.object({
   email: z.string().email(),
   roleId: z.string().uuid(),
@@ -36,6 +37,7 @@ const InviteSchema = z.object({
 const TOKEN_TTL_HOURS = 72;
 
 @Controller('admin/officers/invites')
+@ApiGlobalResponses()
 @ApiTags('admin/officers')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

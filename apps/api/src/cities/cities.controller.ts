@@ -8,9 +8,11 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { DbService } from '../db/db.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const ListQuery = z.object({ country: z.string().length(2).optional() });
 
 @Controller('cities')
+@ApiGlobalResponses()
 @ApiTags('cities')
 @ApiBearerAuth('bearer')
 export class CitiesController {

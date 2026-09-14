@@ -30,12 +30,14 @@ import {
 import { SavedItemsService } from './saved-items.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;
 }
 
 @Controller('saved-items')
+@ApiGlobalResponses()
 @ApiTags('saved-items')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)

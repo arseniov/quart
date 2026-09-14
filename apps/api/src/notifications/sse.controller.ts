@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { NotificationsSubscriber } from './notifications-subscriber.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const HEARTBEAT_MS = 25_000;
 
 /** `GET /me/notifications/stream` — Server-Sent Events feed of
@@ -27,6 +28,7 @@ const HEARTBEAT_MS = 25_000;
  *  default `proxy_read_timeout` / envoy `idle_timeout`) so intermediate
  *  proxies never close an idle SSE connection before we keep it alive. */
 @Controller('me/notifications')
+@ApiGlobalResponses()
 @ApiTags('notifications-sse')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)

@@ -9,6 +9,8 @@ import {
 } from './swagger-env.js';
 import { buildSwaggerBuilder, swaggerUiOptions } from './swagger.config.js';
 
+const openApiLogger = new Logger('OpenApi');
+
 /**
  * Lazy setup hook for the OpenAPI surface. Parses the narrow
  * `SwaggerEnvSchema` independently from the app `EnvSchema` so workers,
@@ -20,11 +22,12 @@ import { buildSwaggerBuilder, swaggerUiOptions } from './swagger.config.js';
  * return `null` for `document` so there's no accidental exposure of the
  * spec.
  *
- * Failure mode: env parse throws on a malformed `SWAGGER_PATH` /
- * `SWAGGER_JSON_PATH` — caught here only for the narrow "env is
- * structurally invalid" case so a misconfigured `SWAGGER_*` doesn't
- * crash the rest of the app. Boot logs the details; the rest of the
- * API keeps running.
+ * Failure modes:
+ *   - env parse fails → warn, return disabled (UI never mounted)
+ *   - `resolveSwaggerEnabled` returns false → return disabled (no log)
+ *   - `SwaggerModule.createDocument` / `SwaggerModule.setup` throw →
+ *     log via pino-shaped logger and skip the surface entirely. Boot
+ *     continues; the rest of the API is unaffected.
  */
 export interface OpenApiSetupResult {
   readonly enabled: boolean;
@@ -39,7 +42,7 @@ export function setupOpenApi(
 ): OpenApiSetupResult {
   const parsed = SwaggerEnvSchema.safeParse(envInput);
   if (!parsed.success) {
-    new Logger('OpenApi').warn(
+    openApiLogger.warn(
       `swagger env invalid: ${JSON.stringify(parsed.error.flatten().fieldErrors)} — UI disabled`,
     );
     return {
@@ -59,22 +62,38 @@ export function setupOpenApi(
     };
   }
 
-  const builder = buildSwaggerBuilder(env);
-  const document = SwaggerModule.createDocument(app, builder.build());
+  try {
+    const builder = buildSwaggerBuilder(env);
+    const document = SwaggerModule.createDocument(app, builder.build());
 
-  // Path normalisation: SwaggerModule.setup expects no leading slash
-  // (it normalises internally). The JSON path keeps the leading slash
-  // because `@nestjs/swagger`'s `jsonDocumentUrl` accepts it.
-  const uiPath = env.SWAGGER_PATH.replace(/^\/+/, '');
-  SwaggerModule.setup(uiPath, app, document, {
-    ...swaggerUiOptions,
-    jsonDocumentUrl: env.SWAGGER_JSON_PATH,
-  });
+    // Path normalisation: SwaggerModule.setup expects no leading slash
+    // (it normalises internally). The JSON path keeps the leading slash
+    // because `@nestjs/swagger`'s `jsonDocumentUrl` accepts it. Both
+    // are accepted with or without the leading slash, but we pick one
+    // for consistency — leading on JSON, no leading on UI.
+    const uiPath = env.SWAGGER_PATH.replace(/^\/+/, '');
+    SwaggerModule.setup(uiPath, app, document, {
+      ...swaggerUiOptions,
+      jsonDocumentUrl: env.SWAGGER_JSON_PATH,
+    });
 
-  return {
-    enabled: true,
-    uiPath: env.SWAGGER_PATH,
-    jsonPath: env.SWAGGER_JSON_PATH,
-    document: document as unknown as Record<string, unknown>,
-  };
+    return {
+      enabled: true,
+      uiPath: env.SWAGGER_PATH,
+      jsonPath: env.SWAGGER_JSON_PATH,
+      document: document as unknown as Record<string, unknown>,
+    };
+  } catch (err) {
+    // Boot must not crash on a swagger failure. The rest of the surface
+    // (controllers, Fastify, plugins) is independent of the docs UI.
+    openApiLogger.error(
+      `swagger setup failed: ${err instanceof Error ? err.message : String(err)} — UI disabled`,
+    );
+    return {
+      enabled: false,
+      uiPath: env.SWAGGER_PATH,
+      jsonPath: env.SWAGGER_JSON_PATH,
+      document: null,
+    };
+  }
 }

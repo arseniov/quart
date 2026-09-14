@@ -19,6 +19,7 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const ModerateSchema = z.object({
   action: z.enum(['publish', 'hide', 'reject']),
   note: z.string().max(500).optional(),
@@ -32,6 +33,7 @@ const CommentSchema = z.object({
 const MODERATOR_ROLES = new Set(['moderator', 'quart_admin']);
 
 @Controller('admin/ideas')
+@ApiGlobalResponses()
 @ApiTags('admin/ideas')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

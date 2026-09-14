@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  REDACTED,
   SwaggerEnvSchema,
   parseSwaggerServers,
-  redactSecrets,
+  redactSecretNames,
   resolveSwaggerEnabled,
 } from '../../src/openapi/swagger-env.js';
 
@@ -16,8 +17,8 @@ describe('SwaggerEnvSchema', () => {
       expect(baseEnv().NODE_ENV).toBe('development');
     });
 
-    it('defaults SWAGGER_ENABLED to false (opt-in)', () => {
-      expect(baseEnv().SWAGGER_ENABLED).toBe(false);
+    it('SWAGGER_ENABLED is unset by default (unset → NODE_ENV decides)', () => {
+      expect(baseEnv().SWAGGER_ENABLED).toBeUndefined();
     });
 
     it('defaults SWAGGER_PATH to /docs', () => {
@@ -32,8 +33,8 @@ describe('SwaggerEnvSchema', () => {
       expect(baseEnv().SWAGGER_TITLE).toBe('Quart API');
     });
 
-    it('defaults SWAGGER_DESCRIPTION to empty string', () => {
-      expect(baseEnv().SWAGGER_DESCRIPTION).toBe('');
+    it('defaults SWAGGER_DESCRIPTION to the T45 spec literal', () => {
+      expect(baseEnv().SWAGGER_DESCRIPTION).toBe('Mobile + Admin shared API');
     });
 
     it('defaults SWAGGER_VERSION to empty string (caller falls back to package.json)', () => {
@@ -111,9 +112,10 @@ describe('resolveSwaggerEnabled', () => {
     expect(resolveSwaggerEnabled(baseEnv({ NODE_ENV: 'test' }))).toBe(true);
   });
 
-  it('returns false in production even when SWAGGER_ENABLED=false is set explicitly', () => {
+  it('respects explicit opt-out in development (SWAGGER_ENABLED=false)', () => {
+    // Devs sometimes want the surface off (e.g. focused perf testing).
     expect(
-      resolveSwaggerEnabled(baseEnv({ NODE_ENV: 'production', SWAGGER_ENABLED: false })),
+      resolveSwaggerEnabled(baseEnv({ NODE_ENV: 'development', SWAGGER_ENABLED: false })),
     ).toBe(false);
   });
 });
@@ -137,6 +139,12 @@ describe('parseSwaggerServers', () => {
     ]);
   });
 
+  it('drops invalid URLs instead of emitting a broken spec', () => {
+    expect(parseSwaggerServers('not-a-url,https://b.example.com')).toEqual([
+      'https://b.example.com',
+    ]);
+  });
+
   it('dedupes entries', () => {
     expect(parseSwaggerServers('https://a.example.com,https://a.example.com')).toEqual([
       'https://a.example.com',
@@ -151,24 +159,45 @@ describe('parseSwaggerServers', () => {
   });
 });
 
-describe('redactSecrets', () => {
+describe('redactSecretNames', () => {
   it('returns empty string unchanged', () => {
-    expect(redactSecrets('')).toBe('');
+    expect(redactSecretNames('')).toBe('');
   });
 
-  it('redacts SECRET_* substrings, leaving the value intact', () => {
-    // We mask the *name* (SECRET_FOO) — the value (=abc123) stays
-    // so the description is still readable.
-    expect(redactSecrets('debug token: SECRET_FOO=abc123')).toBe(
-      'debug token: [redacted]=abc123',
+  it('redacts SECRET_FOO=value pairs entirely (name + value)', () => {
+    expect(redactSecretNames('debug token: SECRET_FOO=abc123')).toBe(
+      `debug token: ${REDACTED}`,
+    );
+  });
+
+  it('is case-insensitive', () => {
+    expect(redactSecretNames('lowercase secret_foo=abc')).toBe(
+      `lowercase ${REDACTED}`,
     );
   });
 
   it('redacts multiple secret patterns', () => {
-    expect(redactSecrets('SECRET_A=1, TOKEN_B=2')).toBe('[redacted]=1, [redacted]=2');
+    expect(redactSecretNames('SECRET_A=1, TOKEN_B=2')).toBe(`${REDACTED}, ${REDACTED}`);
+  });
+
+  it('matches API_KEY and PASSWORD prefixes', () => {
+    expect(redactSecretNames('API_KEY=xyz PASSWORD=hunter2')).toBe(
+      `${REDACTED} ${REDACTED}`,
+    );
   });
 
   it('leaves non-secret text alone', () => {
-    expect(redactSecrets('Quart API for city citizens')).toBe('Quart API for city citizens');
+    expect(redactSecretNames('Quart API for city citizens')).toBe(
+      'Quart API for city citizens',
+    );
+  });
+
+  it('does not redact bare names without an =value', () => {
+    // Names without values are left alone — the rule is "no NAME=value
+    // pair leaks", not "no name leaks". Bare mentions like
+    // "see TOKEN in env" are fine.
+    expect(redactSecretNames('set TOKEN in your .env')).toBe(
+      'set TOKEN in your .env',
+    );
   });
 });

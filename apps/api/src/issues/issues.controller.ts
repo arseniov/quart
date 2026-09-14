@@ -41,7 +41,9 @@ import { IssuesService } from './issues.service.js';
 import type { Issue, IssueEvent, IssuePhoto } from './issues.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('issues')
+@ApiGlobalResponses()
 @ApiTags('issues')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

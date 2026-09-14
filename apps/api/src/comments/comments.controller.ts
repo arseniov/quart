@@ -13,12 +13,14 @@ import { CreateCommentBody, ListCommentsQuery, ReactBody, UpdateCommentBody } fr
 import { CommentsService } from './comments.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;
 }
 
 @Controller('comments')
+@ApiGlobalResponses()
 @ApiTags('comments')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)

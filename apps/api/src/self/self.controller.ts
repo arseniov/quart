@@ -15,12 +15,14 @@ import { UpdateProfileSchema, type UpdateProfileBody } from './self.dto.js';
 import { SelfService } from './self.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;
 }
 
 @Controller('self')
+@ApiGlobalResponses()
 @ApiTags('self')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)

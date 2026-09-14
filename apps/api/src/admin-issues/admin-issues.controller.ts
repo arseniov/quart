@@ -40,12 +40,14 @@ import type { AdminIssue } from './admin-issues.service.js';
 import { AdminIssuesService } from './admin-issues.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;
 }
 
 @Controller('admin/issues')
+@ApiGlobalResponses()
 @ApiTags('admin/issues')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

@@ -23,7 +23,9 @@ import { PollsService } from './polls.service.js';
 import type { Poll } from './polls.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('polls')
+@ApiGlobalResponses()
 @ApiTags('polls')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)

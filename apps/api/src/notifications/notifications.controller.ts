@@ -19,11 +19,13 @@ import {
 import { NotificationsService } from './notifications.service.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   tenant: TenantContext;
 }
 
 @Controller('notifications')
+@ApiGlobalResponses()
 @ApiTags('notifications')
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)
