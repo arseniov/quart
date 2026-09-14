@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { ThrottlerStorage } from '@nestjs/throttler';
 import type { Redis } from 'ioredis';
 
@@ -53,21 +53,32 @@ local blockTtlMs = redis.call('PTTL', KEYS[2])
 return {counter, ttlMs, blocked, blockTtlMs}
 `;
 
+/** "Failing open" record — no hits, no block. Returning this lets the
+ *  guard's check pass on Valkey errors so a cache outage doesn't take
+ *  down auth. The trade-off: an attacker who can both DoS Valkey AND
+ *  hit auth harder than the per-IP limit can bypass it briefly; that's
+ *  strictly better than locking every legitimate user out. */
+const FAIL_OPEN_RECORD: ThrottlerStorageRecord = Object.freeze({
+  totalHits: 0,
+  timeToExpire: 0,
+  isBlocked: false,
+  timeToBlockExpire: 0,
+});
+
 /**
  * Redis-backed ThrottlerStorage. Counts are shared across instances so a
  * brute-force attacker can't multiply their budget by hitting different
  * replicas behind a load balancer.
  *
  * Key shape:
- *   `throttle:{key}`          — counter with first-hit PEXPIRE = ttl
- *   `throttle:{key}:block`    — block marker with PSETEX = blockDuration
+ *   `throttle:{name}:{key}`       — counter with first-hit PEXPIRE = ttl
+ *   `throttle:{name}:{key}:block` — block marker with PSETEX = blockDuration
  *
- * The `name` argument (the throttler bucket name — 'auth', 'global', etc.)
- * is appended to the key so multiple buckets don't share counters even
- * when the guard hashes the same tracker.
+ * The client is owned by `ValkeyService` (DI-injected) — we don't own the
+ * lifecycle, Nest closes it once on shutdown.
  */
 @Injectable()
-export class ValkeyThrottlerStorage implements ThrottlerStorage, OnModuleDestroy {
+export class ValkeyThrottlerStorage implements ThrottlerStorage {
   private readonly logger = new Logger(ValkeyThrottlerStorage.name);
 
   constructor(private readonly client: Redis) {
@@ -83,26 +94,36 @@ export class ValkeyThrottlerStorage implements ThrottlerStorage, OnModuleDestroy
     blockDuration: number,
     throttlerName: string,
   ): Promise<ThrottlerStorageRecord> {
+    // Skip the round-trip when Valkey isn't ready (cold start, restart,
+    // network blip). ThrottlerGuard's `isBlocked` check sees the
+    // FAIL_OPEN_RECORD and lets the request through.
+    if (this.client.status !== 'ready') {
+      return FAIL_OPEN_RECORD;
+    }
     const counterKey = `throttle:${throttlerName}:${key}`;
     const blockKey = `${counterKey}:block`;
     // ttl/blockDuration arrive in milliseconds (per @nestjs/throttler API).
-    const result = (await (this.client as unknown as {
-      throttlerIncrement: (k1: string, k2: string, ttl: number, limit: number, block: number) => Promise<[number, number, number, number]>;
-    }).throttlerIncrement(counterKey, blockKey, ttl, limit, blockDuration)) as [number, number, number, number];
+    try {
+      const result = (await (this.client as unknown as {
+        throttlerIncrement: (k1: string, k2: string, ttl: number, limit: number, block: number) => Promise<[number, number, number, number]>;
+      }).throttlerIncrement(counterKey, blockKey, ttl, limit, blockDuration)) as [number, number, number, number];
 
-    const [totalHits, timeToExpireMs, isBlockedRaw, timeToBlockExpireMs] = result;
-    // Redis returns -1 (no TTL) or -2 (no key) for PTTL in edge cases;
-    // clamp to zero so the guard's Retry-After header is sensible.
-    return {
-      totalHits,
-      timeToExpire: timeToExpireMs > 0 ? Math.ceil(timeToExpireMs / 1000) : 0,
-      isBlocked: isBlockedRaw === 1,
-      timeToBlockExpire: timeToBlockExpireMs > 0 ? Math.ceil(timeToBlockExpireMs / 1000) : 0,
-    };
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    // The Redis client is owned by the caller (typically ValkeyService);
-    // we don't own its lifecycle. Nest closes it separately.
+      const [totalHits, timeToExpireMs, isBlockedRaw, timeToBlockExpireMs] = result;
+      // Redis returns -1 (no TTL) or -2 (no key) for PTTL in edge cases;
+      // clamp to zero so the guard's Retry-After header is sensible.
+      return {
+        totalHits,
+        timeToExpire: timeToExpireMs > 0 ? Math.ceil(timeToExpireMs / 1000) : 0,
+        isBlocked: isBlockedRaw === 1,
+        timeToBlockExpire: timeToBlockExpireMs > 0 ? Math.ceil(timeToBlockExpireMs / 1000) : 0,
+      };
+    } catch (err) {
+      // Fail-open: don't take the API down on a Valkey outage. The
+      // downstream trade-off is logged so operators can see when this
+      // is happening in production (alerts on the log line, not on
+      // 500s).
+      this.logger.error({ err: String(err) }, '[throttler] Valkey unavailable, failing open');
+      return FAIL_OPEN_RECORD;
+    }
   }
 }

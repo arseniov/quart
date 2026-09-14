@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import type { DynamicModule, ExecutionContext } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
-import type { ThrottlerModuleOptions } from '@nestjs/throttler';
-import { Redis } from 'ioredis';
+import type { ExecutionContext } from '@nestjs/common';
+import { Logger, type Provider } from '@nestjs/common';
+import type { ThrottlerAsyncOptions, ThrottlerModuleOptions } from '@nestjs/throttler';
+
+import { ValkeyService } from '../auth/valkey.service.js';
 
 import type { ThrottlerEnv } from './throttler-env.js';
 import { ValkeyThrottlerStorage } from './valkey-throttler.storage.js';
@@ -18,6 +19,21 @@ interface AuthenticatedRequest {
   ip?: string;
   user?: { id?: string } | null;
   url?: string;
+  body?: { phoneNumber?: string } | Record<string, unknown>;
+}
+
+/**
+ * Normalize IPv6-mapped IPv4 addresses. Node/Fastify hands us
+ * `::ffff:1.2.3.4` for IPv4-over-IPv6 sockets and `::1` for the IPv6
+ * loopback. The two ports (`:port` on a real IPv4 host, ephemeral port
+ * on mapped IPv6) are NOT stripped — they're not part of the address.
+ *
+ * Only the well-known `::ffff:` prefix and `::1` loopback are unwrapped;
+ * every other IPv6 form (e.g. `2001:db8::1`) passes through unchanged
+ * because stripping anything else would alias distinct hosts.
+ */
+function normalizeIp(ip: string): string {
+  return ip.replace(/^::ffff:/i, '').replace(/^::1$/, '127.0.0.1');
 }
 
 /**
@@ -31,11 +47,24 @@ interface AuthenticatedRequest {
 export function getThrottlerTracker(req: AuthenticatedRequest): string {
   const userId = req.user?.id;
   if (userId) return `user:${userId}`;
-  // Strip the trailing port from IPv6 loopback ("::1" → "::1", "::ffff:1.2.3.4:5000" → "::ffff:1.2.3.4")
-  // so two requests from the same physical host share a bucket regardless
-  // of ephemeral source port.
-  const ip = (req.ip ?? 'unknown').replace(/:\d+$/, '');
-  return `ip:${ip}`;
+  return `ip:${normalizeIp(req.ip ?? 'unknown')}`;
+}
+
+/**
+ * Per-phone tracker for the `phone` throttler bucket. Spec says
+ * "5/min/phone", but a phone-OTP request that's missing `phoneNumber`
+ * still needs a bucket (otherwise the bucket is shared with all
+ * malformed requests from the same IP). Falls back to IP in that case.
+ *
+ * ponytail: full per-phone enforcement would require rejecting
+ * unparseable bodies before the throttler sees them — out of scope
+ * for T44. Log a follow-up when an attacker actually exploits the
+ * fallback.
+ */
+export function getPhoneTracker(req: AuthenticatedRequest): string {
+  const phone = (req.body as { phoneNumber?: unknown } | undefined)?.phoneNumber;
+  if (typeof phone === 'string' && phone.length > 0) return `phone:${phone}`;
+  return `ip:${normalizeIp(req.ip ?? 'unknown')}`;
 }
 
 /**
@@ -43,8 +72,20 @@ export function getThrottlerTracker(req: AuthenticatedRequest): string {
  * own bucket per (tracker, throttler) pair — login and signup don't
  * share a counter even though they're both proxied through the same
  * Better Auth wildcard handler. Hashing keeps the key length bounded.
+ *
+ * Note: `name` is intentionally NOT included — it's already encoded in
+ * the Redis key prefix by ValkeyThrottlerStorage, and re-hashing it just
+ * dilutes the per-name bucket isolation. Including it here would only
+ * matter if two throttlers ever shared the same Redis keyspace.
  */
-export function getThrottlerKey(context: ExecutionContext, tracker: string, name: string): string {
+export function getThrottlerKey(
+  context: ExecutionContext,
+  tracker: string,
+  // Throttler name. Unused in the hash (already encoded in the Redis key
+  // prefix by ValkeyThrottlerStorage and in the Lua-script keys); kept in
+  // the signature so the binding matches `ThrottlerGenerateKeyFunction`.
+  _name?: string,
+): string {
   const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
   // Use just the pathname — query strings shouldn't affect the bucket,
   // and the path is normalized by Fastify (no trailing slash, no `..`).
@@ -52,15 +93,17 @@ export function getThrottlerKey(context: ExecutionContext, tracker: string, name
   const cls = context.getClass().name;
   const handler = context.getHandler().name;
   const h = createHash('sha256');
-  h.update(`${cls}|${handler}|${path}|${name}|${tracker}`);
+  h.update(`${cls}|${handler}|${path}|${tracker}`);
   return h.digest('hex');
 }
 
 /**
- * Strip query string and normalize path for skipIf checks.
+ * Strip query string and normalize path for skipIf checks. Compared
+ * case-insensitively because route prefixes like `/Health` (rare but
+ * possible via a misconfigured upstream) shouldn't bypass the throttler.
  */
 function pathOf(req: { url?: string } | undefined): string {
-  return (req?.url ?? '').split('?')[0] ?? '';
+  return ((req?.url ?? '').split('?')[0] ?? '').toLowerCase();
 }
 
 /**
@@ -79,40 +122,43 @@ function isProbeRoute(req: { url?: string }): boolean {
  * with `/auth/`.
  */
 function isAuthRoute(req: { url?: string }): boolean {
-  return pathOf(req).startsWith('/auth/') || pathOf(req) === '/auth';
+  const path = pathOf(req);
+  return path.startsWith('/auth/') || path === '/auth';
 }
 
 /**
- * Build the throttler module config for `ThrottlerModule.forRootAsync`.
- * Returns `null` when `THROTTLE_ENABLED=false` — the caller wires the
- * throttler module conditionally so the global guard is never
- * registered in disabled mode (otherwise `@Throttle()` decorators on
- * controllers would throw "throttler options not found" at boot).
- *
- * Two named throttlers:
- *   - `'auth'`   — limit = THROTTLE_LOGIN_LIMIT (default 5), scope to
- *                 /auth/* via skipIf. Each URL is its own bucket per
- *                 (tracker, name) so login, signup, password-reset,
- *                 magic-link, MFA verify don't share counters.
- *   - `'global'` — limit = THROTTLE_DEFAULT_LIMIT (default 60), scope
- *                 to everything EXCEPT /health + /metrics. The
- *                 generous baseline so legitimate traffic never trips,
- *                 while still catching obvious abuse.
- *
- * Storage choice:
- *   - THROTTLE_VALKEY_URL set → Redis-backed (multi-instance safe,
- *     atomic via Lua). Production sets this so counters survive across
- *     replicas.
- *   - empty → in-memory (single-instance only; lose counts on restart;
- *     fine for dev).
+ * Phone-OTP routes only — `/auth/phone/request` and `/auth/phone/verify`.
+ * Scoped to the `phone` throttler bucket so the limit is per-phone-number
+ * rather than per-IP (an attacker iterating phones from one IP would
+ * otherwise multiply the budget).
  */
-export function buildThrottlerOptions(env: ThrottlerEnv): ThrottlerModuleOptions | null {
-  if (!env.THROTTLE_ENABLED) return null;
+function isPhoneOtpRoute(req: { url?: string }): boolean {
+  const path = pathOf(req);
+  return path.startsWith('/auth/phone/') || path === '/auth/phone';
+}
 
+/**
+ * Provider token so the throttler config can be re-injected without
+ * circular-importing AppModule.
+ */
+export const VALKEY_THROTTLER_STORAGE = Symbol('VALKEY_THROTTLER_STORAGE');
+
+/**
+ * Factory that builds the throttler module options. Receives the shared
+ * ValkeyService so we reuse the connection owned by AuthModule — no
+ * separate Redis client to lifecycle.
+ */
+export function buildThrottlerOptions(
+  env: ThrottlerEnv,
+  valkey: ValkeyService | null,
+): ThrottlerModuleOptions {
   const ttlMs = env.THROTTLE_TTL_SECONDS * 1000;
-  const storage = env.THROTTLE_VALKEY_URL
-    ? new ValkeyThrottlerStorage(new Redis(env.THROTTLE_VALKEY_URL, { lazyConnect: true }))
+  const storage = env.THROTTLE_VALKEY_URL && valkey
+    ? new ValkeyThrottlerStorage(valkey.client)
     : undefined; // undefined → ThrottlerStorageProvider falls back to in-memory
+
+  // Logger for the fail-open path; created once per factory call.
+  const logger = new Logger('Throttler');
 
   return {
     throttlers: [
@@ -122,7 +168,25 @@ export function buildThrottlerOptions(env: ThrottlerEnv): ThrottlerModuleOptions
         limit: env.THROTTLE_LOGIN_LIMIT,
         skipIf: (ctx) => !isAuthRoute(ctx.switchToHttp().getRequest()),
         getTracker: (req: Record<string, unknown>) => getThrottlerTracker(req as AuthenticatedRequest),
-        generateKey: (ctx, tracker, name) => getThrottlerKey(ctx, tracker, name),
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
+      },
+      {
+        name: 'phone',
+        ttl: ttlMs,
+        limit: 5,
+        // Skip everywhere except phone-OTP routes — non-phone auth still
+        // uses the `auth` bucket; phone-OTP gets its own (per-phone)
+        // bucket on top.
+        skipIf: (ctx) => !isPhoneOtpRoute(ctx.switchToHttp().getRequest()),
+        getTracker: (req: Record<string, unknown>) => {
+          try {
+            return getPhoneTracker(req as AuthenticatedRequest);
+          } catch (err) {
+            logger.warn({ err: String(err) }, '[throttler] phone tracker failed; using ip');
+            return `ip:${normalizeIp((req as AuthenticatedRequest).ip ?? 'unknown')}`;
+          }
+        },
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
       {
         name: 'global',
@@ -130,7 +194,7 @@ export function buildThrottlerOptions(env: ThrottlerEnv): ThrottlerModuleOptions
         limit: env.THROTTLE_DEFAULT_LIMIT,
         skipIf: (ctx) => isProbeRoute(ctx.switchToHttp().getRequest()),
         getTracker: (req: Record<string, unknown>) => getThrottlerTracker(req as AuthenticatedRequest),
-        generateKey: (ctx, tracker, name) => getThrottlerKey(ctx, tracker, name),
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
     ],
     ...(storage ? { storage } : {}),
@@ -138,28 +202,34 @@ export function buildThrottlerOptions(env: ThrottlerEnv): ThrottlerModuleOptions
 }
 
 /**
- * Re-export the `ThrottlerModule.forRootAsync` shape that wires
- * `buildThrottlerOptions` for NestJS. Kept as a thin helper so the
- * conditional-registration dance lives in one place — AppModule just
- * calls `throttlerModuleForRoot(env)` and gets either a real module or
- * a no-op DynamicModule.
+ * Nest DI providers for the throttler module. AppModule wires these
+ * alongside the `ThrottlerModule.forRootAsync({ useFactory: ... })`
+ * import so the factory has access to ValkeyService (which lives in
+ * AuthModule).
  */
-export function throttlerModuleForRoot(env: ThrottlerEnv): DynamicModule {
-  if (!env.THROTTLE_ENABLED) {
-    // No-op module — ThrottlerModule is registered as global so the
-    // Decorator metadata doesn't error, but with zero throttlers nothing
-    // is checked. The other half: don't wire ThrottlerGuard as APP_GUARD.
-    return { module: ThrottlerModule, global: true };
-  }
-  return ThrottlerModule.forRootAsync({
-    useFactory: () => {
-      const opts = buildThrottlerOptions(env);
-      // buildThrottlerOptions returns non-null when enabled; the cast
-      // is a no-op assertion for the type system.
-      return opts as ThrottlerModuleOptions;
+export function throttlerProviders(env: ThrottlerEnv): Provider[] {
+  if (!env.THROTTLE_ENABLED) return [];
+  return [
+    {
+      provide: VALKEY_THROTTLER_STORAGE,
+      useFactory: (valkey: ValkeyService | null) =>
+        env.THROTTLE_VALKEY_URL && valkey ? new ValkeyThrottlerStorage(valkey.client) : null,
+      inject: [{ token: ValkeyService, optional: true }],
     },
-  });
+  ];
+}
+
+/**
+ * Build the ThrottlerModule.forRootAsync options. Used by AppModule.
+ * When `THROTTLE_ENABLED=false` the caller should NOT import this
+ * module at all — the global ThrottlerGuard provider is also gated.
+ */
+export function throttlerModuleForRootAsync(env: ThrottlerEnv): ThrottlerAsyncOptions {
+  return {
+    inject: [{ token: ValkeyService, optional: true }],
+    useFactory: (valkey: ValkeyService | null) => buildThrottlerOptions(env, valkey),
+  };
 }
 
 // Exported for tests.
-export const __testing__ = { pathOf, isProbeRoute, isAuthRoute };
+export const __testing__ = { pathOf, isProbeRoute, isAuthRoute, isPhoneOtpRoute, normalizeIp };

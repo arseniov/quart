@@ -18,7 +18,10 @@ import { ConfigService } from '../config/config.service.js';
 @Injectable()
 export class ValkeyService implements OnModuleDestroy {
   private readonly logger = new Logger(ValkeyService.name);
-  private readonly client: Redis;
+  // Exposed (read-only) so other Nest providers (e.g. ValkeyThrottlerStorage)
+  // can share the same connection. Lifecycle stays here — Nest closes the
+  // client once on shutdown, and a second owner would race that.
+  public readonly client: Redis;
 
   constructor(config: ConfigService) {
     this.client = new Redis(config.env.VALKEY_URL, { lazyConnect: false });

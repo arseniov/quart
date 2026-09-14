@@ -33,12 +33,21 @@ describe('ThrottlerEnvSchema', () => {
       expect(() => ThrottlerEnvSchema.parse({ THROTTLE_TTL_SECONDS: 0 })).toThrow();
       expect(() => ThrottlerEnvSchema.parse({ THROTTLE_TTL_SECONDS: -1 })).toThrow();
     });
+
+    it('rejects values above the 24h cap', () => {
+      expect(() => ThrottlerEnvSchema.parse({ THROTTLE_TTL_SECONDS: 86_401 })).toThrow();
+      expect(() => ThrottlerEnvSchema.parse({ THROTTLE_TTL_SECONDS: 1_000_000 })).toThrow();
+    });
+
+    it('accepts the 24h maximum', () => {
+      expect(ThrottlerEnvSchema.parse({ THROTTLE_TTL_SECONDS: 86_400 }).THROTTLE_TTL_SECONDS).toBe(86_400);
+    });
   });
 
   describe('per-action limits', () => {
-    it('uses the spec defaults', () => {
+    it('uses the spec defaults (auth 10/min)', () => {
       const env = ThrottlerEnvSchema.parse({});
-      expect(env.THROTTLE_LOGIN_LIMIT).toBe(5);
+      expect(env.THROTTLE_LOGIN_LIMIT).toBe(10);
       expect(env.THROTTLE_SIGNUP_LIMIT).toBe(3);
       expect(env.THROTTLE_PASSWORD_RESET_LIMIT).toBe(3);
       expect(env.THROTTLE_MAGIC_LINK_LIMIT).toBe(5);
@@ -58,11 +67,21 @@ describe('ThrottlerEnvSchema', () => {
       expect(() => ThrottlerEnvSchema.parse({ THROTTLE_LOGIN_LIMIT: 0 })).toThrow();
       expect(() => ThrottlerEnvSchema.parse({ THROTTLE_LOGIN_LIMIT: -3 })).toThrow();
     });
+
+    it('rejects values above the MAX_LIMIT (10_000) cap', () => {
+      expect(() => ThrottlerEnvSchema.parse({ THROTTLE_LOGIN_LIMIT: 10_001 })).toThrow();
+      expect(() => ThrottlerEnvSchema.parse({ THROTTLE_DEFAULT_LIMIT: 1_000_000 })).toThrow();
+    });
+
+    it('accepts the MAX_LIMIT boundary', () => {
+      expect(ThrottlerEnvSchema.parse({ THROTTLE_LOGIN_LIMIT: 10_000 }).THROTTLE_LOGIN_LIMIT).toBe(10_000);
+      expect(ThrottlerEnvSchema.parse({ THROTTLE_DEFAULT_LIMIT: 10_000 }).THROTTLE_DEFAULT_LIMIT).toBe(10_000);
+    });
   });
 
   describe('THROTTLE_DEFAULT_LIMIT', () => {
-    it('defaults to 60 (generous baseline per spec)', () => {
-      expect(ThrottlerEnvSchema.parse({}).THROTTLE_DEFAULT_LIMIT).toBe(60);
+    it('defaults to 600 (10/sec baseline per spec)', () => {
+      expect(ThrottlerEnvSchema.parse({}).THROTTLE_DEFAULT_LIMIT).toBe(600);
     });
   });
 
@@ -87,7 +106,7 @@ describe('ThrottlerEnvSchema', () => {
       THROTTLE_PASSWORD_RESET_LIMIT: '5',
       THROTTLE_MAGIC_LINK_LIMIT: '7',
       THROTTLE_MFA_LIMIT: '15',
-      THROTTLE_DEFAULT_LIMIT: '120',
+      THROTTLE_DEFAULT_LIMIT: '600',
       THROTTLE_VALKEY_URL: 'redis://valkey:6379',
     });
     expect(env).toMatchObject({
@@ -98,7 +117,7 @@ describe('ThrottlerEnvSchema', () => {
       THROTTLE_PASSWORD_RESET_LIMIT: 5,
       THROTTLE_MAGIC_LINK_LIMIT: 7,
       THROTTLE_MFA_LIMIT: 15,
-      THROTTLE_DEFAULT_LIMIT: 120,
+      THROTTLE_DEFAULT_LIMIT: 600,
       THROTTLE_VALKEY_URL: 'redis://valkey:6379',
     });
   });

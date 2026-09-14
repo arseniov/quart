@@ -4,6 +4,7 @@ import {
   Body, Controller, HttpCode, HttpStatus, Post, Req, UnauthorizedException, UseGuards, UsePipes,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -38,6 +39,7 @@ export class MfaController {
 
   @Post('enroll')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   @UsePipes(new ZodValidationPipe(EnrollSchema))
   async enroll(@Body() _body: z.infer<typeof EnrollSchema>, @Req() req: ReqWithAuth) {
     // enroll() persists the mfa_credentials row (with cityId for the RLS
@@ -68,6 +70,7 @@ export class MfaController {
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   @UsePipes(new ZodValidationPipe(VerifySchema))
   async verify(
     @Body() body: z.infer<typeof VerifySchema>,
@@ -111,6 +114,7 @@ export class MfaController {
 
   @Post('backup-code')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   @UsePipes(new ZodValidationPipe(BackupSchema))
   async backupCode(
     @Body() body: z.infer<typeof BackupSchema>,

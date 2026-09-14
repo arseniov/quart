@@ -1,4 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 
 import { Public } from './public.decorator.js';
@@ -30,7 +31,11 @@ const verifySchema = phoneSchema.extend({
 export class PhoneOtpController {
   constructor(private readonly twilio: TwilioService) {}
 
+  // Per-handler override of the global `phone` throttler. The phone
+  // throttler is keyed by phoneNumber (fallback IP) — the limit is 5/min
+  // by default; raising it here would defeat the brute-force protection.
   @Post('request')
+  @Throttle({ phone: { limit: 5, ttl: 60_000 } })
   async requestOtp(@Body() body: unknown) {
     const { phoneNumber } = phoneSchema.parse(body);
     await this.twilio.sendOtp(phoneNumber);
@@ -38,6 +43,7 @@ export class PhoneOtpController {
   }
 
   @Post('verify')
+  @Throttle({ phone: { limit: 5, ttl: 60_000 } })
   async verifyOtp(@Body() body: unknown) {
     const { phoneNumber, code } = verifySchema.parse(body);
     const verified = await this.twilio.verifyOtp(phoneNumber, code);

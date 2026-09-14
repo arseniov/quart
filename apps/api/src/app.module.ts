@@ -1,6 +1,6 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
 import { AdminModule } from './admin/admin.module.js';
@@ -29,20 +29,32 @@ import { RbacModule } from './rbac/rbac.module.js';
 import { SavedItemsModule } from './saved-items/saved-items.module.js';
 import { SearchModule } from './search/search.module.js';
 import { ThrottlerEnvSchema } from './security/throttler-env.js';
-import { throttlerModuleForRoot } from './security/throttler.config.js';
+import { throttlerModuleForRootAsync } from './security/throttler.config.js';
 import { SelfModule } from './self/self.module.js';
 import { TopicsModule } from './topics/topics.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 
-// Parsed ONCE at module load. AppModule is a singleton so subsequent
-// re-imports return the same object. Reads process.env directly (no
-// ConfigService dependency) so test rigs can override via THROTTLE_ENABLED
-// without needing the full DB / Valkey env.
-const THROTTLE_ENV = ThrottlerEnvSchema.parse(process.env);
-
-const throttlerGuardProvider = THROTTLE_ENV.THROTTLE_ENABLED
-  ? [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
-  : [];
+/**
+ * Try to parse the throttler env. Wrapped in a try/catch so a missing
+ * or malformed env var doesn't kill the whole app boot — the throttler
+ * is non-critical and the failure is logged. Nest DI's `useFactory`
+ * already runs lazily, so test rigs that pre-set `process.env` will
+ * see the right values when the factory is invoked.
+ *
+ * ponytail: Zod throws on the first issue; we map to `THROTTLE_ENABLED=false`
+ * so the throttler degrades to a no-op rather than blocking boot. The
+ * cost: a typo in the env silently disables rate limiting — logged
+ * loudly so the operator sees it.
+ */
+function parseThrottlerEnvOrDefault() {
+  try {
+    return ThrottlerEnvSchema.parse(process.env);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[throttler] env parse failed; disabling throttler:', err);
+    return ThrottlerEnvSchema.parse({ THROTTLE_ENABLED: false });
+  }
+}
 
 @Module({
   imports: [
@@ -70,10 +82,13 @@ const throttlerGuardProvider = THROTTLE_ENV.THROTTLE_ENABLED
     AdminModule,
     UploadsModule,
     ObservabilityModule,
-    // Always import — `throttlerModuleForRoot` returns a no-op module
-    // when THROTTLE_ENABLED=false. Keeping it in `imports` keeps
-    // @Throttle() decorators valid either way.
-    throttlerModuleForRoot(THROTTLE_ENV),
+    // ThrottlerModule is registered AFTER AuthModule so the factory's
+    // `inject: [ValkeyService]` resolves. ValkeyService is exported by
+    // AuthModule. We register `ThrottlerModule.forRootAsync` in two
+    // shapes depending on THROTTLE_ENABLED (parsed lazily inside the
+    // factory so process.env edits between module load and NestFactory
+    // create still take effect).
+    ...buildThrottlerImport(),
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
@@ -85,7 +100,9 @@ const throttlerGuardProvider = THROTTLE_ENV.THROTTLE_ENABLED
     // Conditionally wire ThrottlerGuard. When THROTTLE_ENABLED=false the
     // provider list is empty so the guard is never instantiated and the
     // @Throttle() decorators are effectively metadata-only.
-    ...throttlerGuardProvider,
+    ...(parseThrottlerEnvOrDefault().THROTTLE_ENABLED
+      ? [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
+      : []),
   ],
 })
 export class AppModule implements NestModule {
@@ -96,4 +113,20 @@ export class AppModule implements NestModule {
     // `.after()` on the consumer — pass both in order to a single apply().
     consumer.apply(RequestIdMiddleware, SlowQueryMiddleware).forRoutes('*');
   }
+}
+
+/**
+ * Returns the imports array for the throttler module. When disabled,
+ * returns a no-op `ThrottlerModule` import — the decorators stay
+ * valid but no work happens.
+ */
+function buildThrottlerImport() {
+  const env = parseThrottlerEnvOrDefault();
+  if (!env.THROTTLE_ENABLED) {
+    // No-op module — ThrottlerModule is registered as global so the
+    // Decorator metadata doesn't error, but with zero throttlers nothing
+    // is checked.
+    return [{ module: ThrottlerModule, global: true }];
+  }
+  return [ThrottlerModule.forRootAsync(throttlerModuleForRootAsync(env))];
 }
