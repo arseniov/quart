@@ -38,6 +38,7 @@ import type { AdminIssue } from './admin-issues.service.js';
 // `design:paramtypes` for the AdminIssuesService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AdminIssuesService } from './admin-issues.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
@@ -45,6 +46,8 @@ interface AuthedRequest extends FastifyRequest {
 }
 
 @Controller('admin/issues')
+@ApiTags('admin/issues')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminIssuesController {
   constructor(private readonly svc: AdminIssuesService) {}

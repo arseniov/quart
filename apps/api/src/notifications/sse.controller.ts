@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { NotificationsSubscriber } from './notifications-subscriber.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const HEARTBEAT_MS = 25_000;
 
@@ -26,6 +27,8 @@ const HEARTBEAT_MS = 25_000;
  *  default `proxy_read_timeout` / envoy `idle_timeout`) so intermediate
  *  proxies never close an idle SSE connection before we keep it alive. */
 @Controller('me/notifications')
+@ApiTags('notifications-sse')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)
 export class SseController {
   constructor(private readonly subscriber: NotificationsSubscriber) {}

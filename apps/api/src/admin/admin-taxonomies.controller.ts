@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const TopicCategoryPatchSchema = z.object({
   nameI18n: z.record(z.string(), z.string()).optional(),
@@ -33,6 +34,8 @@ const IssueCategoryPatchSchema = z.object({
 });
 
 @Controller('admin/taxonomies')
+@ApiTags('admin/taxonomies')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminTaxonomiesController {
   constructor(

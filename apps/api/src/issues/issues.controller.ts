@@ -39,8 +39,11 @@ import type {
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { IssuesService } from './issues.service.js';
 import type { Issue, IssueEvent, IssuePhoto } from './issues.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @Controller('issues')
+@ApiTags('issues')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class IssuesController {
   constructor(private readonly svc: IssuesService) {}

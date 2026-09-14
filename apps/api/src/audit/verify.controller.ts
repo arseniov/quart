@@ -7,6 +7,7 @@ import { MfaGuard } from '../auth/mfa.guard.js';
 import { ConfigService } from '../config/config.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 // ponytail: ceiling for the chain walk — full-table reads are fine until the
 // table grows past this. Bump + paginate if production logs exceed it.
@@ -19,6 +20,8 @@ const AUDIT_VERIFY_MAX_ROWS = 1_000_000;
 // JwtAuthGuard + MfaGuard-gated and walks the whole table. Add a cityId
 // filter and admin.audit.verify permission check when Phase 5 lands.
 @Controller('admin/audit')
+@ApiTags('admin/audit')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard)
 export class VerifyController {
   constructor(

@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const SettingsPatchSchema = z.object({
   civicPointRules: z.unknown().optional(),
@@ -25,6 +26,8 @@ const SettingsPatchSchema = z.object({
 });
 
 @Controller('admin/settings')
+@ApiTags('admin/settings')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminSettingsController {
   constructor(

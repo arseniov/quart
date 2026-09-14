@@ -11,6 +11,7 @@ import { RbacGuard } from '../rbac/rbac.guard.js';
 
 import { CreateCommentBody, ListCommentsQuery, ReactBody, UpdateCommentBody } from './comments.dto.js';
 import { CommentsService } from './comments.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
@@ -18,6 +19,8 @@ interface AuthedRequest extends FastifyRequest {
 }
 
 @Controller('comments')
+@ApiTags('comments')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class CommentsController {
   constructor(private readonly svc: CommentsService) {}

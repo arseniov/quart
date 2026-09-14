@@ -6,10 +6,13 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 // `design:paramtypes` for the DbService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const ListQuery = z.object({ country: z.string().length(2).optional() });
 
 @Controller('cities')
+@ApiTags('cities')
+@ApiBearerAuth('bearer')
 export class CitiesController {
   constructor(private readonly db: DbService) {}
 

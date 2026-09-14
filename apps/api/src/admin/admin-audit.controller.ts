@@ -13,6 +13,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const AuditQuerySchema = z.object({
   actor: z.string().uuid().optional(),
@@ -26,6 +27,8 @@ const AuditQuerySchema = z.object({
 });
 
 @Controller('admin/audit')
+@ApiTags('admin/audit')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminAuditController {
   constructor(private readonly db: DbService) {}

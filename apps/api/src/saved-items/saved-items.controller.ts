@@ -28,6 +28,7 @@ import {
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SavedItemsService } from './saved-items.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
@@ -35,6 +36,8 @@ interface AuthedRequest extends FastifyRequest {
 }
 
 @Controller('saved-items')
+@ApiTags('saved-items')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class SavedItemsController {
   constructor(private readonly svc: SavedItemsService) {}

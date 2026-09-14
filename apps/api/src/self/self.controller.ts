@@ -13,6 +13,7 @@ import { UpdateProfileSchema, type UpdateProfileBody } from './self.dto.js';
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SelfService } from './self.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
@@ -20,6 +21,8 @@ interface AuthedRequest extends FastifyRequest {
 }
 
 @Controller('self')
+@ApiTags('self')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class SelfController {
   constructor(private readonly svc: SelfService) {}

@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const UserPatchSchema = z.object({
   roleIds: z.array(z.string().uuid()).optional(),
@@ -33,6 +34,8 @@ const ListQuerySchema = z.object({
 });
 
 @Controller('admin/users')
+@ApiTags('admin/users')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminUsersController {
   constructor(

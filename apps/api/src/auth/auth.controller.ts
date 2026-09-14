@@ -8,6 +8,7 @@ import { SkipTenant } from '../common/decorators/skip-tenant.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service.js';
 import { Public } from './public.decorator.js';
+import { ApiTags } from '@nestjs/swagger';
 
 /**
  * Mounts Better Auth's HTTP handler at /auth/*.
@@ -19,6 +20,7 @@ import { Public } from './public.decorator.js';
  * cannot depend on tenant context or an existing JWT.
  */
 @Controller('auth')
+@ApiTags('auth')
 @Public()
 @SkipTenant()
 export class AuthController {

@@ -18,6 +18,7 @@ import { DbService } from '../db/db.service.js';
 // `design:paramtypes` for the UploadsService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { UploadsService } from './uploads.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 /**
  * Fastify multipart — `main.ts` registers `@fastify/multipart` globally and
@@ -28,6 +29,8 @@ import { UploadsService } from './uploads.service.js';
 const TEN_MB = 10 * 1024 * 1024;
 
 @Controller('uploads')
+@ApiTags('uploads')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
   constructor(

@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const RoleCreateSchema = z.object({
   code: z.string().min(1).max(64),
@@ -32,6 +33,8 @@ const RolePatchSchema = z.object({
 });
 
 @Controller('admin/roles')
+@ApiTags('admin/roles')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminRolesController {
   constructor(

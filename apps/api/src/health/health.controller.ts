@@ -7,6 +7,7 @@ import { Public } from '../auth/public.decorator.js';
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { HealthService } from './health.service.js';
+import { ApiTags } from '@nestjs/swagger';
 /* eslint-enable import/order */
 
 interface ReplyLike {
@@ -17,6 +18,7 @@ interface ReplyLike {
 // and /metrics, but @SkipThrottle() prevents an accidental misconfiguration
 // (someone editing skipIf and forgetting health) from breaking scrapers.
 @Controller('health')
+@ApiTags('health')
 @Public()
 @SkipThrottle()
 export class HealthController {

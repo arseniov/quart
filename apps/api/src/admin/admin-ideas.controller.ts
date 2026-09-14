@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const ModerateSchema = z.object({
   action: z.enum(['publish', 'hide', 'reject']),
@@ -31,6 +32,8 @@ const CommentSchema = z.object({
 const MODERATOR_ROLES = new Set(['moderator', 'quart_admin']);
 
 @Controller('admin/ideas')
+@ApiTags('admin/ideas')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminIdeasController {
   constructor(

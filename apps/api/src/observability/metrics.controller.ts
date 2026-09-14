@@ -9,6 +9,7 @@ import {
 } from 'prom-client';
 
 import { QueueService } from '../queue/queue.service.js';
+import { ApiTags } from '@nestjs/swagger';
 
 /**
  * Process-local Prometheus registry. `collectDefaultMetrics()` registers the
@@ -77,6 +78,7 @@ export function setBullmqQueueDepthProvider(provider: QueueService | undefined):
 }
 
 @Controller('metrics')
+@ApiTags('metrics')
 @SkipThrottle()
 export class MetricsController {
   constructor(private readonly queues: QueueService) {

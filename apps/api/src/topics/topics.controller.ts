@@ -15,8 +15,11 @@ import type { Topic } from './topics.service.js';
 // `design:paramtypes` for the TopicsService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TopicsService } from './topics.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @Controller('topics')
+@ApiTags('topics')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class TopicsController {
   constructor(private readonly svc: TopicsService) {}

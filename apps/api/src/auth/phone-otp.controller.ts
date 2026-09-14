@@ -7,6 +7,7 @@ import { Public } from './public.decorator.js';
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TwilioService } from './twilio.service.js';
+import { ApiTags } from '@nestjs/swagger';
 
 const phoneSchema = z.object({
   phoneNumber: z.string().regex(/^\+\d{10,15}$/, 'E.164 phone format required'),
@@ -27,6 +28,7 @@ const verifySchema = phoneSchema.extend({
  * a logged-in user context is available.
  */
 @Controller('auth/phone')
+@ApiTags('auth/phone')
 @Public()
 export class PhoneOtpController {
   constructor(private readonly twilio: TwilioService) {}

@@ -14,8 +14,11 @@ import type { SearchHit } from './search.service.js';
 // `design:paramtypes` for the SearchService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SearchService } from './search.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @Controller('search')
+@ApiTags('search')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class SearchController {
   constructor(private readonly svc: SearchService) {}

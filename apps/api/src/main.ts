@@ -3,10 +3,11 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { Logger } from 'nestjs-pino';
+import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
@@ -14,6 +15,7 @@ import { ZodValidationPipe } from './common/zod-validation.pipe.js';
 import { ConfigService } from './config/config.service.js';
 import { OtelShutdownHook, startOtel } from './observability/otel.js';
 import { initSentry, SentryEnvSchema } from './observability/sentry.js';
+import { setupOpenApi } from './openapi/swagger.setup.js';
 import { buildCorsOptions } from './security/cors.js';
 import { buildHelmetOptions } from './security/helmet.js';
 import { SecurityEnvSchema } from './security/security-env.js';
@@ -79,10 +81,20 @@ async function bootstrap(): Promise<void> {
     attachFieldsToBody: false,
     limits: { fileSize: 10 * 1024 * 1024 },
   });
-  app.useLogger(app.get(Logger));
+  app.useLogger(app.get(PinoLogger));
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
   const config = app.get(ConfigService);
+  // Swagger / OpenAPI surface. Narrow schema parses independently — does
+  // NOT pull in the full EnvSchema. Default-off in production; see
+  // `resolveSwaggerEnabled` for the gate. Mounted AFTER all other plugins
+  // so it can decorate the controllers Nest has already registered.
+  const openapi = setupOpenApi(app, process.env);
+  if (openapi.enabled) {
+    new Logger('OpenApi').log(
+      `swagger UI at ${openapi.uiPath}, spec at ${openapi.jsonPath}`,
+    );
+  }
   await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
 }
 

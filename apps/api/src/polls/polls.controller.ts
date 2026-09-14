@@ -21,8 +21,11 @@ import type { CreateBody, ListQuery, UpdateBody, VoteBody } from './polls.dto.js
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PollsService } from './polls.service.js';
 import type { Poll } from './polls.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @Controller('polls')
+@ApiTags('polls')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class PollsController {
   constructor(private readonly svc: PollsService) {}

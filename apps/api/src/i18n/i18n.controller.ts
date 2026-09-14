@@ -14,8 +14,11 @@ import type { TranslationPayload } from './i18n.dto.js';
 // `design:paramtypes` for the I18nService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { I18nService } from './i18n.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @Controller('i18n')
+@ApiTags('i18n')
+@ApiBearerAuth('bearer')
 export class I18nController {
   constructor(private readonly svc: I18nService) {}
 

@@ -28,6 +28,7 @@ import type { Idea, IdeaComment } from './ideas.service.js';
 // `design:paramtypes` for the IdeasService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { IdeasService } from './ideas.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 // Class-level guards apply to every route. Public read endpoints (list/get)
 // use @Public-decorated equivalents via @RequirePermission which the
@@ -35,6 +36,8 @@ import { IdeasService } from './ideas.service.js';
 // populates req.user from the bearer token; ideas are scoped per-city via
 // the tenant context the interceptor already wired.
 @Controller('ideas')
+@ApiTags('ideas')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class IdeasController {
   constructor(private readonly svc: IdeasService) {}

@@ -17,12 +17,15 @@ import {
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { NotificationsService } from './notifications.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface AuthedRequest extends FastifyRequest {
   tenant: TenantContext;
 }
 
 @Controller('notifications')
+@ApiTags('notifications')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class NotificationsController {
   constructor(private readonly svc: NotificationsService) {}

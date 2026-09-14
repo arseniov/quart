@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const CityCreateSchema = z.object({
   slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/),
@@ -48,6 +49,8 @@ const NeighborhoodCreateSchema = z.object({
 // areas + neighborhoods within their own city (enforced at RLS layer by
 // `runInTenantTx`); the controller delegates via the city-scoped tx.
 @Controller('admin/cities')
+@ApiTags('admin/cities')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminCitiesController {
   constructor(

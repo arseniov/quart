@@ -17,6 +17,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { JwtService } from './jwt.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { MfaService } from './mfa.service.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const EnrollSchema = z.object({}).strict(); // body shape only — verify happens after QR scan
 const VerifySchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
@@ -30,6 +31,8 @@ interface ReqWithAuth extends FastifyRequest {
 // claim attached post-enroll). Backup codes + replay prevention live in
 // `mfa_credentials` (migration 0026).
 @Controller('auth/mfa')
+@ApiTags('auth/mfa')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)
 export class MfaController {
   constructor(

@@ -17,6 +17,7 @@ import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const PatchKeySchema = z.object({
   locale: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
@@ -35,6 +36,8 @@ const ListQuerySchema = z.object({
 // back feature flags + civic-point rules (see 0009 migration). The 0028
 // migration adds `admin.i18n.write` so writes are gated.
 @Controller('admin/i18n')
+@ApiTags('admin/i18n')
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminI18nController {
   constructor(
