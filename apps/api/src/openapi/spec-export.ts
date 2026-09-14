@@ -7,22 +7,6 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 /**
- * Narrow env schema for the OpenAPI export job (T46). Kept separate from
- * the app `EnvSchema` and from `SwaggerEnvSchema` so this script — which
- * runs against a stub ConfigService — doesn't drag in DATABASE_URL /
- * VALKEY_URL / MINIO_*. Without this separation the export script
- * would need every env var the running API needs.
- */
-export interface OpenApiExportEnv {
-  /** Where to write the spec. Resolved against `process.cwd()` if relative. */
-  OPENAPI_OUTPUT_PATH: string;
-  /** Pretty-print with 2-space indent; default true. */
-  OPENAPI_BEAUTIFY: boolean;
-}
-
-export const DEFAULT_OPENAPI_OUTPUT_PATH = 'packages/shared-contracts/openapi.json';
-
-/**
  * Recursively sort OpenAPI object keys so diffs are minimal across runs.
  *
  * OpenAPI doesn't specify key order, but `@nestjs/swagger` emits objects
@@ -37,21 +21,30 @@ export const DEFAULT_OPENAPI_OUTPUT_PATH = 'packages/shared-contracts/openapi.js
  *
  * Pure function — same input yields same bytes. Stable enough to commit
  * the artifact and review routing changes via plain git diff.
+ *
+ * Edge cases guarded: `Map`, `Set`, `Date`, `Symbol`, and any other
+ * non-plain-object instances pass through unchanged (we can't enumerate
+ * their keys the way `Object.keys` does on a plain record). This keeps
+ * the function total — if `@nestjs/swagger` ever starts emitting, say,
+ * a `Date` inside an example, we don't throw, we just emit it.
  */
 export function sortOpenApiKeys<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((v) => sortOpenApiKeys(v)) as unknown as T;
   }
-  if (value !== null && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const sortedKeys = Object.keys(obj).sort();
-    const out: Record<string, unknown> = {};
-    for (const key of sortedKeys) {
-      out[key] = sortOpenApiKeys(obj[key]);
-    }
-    return out as unknown as T;
+  if (value === null || typeof value !== 'object') return value;
+  // `Object.prototype.toString.call(...)` short-circuits built-ins whose
+  // own keys don't enumerate the way plain-object keys do. Anything that
+  // isn't `[object Object]` is passed through as-is.
+  const tag = Object.prototype.toString.call(value);
+  if (tag !== '[object Object]') return value;
+  const obj = value as Record<string, unknown>;
+  const sortedKeys = Object.keys(obj).sort();
+  const out: Record<string, unknown> = {};
+  for (const key of sortedKeys) {
+    out[key] = sortOpenApiKeys(obj[key]);
   }
-  return value;
+  return out as unknown as T;
 }
 
 /**
@@ -97,6 +90,11 @@ export function resolveOutputPath(
  * Creates parent directories first; if the rename fails after a successful
  * tmp write, the tmp file stays on disk for inspection — we explicitly
  * do not auto-clean, so a failure surfaces loudly in the next CI run.
+ *
+ * ponytail: `EXDEV` (cross-device rename) is not handled. The export job
+ * always writes inside the same filesystem as the tmp file (CI cache,
+ * working tree), so a retry isn't needed in practice. If the output ever
+ * crosses a mount point, swap `rename` for `copyFile + unlink`.
  */
 export async function atomicWriteJson(
   absolutePath: string,
@@ -153,7 +151,7 @@ export function diffOpenApi(
 
 /**
  * Read the git HEAD short SHA. Returns `null` when:
- *   - `cwd` is not inside a git repo
+ *   - `cwd` is not inside a git repo (no `.git` directory and no `HEAD` file)
  *   - git is not installed
  *   - the resolved HEAD has no short-sha (detached / unborn)
  *
@@ -198,6 +196,10 @@ export function annotateWithGitSha(
 /**
  * Read the JSON spec from disk if present. Returns null when the file
  * doesn't exist or can't be parsed — used to drive the diff report.
+ *
+ * Note: concurrent reads of the file mid-rename are possible but the
+ * worst case is a `null` return (caught below), which the caller treats
+ * as "first run" — fine since `pnpm` is single-process.
  */
 export function readExistingSpec(absolutePath: string): Record<string, unknown> | null {
   if (!existsSync(absolutePath)) return null;

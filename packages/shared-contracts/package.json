@@ -5,12 +5,11 @@
   "type": "module",
   "main": "./src/index.ts",
   "files": [
-    "src",
-    "openapi.json"
+    "src"
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./openapi.json": "./openapi.json"
+    "./openapi.json": "./src/openapi.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

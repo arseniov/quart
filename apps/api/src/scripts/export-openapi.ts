@@ -1,5 +1,5 @@
 /**
- * OpenAPI export to `packages/shared-contracts/openapi.json` (T46).
+ * OpenAPI export to `packages/shared-contracts/src/openapi.json` (T46).
  *
  * Builds the OpenAPI document from controller metadata WITHOUT booting the
  * Nest DI graph — that path needs Postgres / Valkey / MinIO / BullMQ / OTel,
@@ -8,17 +8,22 @@
  * The trick: `@nestjs/swagger`'s `SwaggerExplorer.exploreController` only
  * reads decorator metadata on controller methods (route path, @ApiOperation,
  * @ApiBody, @ApiResponse, etc.). It doesn't invoke any handler. So we feed
- * it `InstanceWrapper`s whose `instance` is `Object.create(controller.prototype)`
+ * it `InstanceWrapper`s whose `instance` is `Object.create(prototype)`
  * — a "ghost" instance that has all the prototype methods but never ran the
  * constructor. Decorators fire when `Reflect.getMetadata` walks the class
  * shape, so route paths / schemas / tags are all captured correctly.
+ *
+ * Linux-only: paths use POSIX separators and `git` is invoked without a
+ * `.exe` suffix. Windows runners are out of scope for now.
  *
  * Usage:
  *   pnpm --filter @quart/api run export:openapi
  *
  * Env overrides (all optional):
- *   OPENAPI_OUTPUT_PATH — defaults to packages/shared-contracts/openapi.json
+ *   OPENAPI_OUTPUT_PATH — defaults to packages/shared-contracts/src/openapi.json
  *   OPENAPI_BEAUTIFY    — 'false' to emit minified JSON (default true)
+ *   SWAGGER_TITLE / SWAGGER_DESCRIPTION / SWAGGER_VERSION / SWAGGER_SERVERS
+ *                     — narrow env, parsed via SwaggerEnvSchema
  *
  * No side-effects: writes only to `OPENAPI_OUTPUT_PATH`. CI compares the
  * committed copy to this run's output and fails if they differ.
@@ -48,6 +53,10 @@ import { AdminSettingsController } from '../admin/admin-settings.controller.js';
 import { AdminTaxonomiesController } from '../admin/admin-taxonomies.controller.js';
 import { AdminUsersController } from '../admin/admin-users.controller.js';
 import { AdminIssuesController } from '../admin-issues/admin-issues.controller.js';
+import { VerifyController } from '../audit/verify.controller.js';
+import { AuthController } from '../auth/auth.controller.js';
+import { MfaController } from '../auth/mfa.controller.js';
+import { PhoneOtpController } from '../auth/phone-otp.controller.js';
 import { CitiesController } from '../cities/cities.controller.js';
 import { CommentsController } from '../comments/comments.controller.js';
 import { HealthController } from '../health/health.controller.js';
@@ -66,7 +75,13 @@ import {
   resolveOutputPath,
   sortOpenApiKeys,
 } from '../openapi/spec-export.js';
-import { SwaggerEnvSchema } from '../openapi/swagger-env.js';
+import { parseSwaggerServers, SwaggerEnvSchema } from '../openapi/swagger-env.js';
+import {
+  SWAGGER_ADMIN_COOKIE_NAME,
+  SWAGGER_API_COOKIE_NAME,
+  SWAGGER_BEARER_NAME,
+} from '../openapi/swagger.config.js';
+import { readAppVersion } from '../common/app-version.js';
 import { PollsController } from '../polls/polls.controller.js';
 import { SavedItemsController } from '../saved-items/saved-items.controller.js';
 import { SearchController } from '../search/search.controller.js';
@@ -74,7 +89,13 @@ import { SelfController } from '../self/self.controller.js';
 import { TopicsController } from '../topics/topics.controller.js';
 import { UploadsController } from '../uploads/uploads.controller.js';
 
-export const DEFAULT_OPENAPI_OUTPUT_PATH = 'packages/shared-contracts/openapi.json';
+export const DEFAULT_OPENAPI_OUTPUT_PATH = 'packages/shared-contracts/src/openapi.json';
+
+// Metadata key `@nestjs/swagger` writes for `@ApiTags('foo')`. We read it
+// directly off each controller class to populate the top-level `tags` array
+// without re-parsing every operation. Mirrors the constant in
+// `node_modules/@nestjs/swagger/dist/constants.js`.
+const API_TAGS_METADATA = 'swagger/apiUseTags';
 
 // ---------------------------------------------------------------------------
 // Controller registry — the explicit list of controllers that participate in
@@ -96,21 +117,25 @@ const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   AdminTaxonomiesController,
   AdminUsersController,
   AdminIssuesController,
+  VerifyController,
+  AuthController,
+  MfaController,
+  PhoneOtpController,
   CitiesController,
   CommentsController,
   HealthController,
+  I18nController,
   IdeasController,
   IssuesController,
-  I18nController,
   NotificationsController,
   SseController,
+  MetricsController,
   PollsController,
   SavedItemsController,
   SearchController,
   SelfController,
   TopicsController,
   UploadsController,
-  MetricsController,
 ];
 
 // ---------------------------------------------------------------------------
@@ -124,7 +149,16 @@ interface SwaggerBuilderInput {
   description: string;
   version: string;
   servers?: Array<{ url: string; description?: string }>;
-  bearerSecurityName?: string;
+}
+
+interface ExplorerLike {
+  exploreController(
+    wrapper: InstanceWrapper,
+    config: ApplicationConfig,
+    modulePath: string,
+    globalPrefix: string,
+  ): unknown;
+  getSchemas(): Record<string, unknown>;
 }
 
 function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
@@ -133,7 +167,7 @@ function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
     new ModelPropertiesAccessor(),
     new SwaggerTypesMapper(),
   );
-  const explorer = new SwaggerExplorer(schemaFactory);
+  const explorer = new SwaggerExplorer(schemaFactory) as unknown as ExplorerLike;
 
   const wrappers: InstanceWrapper[] = CONTROLLERS.map((ControllerCtor) => {
     // Ghost instance — `Object.create(prototype)` skips constructor but keeps
@@ -151,13 +185,23 @@ function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
 
   const denormalized: unknown[] = [];
   for (const wrapper of wrappers) {
-    const result = explorer.exploreController(
-      wrapper,
-      applicationConfig,
-      '' /* modulePath */,
-      '' /* globalPrefix */,
-    ) as unknown as unknown[];
-    denormalized.push(...result);
+    try {
+      const result = explorer.exploreController(
+        wrapper,
+        applicationConfig,
+        '' /* modulePath */,
+        '' /* globalPrefix */,
+      ) as unknown as unknown[];
+      denormalized.push(...result);
+    } catch (err) {
+      // A single malformed decorator shouldn't lose every other controller's
+      // paths. Log and skip — the spec is still useful for the routes that
+      // did parse, and the operator sees the failure in CI logs.
+      const ctorName = (wrapper.metatype as { name?: string })?.name ?? 'unknown';
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack?.split('\n').slice(0, 5).join('\n') : '';
+      process.stderr.write(`export-openapi: skipping ${ctorName}: ${msg}\n${stack}\n`);
+    }
   }
 
   // The explorer's `exploreController` returns denormalized paths — one entry
@@ -179,22 +223,36 @@ function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
     paths[path][method] = op;
   }
 
-  // Security schemes — bearer JWT plus cookie auth, matching T45.
-  const bearerName = input.bearerSecurityName ?? 'bearer';
+  // Security schemes — bearer JWT plus the two canonical cookie names,
+  // mirroring `swagger.config.ts` exactly. Drift between the runtime
+  // Swagger UI and the exported spec would make the cookie names an
+  // operator-facing lie.
   const securitySchemes: Record<string, unknown> = {
-    [bearerName]: {
+    [SWAGGER_BEARER_NAME]: {
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'EdDSA',
       description: 'Ed25519-signed JWT issued by /auth/login.',
     },
-    'cookie-auth': {
+    [SWAGGER_API_COOKIE_NAME]: {
       type: 'apiKey',
       in: 'cookie',
-      name: 'quart_session',
-      description: 'Better Auth session cookie (HTTP-only).',
+      name: SWAGGER_API_COOKIE_NAME,
+      description: 'Better Auth session cookie for the mobile PWA (HTTP-only).',
+    },
+    [SWAGGER_ADMIN_COOKIE_NAME]: {
+      type: 'apiKey',
+      in: 'cookie',
+      name: SWAGGER_ADMIN_COOKIE_NAME,
+      description: 'Better Auth session cookie for the admin console (HTTP-only).',
     },
   };
+
+  // Top-level `tags` — the union of every `@ApiTags('foo')` declaration on
+  // the registered controllers, sorted for stable diffs. Pulled directly
+  // from class metadata so adding a new controller automatically extends
+  // the list (no separate registry to maintain).
+  const tags = collectTags();
 
   const document: Record<string, unknown> = {
     openapi: '3.0.3',
@@ -204,25 +262,59 @@ function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
       version: input.version,
     },
     servers: input.servers ?? [],
+    tags,
     paths,
     components: {
       securitySchemes,
       schemas,
+      // Zod-based DTOs aren't introspectable via `@nestjs/swagger`'s
+      // class-decorator scan. They are validated at the controller
+      // boundary via the global ZodValidationPipe but their JSON-Schema
+      // shape isn't auto-registered into `components.schemas`. This
+      // extension flag exists so a downstream generator can detect the
+      // gap and either (a) skip schema generation or (b) hand-wire the
+      // missing `components.schemas` entries via `@ApiExtraModels`.
+      'x-schemas-note':
+        'DTOs use Zod schemas (see apps/api/src/**/*.dto.ts). Wire `zod-to-openapi` or annotate with @ApiExtraModels to populate components.schemas.',
     },
-    tags: [],
   };
 
   return document;
 }
 
+function collectTags(): Array<{ name: string }> {
+  const seen = new Set<string>();
+  for (const ControllerCtor of CONTROLLERS) {
+    const tags = Reflect.getMetadata(API_TAGS_METADATA, ControllerCtor) as unknown;
+    if (Array.isArray(tags)) {
+      for (const t of tags) {
+        if (typeof t === 'string') seen.add(t);
+      }
+    }
+  }
+  return [...seen].sort().map((name) => ({ name }));
+}
+
 async function main(): Promise<void> {
   const swaggerEnv = SwaggerEnvSchema.parse(process.env);
+
+  // `info.version` — env override wins, else pull from apps/api/package.json,
+  // else fall back to a labelled placeholder so a missing manifest is loud
+  // (not silent) in the exported spec.
+  const envVersion = swaggerEnv.SWAGGER_VERSION;
+  const pkgVersion = readAppVersion();
+  const version = envVersion || pkgVersion || '0.0.0';
+  if (!envVersion && pkgVersion === null) {
+    process.stderr.write(
+      'export-openapi: SWAGGER_VERSION unset and package.json unreadable — falling back to 0.0.0\n',
+    );
+  }
 
   const rawDocument = buildDocument({
     title: swaggerEnv.SWAGGER_TITLE,
     description: swaggerEnv.SWAGGER_DESCRIPTION,
-    version: swaggerEnv.SWAGGER_VERSION || '0.0.0',
-    servers: parseSwaggerServers(swaggerEnv.SWAGGER_SERVERS),
+    version,
+    servers: parseSwaggerServers(swaggerEnv.SWAGGER_SERVERS).map((url) => ({ url })),
   });
 
   const workspaceRoot = resolve(process.cwd(), '../..');
@@ -244,19 +336,15 @@ async function main(): Promise<void> {
     bytes,
     beautify,
     paths: Object.keys((withSha.paths as Record<string, unknown> | undefined) ?? {}).length,
+    controllers: CONTROLLERS.length,
+    tags: (withSha.tags as Array<{ name: string }>).length,
+    securitySchemes: Object.keys(
+      (withSha.components as { securitySchemes?: Record<string, unknown> })?.securitySchemes ?? {},
+    ),
     delta,
     gitSha: readGitShortSha(workspaceRoot),
   };
   process.stdout.write(JSON.stringify(summary) + '\n');
-}
-
-function parseSwaggerServers(raw: string): Array<{ url: string; description?: string }> {
-  if (!raw.trim()) return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((url) => ({ url }));
 }
 
 main().catch((err: unknown) => {

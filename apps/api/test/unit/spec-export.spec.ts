@@ -10,6 +10,7 @@ import {
   atomicWriteJson,
   diffOpenApi,
   readExistingSpec,
+  readGitShortSha,
   resolveOutputPath,
   sortOpenApiKeys,
 } from '../../src/openapi/spec-export.js';
@@ -188,5 +189,33 @@ describe('readExistingSpec (for CI diff)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('readGitShortSha (no-git / no-HEAD fallback)', () => {
+  it('returns null when no .git and no HEAD file exist under the root', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'spec-export-no-git-'));
+    try {
+      // Neither .git/ nor HEAD — mirrors a tarball / cache checkout.
+      expect(readGitShortSha(dir)).toBe(null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('sortOpenApiKeys (non-plain-object guard)', () => {
+  it('leaves Map / Set / Date / Symbol instances unchanged', () => {
+    // Guard: these have non-enumerable internal slots that would otherwise
+    // surface as `{}` and silently drop data from the spec.
+    const m = new Map<string, number>([['a', 1]]);
+    const s = new Set<number>([1, 2]);
+    const d = new Date(0);
+    const sym = Symbol('x');
+
+    expect(sortOpenApiKeys(m)).toBe(m);
+    expect(sortOpenApiKeys(s)).toBe(s);
+    expect(sortOpenApiKeys(d)).toBe(d);
+    expect(sortOpenApiKeys(sym)).toBe(sym);
   });
 });

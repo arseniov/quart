@@ -2,25 +2,32 @@
   "components": {
     "schemas": {},
     "securitySchemes": {
+      "__Host-quart-admin-session": {
+        "description": "Better Auth session cookie for the admin console (HTTP-only).",
+        "in": "cookie",
+        "name": "__Host-quart-admin-session",
+        "type": "apiKey"
+      },
+      "__Host-quart-api-session": {
+        "description": "Better Auth session cookie for the mobile PWA (HTTP-only).",
+        "in": "cookie",
+        "name": "__Host-quart-api-session",
+        "type": "apiKey"
+      },
       "bearer": {
         "bearerFormat": "EdDSA",
         "description": "Ed25519-signed JWT issued by /auth/login.",
         "scheme": "bearer",
         "type": "http"
-      },
-      "cookie-auth": {
-        "description": "Better Auth session cookie (HTTP-only).",
-        "in": "cookie",
-        "name": "quart_session",
-        "type": "apiKey"
       }
-    }
+    },
+    "x-schemas-note": "DTOs use Zod schemas (see apps/api/src/**/*.dto.ts). Wire `zod-to-openapi` or annotate with @ApiExtraModels to populate components.schemas."
   },
   "info": {
     "description": "Mobile + Admin shared API",
     "title": "Quart API",
     "version": "0.0.0",
-    "x-internal-git-sha": "56b1203"
+    "x-internal-git-sha": "f1d6ab3"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -51,6 +58,32 @@
       }
     },
     "/admin/audit/anchors": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "admin/audit"
+        ]
+      }
+    },
+    "/admin/audit/verify": {
       "get": {
         "responses": {
           "200": {
@@ -995,6 +1028,190 @@
         ],
         "tags": [
           "admin/users"
+        ]
+      }
+    },
+    "/auth/*": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "head": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "options": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "search": {
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/mfa/backup-code": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "auth/mfa"
+        ]
+      }
+    },
+    "/auth/mfa/enroll": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "auth/mfa"
+        ]
+      }
+    },
+    "/auth/mfa/verify": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "auth/mfa"
+        ]
+      }
+    },
+    "/auth/phone/request": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth/phone"
+        ]
+      }
+    },
+    "/auth/phone/verify": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth/phone"
         ]
       }
     },
@@ -2388,5 +2605,93 @@
     }
   },
   "servers": [],
-  "tags": []
+  "tags": [
+    {
+      "name": "admin/audit"
+    },
+    {
+      "name": "admin/cities"
+    },
+    {
+      "name": "admin/i18n"
+    },
+    {
+      "name": "admin/ideas"
+    },
+    {
+      "name": "admin/issues"
+    },
+    {
+      "name": "admin/officers"
+    },
+    {
+      "name": "admin/polls"
+    },
+    {
+      "name": "admin/roles"
+    },
+    {
+      "name": "admin/settings"
+    },
+    {
+      "name": "admin/taxonomies"
+    },
+    {
+      "name": "admin/users"
+    },
+    {
+      "name": "auth"
+    },
+    {
+      "name": "auth/mfa"
+    },
+    {
+      "name": "auth/phone"
+    },
+    {
+      "name": "cities"
+    },
+    {
+      "name": "comments"
+    },
+    {
+      "name": "health"
+    },
+    {
+      "name": "i18n"
+    },
+    {
+      "name": "ideas"
+    },
+    {
+      "name": "issues"
+    },
+    {
+      "name": "metrics"
+    },
+    {
+      "name": "notifications"
+    },
+    {
+      "name": "notifications-sse"
+    },
+    {
+      "name": "polls"
+    },
+    {
+      "name": "saved-items"
+    },
+    {
+      "name": "search"
+    },
+    {
+      "name": "self"
+    },
+    {
+      "name": "topics"
+    },
+    {
+      "name": "uploads"
+    }
+  ]
 }

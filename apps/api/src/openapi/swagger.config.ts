@@ -1,8 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { DocumentBuilder, type SwaggerCustomOptions } from '@nestjs/swagger';
 
+import { readAppVersion } from '../common/app-version.js';
 import { cookieNameFor } from '../auth/cookie.policy.js';
 import {
   type SwaggerEnv,
@@ -54,7 +52,7 @@ export const SWAGGER_ADMIN_COOKIE_NAME = cookieNameFor('admin');
 export function buildSwaggerBuilder(env: SwaggerEnv): DocumentBuilder {
   const builder = new DocumentBuilder()
     .setTitle(env.SWAGGER_TITLE)
-    .setVersion(env.SWAGGER_VERSION || readAppVersion())
+    .setVersion(env.SWAGGER_VERSION || readAppVersion() || '0.0.0')
     .setDescription(redactSecretNames(env.SWAGGER_DESCRIPTION));
 
   for (const url of parseSwaggerServers(env.SWAGGER_SERVERS)) {
@@ -107,17 +105,3 @@ export const swaggerUiOptions: SwaggerCustomOptions = {
   },
   customSiteTitle: 'Quart API',
 };
-
-function readAppVersion(): string {
-  try {
-    const pkgPath = join(process.cwd(), 'package.json');
-    const raw = readFileSync(pkgPath, 'utf8');
-    const parsed = JSON.parse(raw) as { version?: string };
-    return parsed.version ?? '0.0.0';
-  } catch {
-    // ponytail: failure mode is "spec gets version 0.0.0". Surface this
-    // through `info.version` — a missing package.json is a deploy bug
-    // worth noticing, not crashing over.
-    return '0.0.0';
-  }
-}
