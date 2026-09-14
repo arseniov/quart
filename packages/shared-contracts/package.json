@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "files": [
+    "src",
+    "openapi.json"
+  ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./openapi.json": "./openapi.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
