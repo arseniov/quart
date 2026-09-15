@@ -44,6 +44,8 @@ import { SwaggerExplorer } from '@nestjs/swagger/dist/swagger-explorer.js';
 
 import { AdminAuditController } from '../admin/admin-audit.controller.js';
 import { AdminCitiesController } from '../admin/admin-cities.controller.js';
+import { AdminDashboardController } from '../admin/admin-dashboard.controller.js';
+import { AdminDlqController } from '../admin/admin-dlq.controller.js';
 import { AdminI18nController } from '../admin/admin-i18n.controller.js';
 import { AdminIdeasController } from '../admin/admin-ideas.controller.js';
 import { AdminOfficersController } from '../admin/admin-officers.controller.js';
@@ -108,6 +110,8 @@ const API_TAGS_METADATA = 'swagger/apiUseTags';
 const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   AdminAuditController,
   AdminCitiesController,
+  AdminDashboardController,
+  AdminDlqController,
   AdminI18nController,
   AdminIdeasController,
   AdminOfficersController,

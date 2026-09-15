@@ -1,7 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { DB } from '@quart/db';
-import type { ExpressionBuilder, Transaction } from 'kysely';
 import { z } from 'zod';
 
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
@@ -25,7 +23,9 @@ import { RbacGuard } from '../rbac/rbac.guard.js';
 const Q = z.object({ cityId: z.string().uuid() });
 
 interface IssueCountRow {
-  c: number | string | bigint;
+  last7d: number | string | bigint;
+  last30d: number | string | bigint;
+  all: number | string | bigint;
 }
 
 @Controller('admin/dashboard')
@@ -48,29 +48,30 @@ export class AdminDashboardController {
     // that city's rows even if the JWT-bound cityId differs.
     const tenantCtx: TenantContext = { ...ctx, cityId: q.cityId };
     return this.db.runInTenantTx(tenantCtx, async (trx) => {
-      const last7d = await this.countSince(trx, q.cityId, 7);
-      const last30d = await this.countSince(trx, q.cityId, 30);
-      const all = await this.countAll(trx, q.cityId);
-      return { cityId: q.cityId, last7d, last30d, all };
+      // Three aggregates in one pass via PostgreSQL `FILTER (WHERE ...)`.
+      // ponytail: also matches the plan — see T57.
+      // FIX: extend to count ideas / polls / comments / recent audit events.
+      const r = (await trx
+        .selectFrom('issues')
+        .select((eb) => [
+          eb.fn
+            .countAll<string>()
+            .filterWhere('created_at', '>=', new Date(Date.now() - 7 * 86_400_000))
+            .as('last7d'),
+          eb.fn
+            .countAll<string>()
+            .filterWhere('created_at', '>=', new Date(Date.now() - 30 * 86_400_000))
+            .as('last30d'),
+          eb.fn.countAll<string>().as('all'),
+        ])
+        .where('city_id', '=', q.cityId)
+        .executeTakeFirstOrThrow()) as IssueCountRow;
+      return {
+        cityId: q.cityId,
+        last7d: Number(r.last7d),
+        last30d: Number(r.last30d),
+        all: Number(r.all),
+      };
     });
-  }
-
-  private async countSince(trx: Transaction<DB>, cityId: string, days: number): Promise<number> {
-    const r = await trx
-      .selectFrom('issues')
-      .select((eb: ExpressionBuilder<DB, 'issues'>) => eb.fn.countAll<string>().as('c'))
-      .where('city_id', '=', cityId)
-      .where('created_at', '>=', new Date(Date.now() - days * 86_400_000))
-      .executeTakeFirstOrThrow() as IssueCountRow;
-    return Number(r.c);
-  }
-
-  private async countAll(trx: Transaction<DB>, cityId: string): Promise<number> {
-    const r = await trx
-      .selectFrom('issues')
-      .select((eb: ExpressionBuilder<DB, 'issues'>) => eb.fn.countAll<string>().as('c'))
-      .where('city_id', '=', cityId)
-      .executeTakeFirstOrThrow() as IssueCountRow;
-    return Number(r.c);
   }
 }

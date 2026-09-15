@@ -8,30 +8,30 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ApiGlobalResponses } from '../openapi/api-global-responses.decorator.js';
-import type { QueueName } from '../queue/queue.service.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { QueueService } from '../queue/queue.service.js';
+import { QueueService, type DlqJobView } from '../queue/queue.service.js';
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
-const Q = z.object({
-  queue: z.enum(['push', 'email', 'audit-anchor', 'media-scan', 'cleanup', 'webhooks']),
-});
+const QUEUE_VALUES = [
+  'push',
+  'email',
+  'audit-anchor',
+  'media-scan',
+  'cleanup',
+  'webhooks',
+] as const;
 
-// BullMQ's `Job` shape — narrowed to just what the DLQ viewer exposes.
-// ponytail: keep this lean. If we ever surface `data` or `stacktrace` here
-// we must redact PII (the email/push jobs carry recipient contact details
-// and tokens). Upgrade path: build a per-queue allowlist + a deep-redactor.
-interface DlqJob {
-  id?: string;
-  name?: string;
-  attemptsMade?: number;
-  failedReason?: string;
-  timestamp?: number;
-  finishedOn?: number | null;
-}
+// Mirror the `QueueName` union in `queue.service.ts`. The cap on `limit`
+// is the only thing standing between a curious admin and an unbounded
+// Redis scan; the cap on `start` is a sanity bound.
+const Q = z.object({
+  queue: z.enum(QUEUE_VALUES),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  start: z.coerce.number().int().min(0).default(0),
+});
 
 @Controller('admin/dlq')
 @ApiGlobalResponses()
@@ -47,9 +47,12 @@ export class AdminDlqController {
   async list(
     @Query(new ZodValidationPipe(Q)) q: z.infer<typeof Q>,
     @CurrentUser() _user: AuthUser,
-  ): Promise<DlqJob[]> {
-    const queueMap = (this.queues as unknown as { queues: Record<QueueName, { getJobs: (state: 'failed') => Promise<DlqJob[]> }> })
-      .queues;
-    return queueMap[q.queue].getJobs('failed');
+  ): Promise<DlqJobView[]> {
+    // `end` is exclusive in BullMQ — pass `start + limit - 1` so the
+    // requested count lands exactly. Cap stays at the Zod layer above.
+    return this.queues.getFailedJobs(q.queue, {
+      start: q.start,
+      end: q.start + q.limit - 1,
+    });
   }
 }

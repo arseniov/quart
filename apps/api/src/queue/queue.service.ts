@@ -4,6 +4,20 @@ import { Queue, type RedisOptions } from 'bullmq';
 
 export type QueueName = 'push' | 'email' | 'audit-anchor' | 'media-scan' | 'cleanup' | 'webhooks';
 
+/** Narrowed BullMQ-Job projection for the DLQ viewer. Critical:
+ *  `data`, `opts`, and `stacktrace` MUST stay absent — push/email payloads
+ *  carry recipient contact info (email, phone, push-token) and BullMQ
+ *  stores `stacktrace` verbatim. The service layer is the only safe
+ *  redaction point; pino's `*.data` glob doesn't deep-walk arrays. */
+export interface DlqJobView {
+  id?: string | undefined;
+  name?: string | undefined;
+  attemptsMade?: number | undefined;
+  failedReason?: string | undefined;
+  timestamp?: number | undefined;
+  finishedOn?: number | null | undefined;
+}
+
 /** Stable job-name per queue so worker registration isn't coupled to internal ids. */
 const JOB_NAME: Record<QueueName, string> = {
   push: 'send_push',
@@ -112,6 +126,37 @@ export class QueueService implements OnApplicationShutdown {
       failed: counts.failed ?? 0,
       completed: counts.completed ?? 0,
     };
+  }
+
+  /** Failed jobs for the DLQ viewer. Strips `data` / `stacktrace` / `opts`
+   *  — those fields carry PII (recipient contact info) for push/email jobs.
+   *  The bounded `start`/`end` range protects against unbounded scans on
+   *  large queues; the controller caps the upper bound at the Zod layer. */
+  async getFailedJobs(
+    name: QueueName,
+    opts: { start?: number; end?: number } = {},
+  ): Promise<DlqJobView[]> {
+    // BullMQ's signature is `getJobs(types, start?, end?)`; passing the
+    // range as 0..N matches `Job[]` ordering on the failed-state list.
+    const start = opts.start ?? 0;
+    const end = opts.end ?? start + 49;
+    const jobs = (await this.queues[name].getJobs('failed', start, end)) as Array<{
+      id?: string;
+      name?: string;
+      attemptsMade?: number;
+      failedReason?: string;
+      timestamp?: number;
+      finishedOn?: number | null;
+    }>;
+    const out: DlqJobView[] = jobs.map((j) => ({
+      id: j.id,
+      name: j.name,
+      attemptsMade: j.attemptsMade,
+      failedReason: j.failedReason,
+      timestamp: j.timestamp,
+      finishedOn: j.finishedOn ?? null,
+    }));
+    return out;
   }
 }
 
