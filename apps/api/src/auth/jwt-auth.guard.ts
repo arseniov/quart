@@ -15,6 +15,7 @@ import type { TenantContext } from '@quart/shared-types';
 import type { FastifyRequest } from 'fastify';
 
 /* eslint-disable import/order */
+import { SESSION_CACHE_TTL_SECONDS } from './constants.js';
 import type { AuthUser } from './decorators/current-user.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameters below.
@@ -35,9 +36,6 @@ interface RequestWithAuth {
 }
 
 type FastifyLikeRequest = FastifyRequest & RequestWithAuth;
-
-// Short TTL — JWT lifetime bounds the true expiry.
-const SESSION_CACHE_TTL_SECONDS = 60;
 
 // Ponytail: JWT `jti` IS the `auth_sessions.id` (UUID). Documented constraint
 // in the T16 plan; the guard joins claims->session via this single key. If a

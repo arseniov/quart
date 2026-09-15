@@ -1,7 +1,7 @@
-import { Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import { Controller, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { FastifyReply } from 'fastify';
 import { Throttle } from '@nestjs/throttler';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { ApiGlobalResponses } from '../openapi/api-global-responses.decorator.js';
 
@@ -29,6 +29,10 @@ import { SignOutService } from './sign-out.service.js';
  * which JwtAuthGuard copies from `claims.jti` (the JWT's UUID). The
  * service does the DB revoke + audit write in a single transaction
  * so a successful revoke always has a matching chain entry.
+ *
+ * `req.id` (set by RequestIdMiddleware) is forwarded to the service
+ * so the `auth.sign_out` audit row carries the same `request_id` as
+ * the HTTP response headers and the rest of the chain.
  */
 @Controller('auth/sign-out')
 @ApiGlobalResponses()
@@ -43,9 +47,10 @@ export class SignOutController {
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   async signOut(
     @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ): Promise<void> {
-    await this.service.signOut(user);
+    await this.service.signOut(user, req.id);
     res.clearCookie('__Host-quart-api-session', cookieClearOptions('mobile'));
   }
 }
