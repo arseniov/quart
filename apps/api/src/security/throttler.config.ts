@@ -150,10 +150,33 @@ function isMagicLinkRoute(req: { url?: string }): boolean {
 }
 
 /**
+ * Password-reset forgot routes only — `/auth/password/forgot`. Scoped to
+ * the `passwordreset` throttler bucket so the budget is per-email rather
+ * than per-IP. Reset is rate-limited by the `auth` bucket alone — token
+ * is 256-bit single-use.
+ */
+function isPasswordResetRoute(req: { url?: string }): boolean {
+  const path = pathOf(req);
+  return path.startsWith('/auth/password/forgot') || path === '/auth/password/forgot';
+}
+
+/**
  * Per-email tracker for the `magiclink` bucket. Falls back to IP when the
  * body is missing/has no email — same caveat as the phone tracker (T44).
  */
 export function getMagicLinkTracker(req: AuthenticatedRequest): string {
+  const body = req.body as { email?: unknown } | undefined;
+  const email = body?.email;
+  if (typeof email === 'string' && email.length > 0) return `email:${email.toLowerCase()}`;
+  return `ip:${normalizeIp(req.ip ?? 'unknown')}`;
+}
+
+/**
+ * Per-email tracker for the `passwordreset` bucket. Same shape as
+ * `getMagicLinkTracker` — separate function so we don't couple the two
+ * buckets if either ever needs to diverge.
+ */
+export function getPasswordResetTracker(req: AuthenticatedRequest): string {
   const body = req.body as { email?: unknown } | undefined;
   const email = body?.email;
   if (typeof email === 'string' && email.length > 0) return `email:${email.toLowerCase()}`;
@@ -229,6 +252,24 @@ export function buildThrottlerOptions(
         generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
       {
+        name: 'passwordreset',
+        ttl: ttlMs,
+        // Same default as magiclink (10/min). The password-reset
+        // controller pins it explicitly to keep the spec documented
+        // next to the handler instead of buried in the env config.
+        limit: env.THROTTLE_MAGIC_LINK_LIMIT,
+        skipIf: (ctx) => !isPasswordResetRoute(ctx.switchToHttp().getRequest()),
+        getTracker: (req: Record<string, unknown>) => {
+          try {
+            return getPasswordResetTracker(req as AuthenticatedRequest);
+          } catch (err) {
+            logger.warn({ err: String(err) }, '[throttler] passwordreset tracker failed; using ip');
+            return `ip:${normalizeIp((req as AuthenticatedRequest).ip ?? 'unknown')}`;
+          }
+        },
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
+      },
+      {
         name: 'global',
         ttl: ttlMs,
         limit: env.THROTTLE_DEFAULT_LIMIT,
@@ -278,5 +319,6 @@ export const __testing__ = {
   isAuthRoute,
   isPhoneOtpRoute,
   isMagicLinkRoute,
+  isPasswordResetRoute,
   normalizeIp,
 };

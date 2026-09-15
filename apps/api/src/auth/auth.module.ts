@@ -11,13 +11,16 @@ import { logMailer, MAILER, MagicLinkService } from './magic-link.service.js';
 import { MfaController } from './mfa.controller.js';
 import { MfaGuard } from './mfa.guard.js';
 import { MfaService } from './mfa.service.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PasswordResetController } from './password-reset.controller.js';
+import { logMailer as logMailerPwd, PASSWORD_RESET_MAILER, PasswordResetService } from './password-reset.service.js';
 import { PhoneOtpController } from './phone-otp.controller.js';
 import { TwilioService } from './twilio.service.js';
 import { ValkeyService } from './valkey.service.js';
 
 @Module({
   imports: [DbModule],
-  controllers: [AuthController, PhoneOtpController, MfaController, MagicLinkController],
+  controllers: [AuthController, PhoneOtpController, MfaController, MagicLinkController, PasswordResetController],
   providers: [
     AuthService,
     TwilioService,
@@ -27,10 +30,12 @@ import { ValkeyService } from './valkey.service.js';
     MfaService,
     MfaGuard,
     MagicLinkService,
+    PasswordResetService,
     // Default mailer is the Pino-logged stub; AuthModule overrides can
     // rebind MAILER to a real SMTP/SES client.
     { provide: MAILER, useValue: logMailer },
+    { provide: PASSWORD_RESET_MAILER, useValue: logMailerPwd },
   ],
-  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, MAILER],
+  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, MAILER],
 })
 export class AuthModule {}

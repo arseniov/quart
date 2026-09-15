@@ -493,6 +493,17 @@ export interface MagicLinksTable {
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 
+// 0034 — single-use password reset tokens. TTL 60 min. The token column
+// is unique; consumption is atomic via UPDATE-WHERE-RETURNING.
+export interface PasswordResetsTable {
+  id: Generated<string>;
+  user_id: string;
+  token: string;
+  expires_at: ColumnType<Date, Date | string, Date | string>;
+  consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+}
+
 // ============================================================================
 // 0027 Saved items
 // ============================================================================
@@ -589,6 +600,7 @@ export interface DB {
   notification_deliveries: NotificationDeliveriesTable;
   saved_items: SavedItemsTable;
   magic_links: MagicLinksTable;
+  password_resets: PasswordResetsTable;
 
   dsar_requests: DsarRequestsTable;
   feature_flags: FeatureFlagsTable;
