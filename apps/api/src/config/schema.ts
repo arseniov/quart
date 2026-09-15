@@ -49,6 +49,12 @@ export const EnvSchema = z.object({
   // every send (dev / test) and the SES provider is never wired. Production
   // sets SES_FROM_ADDRESS once SES + the verified sender are configured.
   SES_FROM_ADDRESS: z.string().default(''),
+
+  // Magic-link base URL (T54). The verify endpoint is appended as
+  // `${MAGIC_LINK_BASE_URL}/auth/magic-link/verify?token=...`.
+  // Default points at the staging hostname so dev/test rigs don't accidentally
+  // email a localhost URL that's unreachable from the recipient's mail client.
+  MAGIC_LINK_BASE_URL: z.string().url().default('https://api.quart.app'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -482,6 +482,17 @@ export interface NotificationDeliveriesTable {
   last_attempt_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
+// 0033 — single-use email sign-in tokens. TTL 15 min from issuance;
+// consumed_at marks the row as used. Admin-managed (no tenant RLS).
+export interface MagicLinksTable {
+  id: Generated<string>;
+  email: string;
+  token: string;
+  expires_at: ColumnType<Date, Date | string, Date | string>;
+  consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+}
+
 // ============================================================================
 // 0027 Saved items
 // ============================================================================
@@ -577,6 +588,7 @@ export interface DB {
   push_subscriptions: PushSubscriptionsTable;
   notification_deliveries: NotificationDeliveriesTable;
   saved_items: SavedItemsTable;
+  magic_links: MagicLinksTable;
 
   dsar_requests: DsarRequestsTable;
   feature_flags: FeatureFlagsTable;

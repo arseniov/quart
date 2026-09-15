@@ -35,6 +35,8 @@ describe('AppModule', () => {
         EXPO_TIMEOUT_MS: 10_000,
         KEK_BASE64: Buffer.alloc(32, 7).toString('base64'),
         SES_FROM_ADDRESS: '',
+        // T54: magic-link endpoints construct verify URLs against this base.
+        MAGIC_LINK_BASE_URL: 'https://api.quart.app',
       },
     } as unknown as ConfigService;
     const queueStub = {

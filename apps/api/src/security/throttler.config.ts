@@ -138,6 +138,29 @@ function isPhoneOtpRoute(req: { url?: string }): boolean {
 }
 
 /**
+ * Magic-link routes only — `/auth/magic-link/request`. Scoped to the
+ * `magiclink` throttler bucket so the budget is per-email rather than
+ * per-IP. Verify is rate-limited by the `auth` bucket alone — it's not
+ * an enumeration vector (tokens are 64-hex single-use).
+ */
+function isMagicLinkRoute(req: { url?: string }): boolean {
+  const path = pathOf(req);
+  // Only the request endpoint issues tokens; verify is key-search-resistant.
+  return path.startsWith('/auth/magic-link/request') || path === '/auth/magic-link/request';
+}
+
+/**
+ * Per-email tracker for the `magiclink` bucket. Falls back to IP when the
+ * body is missing/has no email — same caveat as the phone tracker (T44).
+ */
+export function getMagicLinkTracker(req: AuthenticatedRequest): string {
+  const body = req.body as { email?: unknown } | undefined;
+  const email = body?.email;
+  if (typeof email === 'string' && email.length > 0) return `email:${email.toLowerCase()}`;
+  return `ip:${normalizeIp(req.ip ?? 'unknown')}`;
+}
+
+/**
  * Provider token so the throttler config can be re-injected without
  * circular-importing AppModule.
  */
@@ -189,6 +212,23 @@ export function buildThrottlerOptions(
         generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
       {
+        name: 'magiclink',
+        ttl: ttlMs,
+        // Bucket default = 10/min; per-endpoint @Throttle can override.
+        // The magic-link controller pins it to 10 (T54 spec).
+        limit: env.THROTTLE_MAGIC_LINK_LIMIT,
+        skipIf: (ctx) => !isMagicLinkRoute(ctx.switchToHttp().getRequest()),
+        getTracker: (req: Record<string, unknown>) => {
+          try {
+            return getMagicLinkTracker(req as AuthenticatedRequest);
+          } catch (err) {
+            logger.warn({ err: String(err) }, '[throttler] magiclink tracker failed; using ip');
+            return `ip:${normalizeIp((req as AuthenticatedRequest).ip ?? 'unknown')}`;
+          }
+        },
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
+      },
+      {
         name: 'global',
         ttl: ttlMs,
         limit: env.THROTTLE_DEFAULT_LIMIT,
@@ -232,4 +272,11 @@ export function throttlerModuleForRootAsync(env: ThrottlerEnv): ThrottlerAsyncOp
 }
 
 // Exported for tests.
-export const __testing__ = { pathOf, isProbeRoute, isAuthRoute, isPhoneOtpRoute, normalizeIp };
+export const __testing__ = {
+  pathOf,
+  isProbeRoute,
+  isAuthRoute,
+  isPhoneOtpRoute,
+  isMagicLinkRoute,
+  normalizeIp,
+};
