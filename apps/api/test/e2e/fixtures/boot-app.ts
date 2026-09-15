@@ -287,6 +287,16 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
 
   await bootstrap.destroy();
 
+  // 0011 creates `quart_app` NOLOGIN but doesn't grant it to the bootstrap
+  // user, so SET LOCAL ROLE quart_app (runInTenantTx) would error on a
+  // freshly-migrated DB. Production grants this via deploy scripts; e2e
+  // needs it inside the test container. Idempotent — safe to re-run if the
+  // role was already granted. Must happen AFTER migrations because 0011 is
+  // what creates `quart_app` in the first place.
+  const postMigrateDb = createDb({ connectionString: pgUri });
+  await sql.raw(`GRANT quart_app TO quart`).execute(postMigrateDb).catch(() => undefined);
+  await postMigrateDb.destroy();
+
   const minioHost = minio.getHost();
   Object.assign(process.env, {
     NODE_ENV: 'test',

@@ -5,6 +5,15 @@ import { sql } from 'kysely';
 export type { TenantContext };
 
 /**
+ * Quote a string as a Postgres string literal (`'foo'` with embedded `''`
+ * escapes). Matches `escape_string_literal` semantics so the resulting
+ * literal is safe to embed inside any SQL statement.
+ */
+function quoteLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
  * Runs `fn` inside a Postgres transaction with per-request RLS settings
  * bound via SET LOCAL (transaction-scoped, NOT session-scoped).
  *
@@ -17,11 +26,21 @@ export async function runInTenantTx<DB, T>(
   fn: (trx: Transaction<DB>) => Promise<T>,
 ): Promise<T> {
   return db.transaction().execute(async (trx) => {
-    await sql`SET LOCAL ROLE quart_app`.execute(trx);
-    await sql`SET LOCAL app.city_id = ${ctx.cityId}`.execute(trx);
-    await sql`SET LOCAL app.user_id = ${ctx.userId ?? ''}`.execute(trx);
-    await sql`SET LOCAL app.is_super_admin = ${ctx.isSuperAdmin ? 'true' : 'false'}`.execute(trx);
-    await sql`SET LOCAL app.request_id = ${ctx.requestId}`.execute(trx);
+    // Postgres' SET LOCAL doesn't accept bind parameters in the extended
+    // query protocol — `SET LOCAL ROLE $1` is a syntax error. Render the
+    // statements as raw SQL and quote the user-supplied values into the
+    // string ourselves. Inputs are typed (UUID, opaque request-id,
+    // boolean string) so the literal-interpolation surface is tiny and
+    // each value passes through a quote-and-escape helper.
+    await sql
+      .raw(
+        `SET LOCAL ROLE quart_app;\n` +
+          `SET LOCAL app.city_id = ${quoteLiteral(ctx.cityId)};\n` +
+          `SET LOCAL app.user_id = ${quoteLiteral(ctx.userId ?? '')};\n` +
+          `SET LOCAL app.is_super_admin = ${ctx.isSuperAdmin ? 'true' : 'false'};\n` +
+          `SET LOCAL app.request_id = ${quoteLiteral(ctx.requestId)};`,
+      )
+      .execute(trx);
     return fn(trx);
   });
 }

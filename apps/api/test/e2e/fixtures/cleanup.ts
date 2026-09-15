@@ -26,9 +26,7 @@ const TENANT_TABLES: readonly string[] = [
   'mfa_credentials',
   // Content (0004, 0005)
   'topics',
-  'topic_categories',
   'topic_user_subscriptions',
-  'issue_categories',
   'issues',
   'issue_photos',
   'issue_events',
@@ -39,12 +37,17 @@ const TENANT_TABLES: readonly string[] = [
   'poll_votes',
   'comments',
   'comment_reactions',
-  // Geography (0001)
-  'countries',
-  'cities',
+  // Geography (0001) — countries + cities are seeded by 0020_seed_italy and
+  // shared across specs as reference fixtures. Truncating them (directly or
+  // via CASCADE) breaks FKs in user_roles / issues / neighborhoods in the
+  // same suite's beforeAll. A spec that needs fresh geographies should seed
+  // them itself before truncating.
   'city_areas',
   'neighborhoods',
   'user_neighborhoods',
+  // Taxonomy + RBAC — seeded by 0021/0022 and referenced by per-test data
+  // (issues.category_id, user_roles.role_id, etc.). A spec that wants fresh
+  // taxonomy / roles should re-seed explicitly.
   // Notifications (0008, 0032)
   'notifications',
   'push_subscriptions',
