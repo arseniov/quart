@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module.js';
 
 import { AdminAuditController } from './admin-audit.controller.js';
 import { AdminCitiesController } from './admin-cities.controller.js';
+import { AdminDashboardController } from './admin-dashboard.controller.js';
+import { AdminDlqController } from './admin-dlq.controller.js';
 import { AdminI18nController } from './admin-i18n.controller.js';
 import { AdminIdeasController } from './admin-ideas.controller.js';
 import { AdminOfficersController } from './admin-officers.controller.js';
@@ -33,6 +35,8 @@ import { AdminUsersController } from './admin-users.controller.js';
     AdminAuditController,
     AdminSettingsController,
     AdminI18nController,
+    AdminDashboardController,
+    AdminDlqController,
   ],
 })
 export class AdminModule {}
