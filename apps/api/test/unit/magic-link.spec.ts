@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 
-import { MagicLinkController } from '../../src/auth/magic-link.controller.js';
+import { MagicLinkController, __testing__ as controllerTesting } from '../../src/auth/magic-link.controller.js';
 import { MAILER, type Mailer, MagicLinkService } from '../../src/auth/magic-link.service.js';
 import { __testing__, getMagicLinkTracker } from '../../src/security/throttler.config.js';
 
@@ -22,33 +22,32 @@ interface MagicLinkRow {
 
 interface DbState {
   rows: MagicLinkRow[];
-  // When set, lookup always returns null — exercises non-existent token.
-  returnNull?: boolean;
 }
 
 /**
  * Minimal Kysely-shaped stub. The service uses the 3-arg `.where(col, op, val)`
  * form (which the real Kysely translates to parameterized SQL); the stub
  * just passes the value through. Closures keep token-lookup in one place.
+ *
+ * `consume()` is a single UPDATE-WHERE-RETURNING (the race-condition fix).
+ * The stub chains `.where().where().returning().executeTakeFirst()` so
+ * tests assert both the SQL shape AND the single-statement invariant
+ * (no SELECT-then-UPDATE pair).
  */
 function makeDb(state: DbState) {
-  const lookup = async (token: string): Promise<MagicLinkRow | null> => {
-    if (state.returnNull) return null;
-    return state.rows.find((r) => r.token === token) ?? null;
-  };
   return {
     kysely: {
       insertInto: (_table: unknown) => ({
         values: (v: Partial<MagicLinkRow>) => ({
           execute: async () => {
-            // Service inserts only the 3 write-side fields; the stub
-            // fills in the rest so the lookup shape matches the
-            // consumed_at/created_at/id selectors.
+            // Service writes all 3 columns (email/token/expires_at);
+            // the stub fills in the rest so the row shape matches the
+            // updateTable predicates.
             state.rows.push({
               id: '00000000-0000-0000-0000-000000000001',
               email: '',
               token: '',
-              expires_at: FUTURE(),
+              expires_at: new Date(),
               consumed_at: null,
               created_at: new Date(),
               ...v,
@@ -56,23 +55,56 @@ function makeDb(state: DbState) {
           },
         }),
       }),
-      selectFrom: (_table: unknown) => ({
-        select: (_cols: unknown) => ({
-          where: (_col: unknown, _op: unknown, token: string) => ({
-            executeTakeFirst: () => lookup(token),
-          }),
-        }),
-      }),
-      updateTable: (_table: unknown) => ({
-        set: (patch: Partial<MagicLinkRow>) => ({
-          where: (_col: unknown, _op: unknown, token: string) => ({
-            execute: async () => {
-              const row = state.rows.find((r) => r.token === token);
-              if (row) Object.assign(row, patch);
-            },
-          }),
-        }),
-      }),
+      // selectFrom is intentionally absent: consume() must NEVER
+      // select-then-update. Tests asserting this property live below.
+      updateTable: (_table: unknown) => {
+        const chain: {
+          set: unknown;
+          wheres: Array<(row: MagicLinkRow) => boolean>;
+          returning: unknown;
+        } = {
+          set: undefined,
+          wheres: [],
+          returning: undefined,
+        };
+        const obj = {
+          set: (patch: Partial<MagicLinkRow>) => {
+            chain.set = patch;
+            return obj;
+          },
+          where: (col: unknown, op: unknown, val: unknown) => {
+            // Each clause is an inline predicate against the in-memory
+            // row. `is null` (with op === 'is') → consumed_at IS NULL;
+            // `>` → expires_at > now; `=` (token) → token === val.
+            chain.wheres.push((row: MagicLinkRow) => {
+              if (col === 'token' && op === '=') return row.token === val;
+              if (col === 'consumed_at' && op === 'is') {
+                return val === null ? row.consumed_at === null : row.consumed_at !== null;
+              }
+              if (col === 'expires_at' && op === '>') {
+                return row.expires_at.getTime() > (val as Date).getTime();
+              }
+              return true;
+            });
+            return obj;
+          },
+          returning: (_cols: unknown) => {
+            chain.returning = _cols;
+            return obj;
+          },
+          executeTakeFirst: async () => {
+            // Single round-trip: match the first row that satisfies
+            // every chained predicate, then mark consumed. Mirrors
+            // Postgres' UPDATE-WHERE-RETURNING: only one row can win
+            // because the `consumed_at IS NULL` predicate disqualifies
+            // already-consumed rows.
+            const row = state.rows.find((r) => chain.wheres.every((p) => p(r)));
+            if (row) Object.assign(row, chain.set as Partial<MagicLinkRow>);
+            return row ? { email: row.email } : undefined;
+          },
+        };
+        return obj;
+      },
     },
   };
 }
@@ -130,19 +162,32 @@ describe('MagicLinkService', () => {
     const mailer = makeMailer();
     const svc = new MagicLinkService(db as never, configStub(), mailer);
 
-    const { token, expiresAt } = await svc.issue('a@example.com');
+    await svc.issue('a@example.com');
 
     expect(state.rows).toHaveLength(1);
     const row = state.rows[0]!;
     expect(row.email).toBe('a@example.com');
-    expect(row.token).toBe(token);
-    expect(row.expires_at.getTime()).toBe(expiresAt.getTime());
+    expect(row.token.length).toBeGreaterThan(0);
+    expect(row.expires_at.getTime()).toBeGreaterThan(Date.now());
 
     expect(mailer.calls).toHaveLength(1);
     const call = mailer.calls[0]!;
     expect(call.to).toBe('a@example.com');
     expect(call.subject.length).toBeGreaterThan(0);
-    expect(call.body).toContain(`https://api.quart.app/auth/magic-link/verify?token=${token}`);
+    expect(call.body).toContain(`https://api.quart.app/auth/magic-link/verify?token=${row.token}`);
+  });
+
+  it('issue lowercases the email before insert (citext defense in depth)', async () => {
+    const state: DbState = { rows: [] };
+    const db = makeDb(state);
+    const mailer = makeMailer();
+    const svc = new MagicLinkService(db as never, configStub(), mailer);
+
+    await svc.issue('EMAIL@X.COM');
+
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]!.email).toBe('email@x.com');
+    expect(mailer.calls[0]!.to).toBe('email@x.com');
   });
 
   it('issue uses MAGIC_LINK_BASE_URL from config (env override)', async () => {
@@ -155,9 +200,9 @@ describe('MagicLinkService', () => {
       mailer,
     );
 
-    const { token } = await svc.issue('user@example.com');
+    await svc.issue('user@example.com');
     expect(mailer.calls[0]!.body).toContain(
-      `https://staging.quart.app/auth/magic-link/verify?token=${token}`,
+      `https://staging.quart.app/auth/magic-link/verify?token=${state.rows[0]!.token}`,
     );
   });
 
@@ -167,10 +212,11 @@ describe('MagicLinkService', () => {
     const mailer = makeMailer();
     const svc = new MagicLinkService(db as never, configStub(), mailer);
 
-    const a = await svc.issue('a@example.com');
-    const b = await svc.issue('a@example.com');
-    expect(a.token).not.toBe(b.token);
+    await svc.issue('a@example.com');
+    await svc.issue('a@example.com');
+
     expect(state.rows).toHaveLength(2);
+    expect(state.rows[0]!.token).not.toBe(state.rows[1]!.token);
   });
 
   it('generated token is at least 60 chars (CSPRNG floor)', async () => {
@@ -178,9 +224,9 @@ describe('MagicLinkService', () => {
     const db = makeDb(state);
     const mailer = makeMailer();
     const svc = new MagicLinkService(db as never, configStub(), mailer);
-    const { token } = await svc.issue('a@example.com');
+    await svc.issue('a@example.com');
     // Two UUIDs (36 + 32 = 68 chars).
-    expect(token.length).toBeGreaterThanOrEqual(60);
+    expect(state.rows[0]!.token.length).toBeGreaterThanOrEqual(60);
   });
 
   it('consume returns the email on a valid, unused token', async () => {
@@ -210,11 +256,23 @@ describe('MagicLinkService', () => {
   });
 
   it('consume returns null for a non-existent token (no leak)', async () => {
-    const state: DbState = { rows: [], returnNull: true };
+    const state: DbState = { rows: [] };
     const db = makeDb(state);
     const mailer = makeMailer();
     const svc = new MagicLinkService(db as never, configStub(), mailer);
     expect(await svc.consume('nonexistent')).toBeNull();
+  });
+
+  it('consume uses a single UPDATE-WHERE-RETURNING (no selectFrom)', async () => {
+    // Race-condition fix: the service must never SELECT-then-UPDATE,
+    // because two concurrent verify calls can both win the SELECT and
+    // both UPDATE, breaking single-use semantics. Asserting the kysely
+    // surface has no selectFrom keeps the invariant at the test layer.
+    const db = makeDb({ rows: [makeRow()] });
+    expect((db.kysely as unknown as { selectFrom?: unknown }).selectFrom).toBeUndefined();
+    const svc = new MagicLinkService(db as never, configStub(), makeMailer());
+    const r = await svc.consume(VALID_TOKEN);
+    expect(r).toEqual({ email: 'a@example.com' });
   });
 });
 
@@ -235,16 +293,14 @@ describe('MagicLinkController', () => {
     expect(state.rows).toHaveLength(1);
   });
 
-  it('request rejects a non-email body', async () => {
-    const mailer = makeMailer();
-    const svc = new MagicLinkService(
-      makeDb({ rows: [] }) as never,
-      configStub(),
-      mailer,
-    );
-    const c = new MagicLinkController(svc as never);
-    await expect(c.request({ email: 'not-an-email' })).rejects.toThrow();
-    expect(mailer.calls).toHaveLength(0);
+  it('request handler is wrapped in ZodValidationPipe (schema metadata)', () => {
+    // Same caveat as `verify`: the pipe only runs on the HTTP path.
+    // We assert the pipe is attached by checking handler metadata,
+    // not by invoking the method directly.
+    const fn = MagicLinkController.prototype.request as unknown as object;
+    const pipes = Reflect.getMetadata('__pipes__', fn) as unknown[] | undefined;
+    expect(Array.isArray(pipes)).toBe(true);
+    expect(pipes!.length).toBeGreaterThan(0);
   });
 
   it('verify returns { ok: true, email } on a valid token', async () => {
@@ -262,22 +318,25 @@ describe('MagicLinkController', () => {
       ['non-existent', null],
     ] as const;
     for (const [label, row] of cases) {
-      const state: DbState = row ? { rows: [row] } : { rows: [], returnNull: true };
+      const state: DbState = row ? { rows: [row] } : { rows: [] };
       const svc = new MagicLinkService(makeDb(state) as never, configStub(), makeMailer());
       const c = new MagicLinkController(svc as never);
       expect(await c.verify({ token: VALID_TOKEN }), label).toEqual({ ok: false });
     }
   });
 
-  it('verify rejects tokens outside the [20, 128] length band', async () => {
-    const svc = new MagicLinkService(
-      makeDb({ rows: [] }) as never,
-      configStub(),
-      makeMailer(),
-    );
-    const c = new MagicLinkController(svc as never);
-    await expect(c.verify({ token: 'short' })).rejects.toThrow();
-    await expect(c.verify({ token: 'x'.repeat(200) })).rejects.toThrow();
+  it('verify handler is wrapped in ZodValidationPipe (schema metadata)', () => {
+    // The pipe only runs on the HTTP path (guards → pipes → handler),
+    // not on direct method calls. We assert the schema is wired by
+    // checking the handler metadata instead — direct invocation of
+    // `c.verify({ token: 'short' })` would bypass the pipe entirely.
+    const fn = MagicLinkController.prototype.verify as unknown as object;
+    // ZodValidationPipe stores the schema under a per-instance key;
+    // verify the handler has at least one pipe attached. (NestJS
+    // exposes pipe metadata via `__pipes__` on the descriptor.)
+    const pipes = Reflect.getMetadata('__pipes__', fn) as unknown[] | undefined;
+    expect(Array.isArray(pipes)).toBe(true);
+    expect(pipes!.length).toBeGreaterThan(0);
   });
 
   it('issuing twice does not invalidate the prior token', async () => {
@@ -370,7 +429,7 @@ describe('MAILER DI token', () => {
 // suite and the e2e harness.
 
 describe('MagicLink @Throttle decorator wiring', () => {
-  it('request() carries both auth and magiclink buckets at 10/60s', () => {
+  it('request() carries both auth and magiclink buckets at the env-driven limits', () => {
     // @nestjs/throttler@6 emits metadata keys as
     // `THROTTLER:LIMIT{::name}` (no separator — string concat is the
     // implementation detail in throttler.decorator.js). Metadata lands
@@ -384,7 +443,14 @@ describe('MagicLink @Throttle decorator wiring', () => {
 
     expect(authLimit).toBe(10);
     expect(authTtl).toBe(60_000);
-    expect(mlLimit).toBe(10);
-    expect(mlTtl).toBe(60_000);
+    // magiclink limits are env-driven (THROTTLE_MAGIC_LINK_LIMIT /
+    // THROTTLE_TTL_SECONDS) — verify they match what the controller
+    // computed at module-load time, not a hardcoded constant.
+    const { MAGIC_LINK_LIMIT, MAGIC_LINK_TTL_MS } = controllerTesting as unknown as {
+      MAGIC_LINK_LIMIT: number;
+      MAGIC_LINK_TTL_MS: number;
+    };
+    expect(mlLimit).toBe(MAGIC_LINK_LIMIT);
+    expect(mlTtl).toBe(MAGIC_LINK_TTL_MS);
   });
 });

@@ -9,10 +9,18 @@
 -- disable it per-row; keeping the policy off globally is the simpler
 -- invariant. Writes happen through DbService.kysely (super-admin path
 -- in runInTenantTx callers) or service-layer admin auth.
+--
+-- Email uses `citext` (also used by users.email in 0002) so the
+-- per-email throttle bucket is case-insensitive at the storage layer.
+-- `MagicLinkService.issue()` lowercases before insert as defense in
+-- depth — relying solely on citext would still let a row leak a
+-- mixed-case value into the audit chain on its first read.
+
+CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE magic_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT NOT NULL,
+  email CITEXT NOT NULL,
   token TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
   consumed_at TIMESTAMPTZ,

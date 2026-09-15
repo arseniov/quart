@@ -56,14 +56,23 @@ export class MagicLinkService {
    * Issue a fresh token, persist it, and email it. The token is the
    * one-time URL fragment the user clicks; we email the full URL via
    * `${MAGIC_LINK_BASE_URL}/auth/magic-link/verify?token=...`.
+   *
+   * Returns void — the token must never live in JS-land beyond the
+   * mailer call. The controller only needs to know the request was
+   * accepted; the mailer is the only thing that learns the token.
    */
-  async issue(email: string): Promise<{ token: string; expiresAt: Date }> {
+  async issue(email: string): Promise<void> {
+    // Lowercase before insert: citext would compare case-insensitively,
+    // but a mixed-case value would still be written as-is and leak into
+    // the audit chain on first read. The throttle bucket is keyed on
+    // the lowercased email so this also keeps the bucket aligned.
+    const normalized = email.toLowerCase();
     const token = generateToken();
     const expiresAt = new Date(Date.now() + TTL_MS);
 
     await this.db.kysely
       .insertInto('magic_links')
-      .values({ email, token, expires_at: expiresAt } as never)
+      .values({ email: normalized, token, expires_at: expiresAt } as never)
       .execute();
 
     const url = `${this.config.env.MAGIC_LINK_BASE_URL}/auth/magic-link/verify?token=${token}`;
@@ -71,34 +80,36 @@ export class MagicLinkService {
     // template layer lands.
     const subject = 'Il tuo link di accesso a Quart';
     const body = `Ciao,\n\nclicca questo link per accedere a Quart (valido 15 minuti):\n\n${url}\n\nSe non l'hai richiesto tu, ignora questa email.`;
-    await this.mailer.send(email, subject, body);
-
-    return { token, expiresAt };
+    await this.mailer.send(normalized, subject, body);
   }
 
   /**
-   * Consume a token. Returns the email on success; `null` on every
-   * failure mode (missing, consumed, expired) so callers cannot leak
-   * which one happened.
+   * Consume a token atomically. Returns the email on success; `null`
+   * on every failure mode (missing, consumed, expired) so callers
+   * cannot leak which one happened.
+   *
+   * The UPDATE-WHERE-RETURNING is a single round-trip: Postgres only
+   * matches one row under `consumed_at IS NULL`, so two concurrent
+   * verify calls can't both win. The OLD row's email is returned by
+   * the same statement, so there's no separate SELECT.
+   *
+   * FIXME: audit chain integration pending — see gh issue #N.
+   * `AuditService.write` requires a `TenantContext` (cityId/userId),
+   * but a magic-link verify runs before either exists. A "system
+   * pathway" audit event (e.g. `actor_user_id IS NULL` + a sentinel
+   * `city_id`) is the smallest change; until that lands, successful
+   * verifies are not in the HMAC chain. Tracking issue will be opened.
    */
   async consume(token: string): Promise<{ email: string } | null> {
     const row = await this.db.kysely
-      .selectFrom('magic_links')
-      .select(['email', 'expires_at', 'consumed_at'])
-      .where('token', '=', token)
-      .executeTakeFirst();
-
-    if (!row) return null;
-    if (row.consumed_at !== null) return null;
-    if (row.expires_at.getTime() < Date.now()) return null;
-
-    await this.db.kysely
       .updateTable('magic_links')
       .set({ consumed_at: new Date() } as never)
       .where('token', '=', token)
-      .execute();
-
-    return { email: row.email };
+      .where('consumed_at', 'is', null)
+      .where('expires_at', '>', new Date())
+      .returning('email')
+      .executeTakeFirst();
+    return row ?? null;
   }
 }
 
