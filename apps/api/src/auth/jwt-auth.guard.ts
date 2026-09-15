@@ -175,12 +175,15 @@ export class JwtAuthGuard implements CanActivate {
     // T16 plan §3: `req.user` carries auth claims; `req.tenant` carries the
     // RLS context. `isSuperAdmin` defaults to false until a future task
     // promotes a role-bit in `role_snapshot`.
+    // T56: `sessionId` carries `claims.jti` (== `auth_sessions.id`) so
+    // sign-out can target the row without re-parsing the JWT.
     const user: AuthUser = {
       id: claims.sub,
       cityId: claims.city_id,
       isSuperAdmin: false,
       roleSnapshot: claims.role_snapshot ?? [],
     };
+    if (claims.jti !== undefined) user.sessionId = claims.jti;
     // T17: optional TOTP claims populated by MfaService after enrollment.
     // `mfaSecret` is base32-encoded; `mfaEnrolledAt` is epoch-ms. Spread
     // to satisfy `exactOptionalPropertyTypes`.

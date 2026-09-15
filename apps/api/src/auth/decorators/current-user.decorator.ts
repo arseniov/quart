@@ -5,6 +5,11 @@ export interface AuthUser {
   cityId: string;
   isSuperAdmin: boolean;
   roleSnapshot: string[];
+  // T56: session id (== JWT `jti` == `auth_sessions.id` UUID). Populated
+  // by JwtAuthGuard so sign-out and any future "revoke my own session"
+  // endpoint can target the row without re-reading the JWT. Optional
+  // for callers that don't yet attach session id.
+  sessionId?: string;
   // T17: TOTP secret + enroll timestamp carried in the JWT after enrollment.
   // T18: `mfaVerifiedAt` is stamped by /verify and gates officer endpoints
   // (MfaGuard's 5-min freshness window).

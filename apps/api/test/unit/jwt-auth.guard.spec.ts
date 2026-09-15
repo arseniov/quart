@@ -190,11 +190,14 @@ describe('JwtAuthGuard', () => {
       headers: { authorization: 'Bearer t' },
     };
     await expect(g.canActivate(makeCtx(requestObj))).resolves.toBe(true);
+    // T56: `sessionId` is populated from `claims.jti` so sign-out can
+    // target the row without re-parsing the JWT.
     expect(requestObj.user).toEqual({
       id: 'u-1',
       cityId: 'c-1',
       isSuperAdmin: false,
       roleSnapshot: ['citizen'],
+      sessionId: 'sess-ok',
     });
     expect(requestObj.tenant).toEqual({
       cityId: 'c-1',
