@@ -254,10 +254,11 @@ export function buildThrottlerOptions(
       {
         name: 'passwordreset',
         ttl: ttlMs,
-        // Same default as magiclink (10/min). The password-reset
-        // controller pins it explicitly to keep the spec documented
-        // next to the handler instead of buried in the env config.
-        limit: env.THROTTLE_MAGIC_LINK_LIMIT,
+        // Default 3/min per ThrottlerEnvSchema (separate bucket from
+        // magiclink). The password-reset controller pins it to 10/min
+        // via @Throttle — this default guards the bucket-only path
+        // (operators tune via THROTTLE_PASSWORD_RESET_LIMIT).
+        limit: env.THROTTLE_PASSWORD_RESET_LIMIT,
         skipIf: (ctx) => !isPasswordResetRoute(ctx.switchToHttp().getRequest()),
         getTracker: (req: Record<string, unknown>) => {
           try {

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { Test } from '@nestjs/testing';
-import * as argon2 from 'argon2';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { describe, expect, it } from 'vitest';
 
 import { MagicLinkController } from '../../src/auth/magic-link.controller.js';
@@ -263,8 +263,51 @@ describe('PasswordResetService', () => {
     expect(r).toEqual({ ok: true });
     expect(state.users[0]!.password_hash).not.toBe('old-hash');
     expect(state.users[0]!.password_hash).not.toBeNull();
-    // argon2.hash produces a hash that verify() accepts.
-    await expect(argon2.verify(state.users[0]!.password_hash!, 'NewStrongPassword!!1')).resolves.toBe(true);
+    // Better Auth's hashPassword writes `salt:hash` (hex) — verify
+    // round-trips through the same primitive auth.service.ts uses at
+    // sign-in. The format check guards against a regression that
+    // silently swaps in another hashing primitive.
+    expect(state.users[0]!.password_hash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    await expect(
+      verifyPassword({
+        hash: state.users[0]!.password_hash!,
+        password: 'NewStrongPassword!!1',
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it('reset on a failure mode does NOT touch password_hash (regression guard)', async () => {
+    // Failure-mode tests must leave the hash unchanged — otherwise a
+    // regression that updates the hash before the consume succeeds
+    // (or on a stale token) would be invisible. Anchor the invariant
+    // by seeding an old hash and asserting it survives every branch.
+    const cases: ReadonlyArray<readonly [string, PasswordResetRow | null]> = [
+      ['already consumed', makeRow({ consumed_at: new Date() })],
+      ['expired', makeRow({ expires_at: PAST() })],
+      ['non-existent', null],
+    ] as const;
+    for (const [label, row] of cases) {
+      const state: State = {
+        users: [makeUser({ password_hash: 'old-hash' })],
+        rows: row ? [row] : [],
+      };
+      const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+      const result = await svc.reset(VALID_TOKEN, 'NewStrongPassword!!1');
+      expect(result, label).toEqual({ ok: false });
+      expect(state.users[0]!.password_hash, label).toBe('old-hash');
+    }
+  });
+
+  it('hashPassword round-trip (sanity for the primitive the service uses)', async () => {
+    // Ponytail anchor: if a future refactor switches hashing to
+    // something other than Better Auth's `hashPassword`, the previous
+    // test still passes via an inline `hashPassword` call. This sanity
+    // check pins the spec — separate bcrypt-style outputs from
+    // Better Auth's `salt:hash` format.
+    const hash = await hashPassword('pwd-abc-123');
+    expect(hash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    await expect(verifyPassword({ hash, password: 'pwd-abc-123' })).resolves.toBe(true);
+    await expect(verifyPassword({ hash, password: 'wrong' })).resolves.toBe(false);
   });
 
   it('reset consumed a consumed token returns { ok: false } (single-use)', async () => {

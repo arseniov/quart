@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import * as argon2 from 'argon2';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { hashPassword } from 'better-auth/crypto';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the ConfigService + DbService constructor
@@ -44,6 +44,12 @@ function generateToken(): string {
  * use `db.kysely` directly to sidestep runInTenantTx: the request flow
  * runs before the user has any tenant context, and verify surfaces only
  * `{ ok: false }` on failure.
+ *
+ * Password hashing is delegated to Better Auth's `hashPassword`
+ * (scrypt, salt:hash hex). Sharing the verifier with AuthService means
+ * a reset-hash and a sign-up-hash are byte-comparable — see the
+ * `verifyPassword` import in auth.service.ts and the format at
+ * better-auth/dist/crypto.js. Don't roll your own primitive here.
  */
 @Injectable()
 export class PasswordResetService {
@@ -140,14 +146,14 @@ export class PasswordResetService {
 
     let hash: string;
     try {
-      hash = await argon2.hash(newPassword);
+      hash = await hashPassword(newPassword);
     } catch (err) {
-      // argon2 can throw on malformed input (extremely long passwords,
-      // OOM). Roll the consumed row forward? No — leaving it consumed
-      // means the token is one-shot (already burned). Fail closed.
+      // Better Auth's hashPassword (scrypt) can throw on malformed input
+      // (extremely long passwords, NFKC overflow). The token is already
+      // consumed — fail closed rather than re-opening the row.
       this.logger.error(
         { err: String(err), user_id: (row as { user_id: string }).user_id },
-        'argon2.hash failed during password reset',
+        'hashPassword failed during password reset',
       );
       return { ok: false };
     }

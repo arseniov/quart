@@ -27,7 +27,10 @@ CREATE TABLE password_resets (
 );
 
 CREATE INDEX password_resets_user_id_idx ON password_resets (user_id);
-CREATE INDEX password_resets_expires_at_idx ON password_resets (expires_at);
+-- ponytail: no `expires_at` index until the cleanup sweeper lands; the
+-- atomic UPDATE only filters by `token`, and the user lookup is by
+-- `user_id`. A sweeper-side scan that needs an index can add one in
+-- the same migration as the sweeper.
 
 ALTER TABLE password_resets ENABLE ROW LEVEL SECURITY;
 -- No policies. Admin-managed (system auth event before tenant exists).

@@ -26,6 +26,10 @@ export const redactionPaths: readonly string[] = [
   // Common request body fields
   'req.body.password',
   'req.body.new_password',
+  // T55 — `newPassword` (camelCase) is what the controller binds. Pino
+  // path-component matching is literal, so the kebab-case entry alone
+  // wouldn't catch it.
+  'req.body.newPassword',
   'req.body.token',
   'req.body.refresh_token',
   'req.body.totp_code',
