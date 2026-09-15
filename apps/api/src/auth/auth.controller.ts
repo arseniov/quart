@@ -29,7 +29,10 @@ export class AuthController {
   @All('*')
   async handle(@Req() req: FastifyRequest, @Res() res: FastifyReply): Promise<void> {
     const wildcard = (req.params as Record<string, string>)['*'] ?? '';
-    const url = `/auth/${wildcard}`;
+    // Better Auth's default basePath is `/api/auth`; the controller mounts at
+    // `/auth` so callers don't see the `/api` prefix, but the internal
+    // handler must still see the prefix or it 404s on its own basePath check.
+    const url = `/api/auth/${wildcard}`;
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {
       if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));

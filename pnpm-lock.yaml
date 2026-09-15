@@ -153,7 +153,13 @@ importers:
       '@quart/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@testcontainers/minio':
+        specifier: 11.14.0
+        version: 11.14.0
       '@testcontainers/postgresql':
+        specifier: 11.14.0
+        version: 11.14.0
+      '@testcontainers/redis':
         specifier: 11.14.0
         version: 11.14.0
       '@types/node':
@@ -174,6 +180,9 @@ importers:
       supertest:
         specifier: 7.0.0
         version: 7.0.0
+      testcontainers:
+        specifier: 11.14.0
+        version: 11.14.0
       ts-loader:
         specifier: 9.5.1
         version: 9.5.1(typescript@5.6.3)(webpack@5.96.1)
@@ -2346,8 +2355,14 @@ packages:
     resolution: {integrity: sha512-SFXke7xkgPRowY2E+8djKbdEznTVnD5R6GO7GPTthpHrokLvNKw8C3lFZypTxLI7KkCfGPfhtqB3d7OVGGa9jQ==}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
+  '@testcontainers/minio@11.14.0':
+    resolution: {integrity: sha512-IhoKiUTEHncJMwVHxy1vGK8XDp/wy4uodU1D45zNCBGvTURGp3mgXsDhVaBiVniEEfofyuqKp1HFauDxqDdzBQ==}
+
   '@testcontainers/postgresql@11.14.0':
     resolution: {integrity: sha512-wYbJn8GRTj8qfqzfVubxioYWlHJU/ImIjuzPwyy9C5Qfo6g3GLduPZAj+BifvqTZjgT3gd4gFVLCPhBji7dc1w==}
+
+  '@testcontainers/redis@11.14.0':
+    resolution: {integrity: sha512-WX005slz2JMQPw2avbSjf5awVjpmFhOs5xCxeGSYLcV5ia4W1edv/P6MdOw4dZnvDQDuN5LfqNoV/ut3XGb2pA==}
 
   '@tybys/wasm-util@0.8.3':
     resolution: {integrity: sha512-Z96T/L6dUFFxgFJ+pQtkPpne9q7i6kIPYCFnQBHSgSPV9idTsKfIhCss0h5iM9irweZCatkrdeP8yi5uM1eX6Q==}
@@ -7612,7 +7627,25 @@ snapshots:
 
   '@simplewebauthn/types@10.0.0': {}
 
+  '@testcontainers/minio@11.14.0':
+    dependencies:
+      testcontainers: 11.14.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
+
   '@testcontainers/postgresql@11.14.0':
+    dependencies:
+      testcontainers: 11.14.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
+
+  '@testcontainers/redis@11.14.0':
     dependencies:
       testcontainers: 11.14.0
     transitivePeerDependencies:

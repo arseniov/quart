@@ -1,17 +1,18 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
+import { Public } from '../auth/public.decorator.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the DbService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const ListQuery = z.object({ country: z.string().length(2).optional() });
 
 @Controller('cities')
+@Public()
 @ApiGlobalResponses()
 @ApiTags('cities')
 @ApiBearerAuth('bearer')
