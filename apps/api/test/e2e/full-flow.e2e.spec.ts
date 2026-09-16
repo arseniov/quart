@@ -242,6 +242,48 @@ describe('full triage flow (e2e)', () => {
     expect(body.issue.id).toBe(d.issueId);
     expect(body.issue.status).toBe('acknowledged');
   });
+
+  it('non-UUID x-request-id is coerced to NULL in audit_log.request_id (gh #3)', async () => {
+    if (skipIfNoDocker()) return failSkip();
+    const f = fastify();
+    const d = data!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = (boot as Exclude<CreateTestAppResult, { skipped: true }>).db as unknown as Kysely<any>;
+
+    // The middleware accepts /^[A-Za-z0-9_-]{8,128}$/ but audit_log.request_id
+    // is uuid-typed. Before the fix, this crashed every controller-mediated
+    // write that goes through AuditService with 22P02. After the fix,
+    // AuditService.buildRow drops the non-UUID to NULL and the row lands.
+    const resp = await f.inject({
+      method: 'POST',
+      url: '/comments',
+      headers: {
+        authorization: `Bearer ${d.citizen.token}`,
+        'x-request-id': 'req-abc12345',
+      },
+      payload: {
+        targetType: 'issue',
+        targetId: d.issueId,
+        body: 'non-uuid request id smoke',
+      },
+    });
+    expect(resp.statusCode, `comment: ${resp.body}`).toBe(201);
+
+    // The most recent comment.create row for this issue is ours (the happy
+    // path runs first; this test is the only later writer for that issue).
+    // comment.create stores the comment's id in target_id, but the comment
+    // payload carries parent_id = issueId, so we filter through the jsonb.
+    const row = await db
+      .selectFrom('audit_log')
+      .select(['id', 'request_id'])
+      .where('action', '=', 'comment.create')
+      .where(sql`payload_redacted->>'parent_id'`, '=', d.issueId)
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    expect(row, 'expected a comment.create audit row for this issue').toBeDefined();
+    expect(row!.request_id, 'request_id should be NULL after non-UUID coercion').toBeNull();
+  });
 });
 
 // ------------------------------------------------------------------helpers
