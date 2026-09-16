@@ -28,7 +28,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveOutputPath, sortOpenApiKeys } from '../openapi/spec-export.js';
@@ -36,6 +36,17 @@ import { resolveOutputPath, sortOpenApiKeys } from '../openapi/spec-export.js';
 import { generateSpec } from './export-openapi.js';
 
 export const DEFAULT_DRIFT_COMMITTED_PATH = 'packages/shared-contracts/src/openapi.json';
+
+/**
+ * Workspace root, derived from this script's location rather than
+ * `process.cwd()`. Script lives at `<workspace>/apps/api/src/scripts/`
+ * (or `dist/scripts/` after build — same depth), so the workspace is
+ * four levels up from the script directory.
+ * Decouples correctness from invocation cwd — works from any directory.
+ */
+export function workspaceRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+}
 
 /**
  * Pure comparison: returns `true` if `live` matches `committed` after
@@ -63,12 +74,12 @@ function renderDiff(committedPath: string, livePath: string): string {
 }
 
 function main(): void {
-  const workspaceRoot = resolve(process.cwd(), '../..');
+  const root = workspaceRoot();
   const rawCommitted =
     process.env.OPENAPI_DRIFT_COMMITTED_PATH?.trim() || DEFAULT_DRIFT_COMMITTED_PATH;
   const { absolute: committedAbs, relative: committedRel } = resolveOutputPath(
     rawCommitted,
-    workspaceRoot,
+    root,
   );
 
   if (!existsSync(committedAbs)) {
