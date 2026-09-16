@@ -186,6 +186,10 @@ export class JwtAuthGuard implements CanActivate {
       isSuperAdmin: false,
       roleSnapshot: claims.role_snapshot ?? [],
     };
+    // Gh #7: mirror the raw request id onto the user so services that
+    // rebuild a TenantContext from `user: AuthUser` (no @Req()) can
+    // thread it through to audit_log.request_id instead of ''.
+    user.requestId = req.raw?.id ?? req.id ?? '';
     if (claims.jti !== undefined) user.sessionId = claims.jti;
     // T17: optional TOTP claims populated by MfaService after enrollment.
     // `mfaSecret` is base32-encoded; `mfaEnrolledAt` is epoch-ms. Spread

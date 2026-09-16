@@ -54,7 +54,7 @@ export class I18nService {
       cityId: user.cityId,
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      requestId: '',
+      requestId: user.requestId ?? '',
     };
     return this.db.runInTenantTx(tenant, async (trx) => {
       const existing = await trx
@@ -97,7 +97,7 @@ export class I18nService {
       cityId: user.cityId,
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      requestId: '',
+      requestId: user.requestId ?? '',
     };
     await this.db.runInTenantTx(tenant, async (trx) => {
       const deleted = await trx

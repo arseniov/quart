@@ -23,6 +23,7 @@ interface RequestWithTenant {
   raw?: { id?: string };
   headers: Record<string, string | string[] | undefined>;
   tenant?: TenantContext;
+  user?: { requestId?: string };
 }
 
 // Loose UUID regex (matches any 8-4-4-4-12 hex layout). Sufficient for the
@@ -64,6 +65,11 @@ export class TenantContextInterceptor implements NestInterceptor {
     const tenant = skip ? null : this.buildTenant(req);
 
     if (tenant) req.tenant = tenant;
+    // Gh #7: mirror the request id onto `req.user` so downstream guards
+    // and services that rebuild a TenantContext from `user` (no @Req())
+    // see the same id. JwtAuthGuard re-assigns after JWT verify; this
+    // pre-populates the header-only path that runs before auth.
+    if (req.user && tenant) req.user.requestId = tenant.requestId;
     return next.handle();
   }
 

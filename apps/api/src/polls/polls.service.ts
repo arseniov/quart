@@ -353,7 +353,7 @@ export class PollsService {
       cityId: user.cityId,
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      requestId: '',
+      requestId: user.requestId ?? '',
     };
   }
 }

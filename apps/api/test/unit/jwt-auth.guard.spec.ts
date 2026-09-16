@@ -197,6 +197,7 @@ describe('JwtAuthGuard', () => {
       cityId: 'c-1',
       isSuperAdmin: false,
       roleSnapshot: ['citizen'],
+      requestId: 'r-abc',
       sessionId: 'sess-ok',
     });
     expect(requestObj.tenant).toEqual({
@@ -223,5 +224,33 @@ describe('JwtAuthGuard', () => {
     const fpReq = { headers: { authorization: 'Bearer valid', 'x-device-fingerprint': 'deadbeef' }, id: 'req-1' };
     const g = build(jwt, db, valkey, false);
     await expect(g.canActivate(makeCtx(fpReq))).resolves.toBe(true);
+  });
+
+  // Gh #7: services that build a TenantContext from `user: AuthUser` (no
+  // @Req()) used to land audit rows with request_id='' because they had
+  // no path to the raw request id. The guard now mirrors raw.id onto
+  // user.requestId so service helpers can thread it through. Also
+  // confirm the raw.id path is preferred over the wrapped-request id
+  // (RequestIdMiddleware writes the real UUID onto raw.id, not top-level).
+  it('mirrors req.raw.id onto user.requestId (gh #7)', async () => {
+    const jwt = { verify: vi.fn(async () => ({ ...claims, jti: 'sess-raw' })) } as unknown as JwtService;
+    const db = kyselyStub({ id: 'sess-raw', revoked_at: null, absolute_expires_at: future });
+    const valkey = {
+      getSession: vi.fn(async () => null),
+      setSession: vi.fn(async () => undefined),
+    } as unknown as ValkeyService;
+    const g = build(jwt, db, valkey);
+    const requestObj: { headers: Record<string, string>; id: string; raw: { id: string }; user?: unknown; tenant?: unknown } = {
+      id: 'req-N', // fastify's wrapped-request default — must be ignored in favour of raw.id
+      raw: { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' },
+      headers: { authorization: 'Bearer t' },
+    };
+    await expect(g.canActivate(makeCtx(requestObj))).resolves.toBe(true);
+    expect((requestObj.user as { requestId?: string }).requestId).toBe(
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    );
+    expect((requestObj.tenant as { requestId?: string }).requestId).toBe(
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    );
   });
 });

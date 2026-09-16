@@ -48,7 +48,7 @@ export class SearchService {
       cityId: user.cityId,
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      requestId: '',
+      requestId: user.requestId ?? '',
     };
     const offset = (q.page - 1) * q.limit;
     const kind: SearchKind = q.kind ?? 'issue';

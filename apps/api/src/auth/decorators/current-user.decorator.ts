@@ -5,6 +5,13 @@ export interface AuthUser {
   cityId: string;
   isSuperAdmin: boolean;
   roleSnapshot: string[];
+  // Gh #7: request UUID (or short id when middleware accepts a non-UUID
+  // header) mirrored from `req.raw.id` by JwtAuthGuard / RbacGuard so
+  // services that build a TenantContext from `user: AuthUser` (no @Req())
+  // can thread the real id into the audit row instead of an empty
+  // string. Optional — pre-auth paths (magic-link consume, etc.) never
+  // see it.
+  requestId?: string;
   // T56: session id (== JWT `jti` == `auth_sessions.id` UUID). Populated
   // by JwtAuthGuard so sign-out and any future "revoke my own session"
   // endpoint can target the row without re-reading the JWT. Optional

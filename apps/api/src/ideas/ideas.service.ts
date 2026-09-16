@@ -428,7 +428,7 @@ export class IdeasService {
       cityId: user.cityId,
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      requestId: '',
+      requestId: user.requestId ?? '',
     };
   }
 }

@@ -62,6 +62,11 @@ export class RbacGuard implements CanActivate {
         error: { code: 'auth.missing', message: 'no user on request' },
       });
     }
+    // Gh #7: re-stamp user.requestId from `req.raw.id`. JwtAuthGuard
+    // already does this, but RbacGuard is the last guard in the chain
+    // and a stale `''` here would silently leak into the audit row for
+    // any guard-rejected path that still touches runInTenantTx.
+    user.requestId = req.raw?.id ?? req.id ?? '';
     if (user.isSuperAdmin) return true;
 
     const codes = requirements.map((r) => (typeof r === 'string' ? r : r.code));
