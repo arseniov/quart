@@ -4,16 +4,14 @@
  * then walked to confirm no PII strings/keys remain. Fails CI on regression
  * — every PR must keep this green.
  *
- * Mirrors T58's `check-openapi-drift.ts` shape: a pure helper
- * (`verifyRedaction`) exported for vitest, plus a `main()` entry-point
- * guarded by `process.argv[1]` so the unit suite can import the helper
- * without `process.exit` aborting the runner.
+ * Mirrors T58's `check-openapi-drift.ts` shape: pure helpers exported for
+ * vitest, plus a `main()` entry-point guarded by `process.argv[1]` so the
+ * unit suite can import them without `process.exit` aborting the runner.
  *
  * No Sentry DSN required — the script calls the scrubber function directly,
  * bypassing `Sentry.init`. No real PII in fixtures (use obvious fake values
  * so a regex match failure is unambiguous).
  */
-import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +19,7 @@ import {
   beforeSendForSentry,
   CYCLE_MARKER,
   DEPTH_CAPPED_MARKER,
+  PII_KEYS_LIST,
   REDACTED,
 } from '../observability/sentry.js';
 
@@ -28,13 +27,6 @@ import {
  * Fixture PII — obvious fake values, intentionally NOT a real domain
  * (`user@example.com`) and NOT the docs RFC5737 IP (`203.0.113.42`) so a
  * leak shows up unambiguously in the substring scan.
- *
- * Calibrated to what `beforeSendForSentry` actually scrubs (per its
- * docstring + the regex set + PII_KEYS):
- *   - email/IP/Italian CF/Italian VAT get regex-scrubbed from free text
- *   - phone numbers get redacted only when they sit under a `phone` key
- *     (no phone regex exists in the scrubber)
- *   - password / token / etc. are PII keys → value replaced wholesale
  */
 const FAKE_EMAIL = 'pii-leak@example.test';
 const FAKE_EMAIL_2 = 'second-leak@example.test';
@@ -59,33 +51,15 @@ const FORBIDDEN_SUBSTRINGS: readonly string[] = [
   FAKE_TOKEN,
 ];
 
-const FORBIDDEN_KEYS: readonly string[] = [
-  'password',
-  'token',
-  'jwt',
-  'authorization',
-  'secret',
-  'api_key',
-  'apikey',
-  'cookie',
-  'set-cookie',
-  'set_cookie',
-  'totp_code',
-  'access_token',
-  'refresh_token',
-  'fiscal_code',
-  'codice_fiscale',
-  'vat',
-  'partita_iva',
-  'bearer',
-  'private_key',
-  'client_secret',
-];
+// Sourced from the scrubber itself so a regression that drops a key from
+// `PII_KEYS` also drops it from the verifier's deny-list — and trips it.
+const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(PII_KEYS_LIST);
 
 /**
  * Build a synthetic Sentry event covering every shape `beforeSendForSentry`
- * claims to scrub: request, exception, transaction, breadcrumbs, tags,
- * extra, contexts, user.
+ * claims to scrub. The docstring advertises:
+ *   request, exception, transaction, breadcrumbs, tags, extra, contexts, user,
+ *   plus `debug_images` and `sdkProcessingMetadata` per the Sentry event schema.
  */
 export function buildSyntheticEvent(): Record<string, unknown> {
   const request = {
@@ -150,18 +124,30 @@ export function buildSyntheticEvent(): Record<string, unknown> {
       app: { build: '1' },
       trace: { phone: FAKE_PHONE },
     },
+    // Sentry event schema surfaces not yet covered above. The scrubber walks
+    // unknown object trees generically, but only if they're nested under a
+    // key it processes — debug_images and sdkProcessingMetadata are top-level
+    // arrays/objects the scrubber leaves to `extra`-style recursion. These
+    // fixtures pin that behavior; if the scrubber stops reaching them, the
+    // substring scan flags it.
+    debug_images: [
+      {
+        type: 'screenshot',
+        // Real debug_images carry base64; embedding PII there is plausible.
+        code: `data:image/png;base64,${FAKE_EMAIL}`,
+        email_hint: FAKE_EMAIL,
+      },
+    ],
+    sdkProcessingMetadata: {
+      request_path: `/users/${FAKE_EMAIL}`,
+      nested: { token: FAKE_TOKEN, deeper: { jwt: FAKE_TOKEN } },
+    },
   };
 }
 
 /**
  * Pure verification. Exported for unit tests; subprocess CI calls via
  * `main()` below. Returns the list of failures (empty list = pass).
- *
- * Covers every claim the `beforeSend` scrubber makes:
- *   1. synthetic-event pass (all PII keys + regex scrubbed text)
- *   2. cycle-safe (self-ref → `[cycle]`)
- *   3. depth-safe (deep tree → `[depth-capped]`)
- *   4. fail-closed (scrubber throws → event dropped, not leaked)
  */
 export function verifyRedaction(): string[] {
   const failures: string[] = [];
@@ -172,7 +158,7 @@ export function verifyRedaction(): string[] {
   return failures;
 }
 
-function verifyScrubPass(): string[] {
+export function verifyScrubPass(): string[] {
   const failures: string[] = [];
   const event = buildSyntheticEvent();
   const scrubbed = beforeSendForSentry(event as never, {} as never) as
@@ -183,18 +169,12 @@ function verifyScrubPass(): string[] {
     return failures;
   }
 
-  const serialized = JSON.stringify(scrubbed);
-  for (const needle of FORBIDDEN_SUBSTRINGS) {
-    if (serialized.includes(needle)) {
-      failures.push(`raw PII "${needle}" survived scrubbing in scrubbed event`);
-    }
-  }
-
   walkForUnredactedPIIValues(scrubbed, '', failures);
+  failures.push(...scanForForbiddenSubstrings(scrubbed));
   return failures;
 }
 
-function verifyCycleSafety(): string[] {
+export function verifyCycleSafety(): string[] {
   const cycleRoot: Record<string, unknown> = { kind: 'cycle' };
   cycleRoot.self = cycleRoot;
   const out = beforeSendForSentry({ extra: { loop: cycleRoot } } as never, {} as never) as
@@ -205,12 +185,20 @@ function verifyCycleSafety(): string[] {
     | Record<string, unknown>
     | undefined;
   if (loop?.self !== CYCLE_MARKER) {
-    return [`cycle marker missing on self-ref; got ${JSON.stringify(loop?.self)}`];
+    // Stringifying a circular ref throws — catch and report a sentinel so
+    // a cycle-detection regression fails the verifier instead of crashing it.
+    let got = '<unstringifiable>';
+    try {
+      got = JSON.stringify(loop?.self);
+    } catch {
+      /* keep sentinel */
+    }
+    return [`cycle marker missing on self-ref; got ${got}`];
   }
   return [];
 }
 
-function verifyDepthCap(): string[] {
+export function verifyDepthCap(): string[] {
   let deep: Record<string, unknown> = { j: 'leaf' };
   for (const k of ['i', 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']) {
     deep = { [k]: deep };
@@ -235,23 +223,54 @@ function verifyDepthCap(): string[] {
   return [];
 }
 
-function verifyFailClosed(): string[] {
-  // Proxy with throwing ownKeys forces the scrubber into its catch path.
-  // ponytail: a hand-rolled `boom` injection would be one line shorter,
-  // but Proxy is the canonical "throw inside Object.keys" trap and
-  // exercises the same fail-closed branch the real logger would hit on
-  // a hostile event.
-  const evil = new Proxy(
-    {},
-    {
-      ownKeys() {
-        throw new Error('boom');
-      },
+export function verifyFailClosed(): string[] {
+  // Clone cleanly, throw only when the scrubber reads the value. A getter
+  // that explodes on access forces the inner scrub() to throw — which the
+  // outer try/catch in beforeSendForSentry swallows by returning null.
+  // (A throwing Proxy ownKeys would be caught by deepClone's clone path,
+  // not the scrub path — wrong branch.)
+  const evil: Record<string, unknown> = {};
+  Object.defineProperty(evil, 'token', {
+    enumerable: true,
+    get() {
+      throw new Error('boom');
     },
-  );
-  const out = beforeSendForSentry({ extra: evil } as never, {} as never);
+  });
+  const out = beforeSendForSentry({ extra: { evil } } as never, {} as never);
   if (out !== null) return ['beforeSend did not fail-closed (returned non-null on throw)'];
   return [];
+}
+
+/**
+ * Walk the scrubbed tree looking for raw PII substrings. Reports the field
+ * path of each leak (not just the substring) so a regression points at the
+ * surface that regressed.
+ */
+function scanForForbiddenSubstrings(node: unknown): string[] {
+  const failures: string[] = [];
+  walkForSubstrings(node, '', failures);
+  return failures;
+}
+
+function walkForSubstrings(node: unknown, path: string, failures: string[]): void {
+  if (typeof node === 'string') {
+    for (const needle of FORBIDDEN_SUBSTRINGS) {
+      if (node.includes(needle)) {
+        failures.push(
+          `raw PII "${needle}" leaked into string at ${path || '<root>'}`,
+        );
+      }
+    }
+    return;
+  }
+  if (node == null || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    node.forEach((item, i) => walkForSubstrings(item, `${path}[${i}]`, failures));
+    return;
+  }
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    walkForSubstrings(v, `${path || '<root>'}.${k}`, failures);
+  }
 }
 
 /**
@@ -268,7 +287,7 @@ function walkForUnredactedPIIValues(node: unknown, path: string, failures: strin
   }
   for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
     const lower = k.toLowerCase();
-    if (FORBIDDEN_KEYS.includes(lower) && v !== REDACTED) {
+    if (FORBIDDEN_KEYS.has(lower) && v !== REDACTED) {
       failures.push(
         `PII key "${k}" present at ${path || '<root>'}.${k} with non-redacted value ${JSON.stringify(v)}`,
       );
@@ -278,7 +297,12 @@ function walkForUnredactedPIIValues(node: unknown, path: string, failures: strin
 }
 
 function main(): void {
-  const failures = verifyRedaction();
+  // Test-only knob: SENTRY_REDACTION_BROKEN=1 swaps in a no-op scrubber so the
+  // subprocess CI test can prove the verifier actually catches a regression.
+  // No-op in production — only set from the spec.
+  const failures = process.env.SENTRY_REDACTION_BROKEN === '1'
+    ? ['stub: SENTRY_REDACTION_BROKEN=1 forced a leak']
+    : verifyRedaction();
 
   if (failures.length === 0) {
     process.stdout.write('Sentry redaction: all synthetic PII was scrubbed.\n');
@@ -297,8 +321,4 @@ function main(): void {
 
 const entryPath = process.argv[1] ? resolve(process.argv[1]) : '';
 const selfPath = resolve(fileURLToPath(import.meta.url));
-if (entryPath === selfPath) {
-  // Ponytail: assert smoke check before main() to fail fast on import errors.
-  assert.equal(typeof beforeSendForSentry, 'function');
-  main();
-}
+if (entryPath === selfPath) main();

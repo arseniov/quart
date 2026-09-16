@@ -46,6 +46,9 @@ const PII_KEYS: ReadonlySet<string> = new Set([
   'private_key',
   'client_secret',
 ]);
+// Exported for the CI redaction verifier so it can't drift from the scrubber.
+// ponytail: Set → array coercion at module load is fine; the set is tiny.
+export const PII_KEYS_LIST: readonly string[] = [...PII_KEYS];
 
 const isPIIKey = (k: string): boolean => PII_KEYS.has(k.toLowerCase());
 
@@ -98,6 +101,8 @@ export function initSentry(env: SentryEnv): void {
  *   - event.message, event.transaction, event.tags
  *   - exception.values[*].value, exception.values[*].stacktrace.frames[*].vars
  *   - breadcrumbs[*].message, breadcrumbs[*].data, extra, contexts
+ *   - debug_images[*] (Sentry screenshots / view-hierarchies may carry PII)
+ *   - sdkProcessingMetadata (free-form SDK dict; treat as opaque PII carrier)
  *   - user (keep only id)
  *
  * Pure: clones the input before scrubbing. Sentry may replay or re-run the
@@ -174,6 +179,16 @@ export function beforeSendForSentry(
     }
 
     if (cloned.user) cloned.user = { id: cloned.user.id } as Sentry.User;
+
+    // debug_images + sdkProcessingMetadata are Sevent event schema surfaces
+    // not in @sentry/node's ErrorEvent typings — scrub via the generic walker.
+    const extended = cloned as unknown as Record<string, unknown>;
+    if (extended.debug_images) {
+      extended.debug_images = scrub(extended.debug_images);
+    }
+    if (extended.sdkProcessingMetadata) {
+      extended.sdkProcessingMetadata = scrub(extended.sdkProcessingMetadata);
+    }
 
     return cloned;
   } catch {
