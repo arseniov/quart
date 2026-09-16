@@ -17,6 +17,7 @@ import {
   REDACTED,
   REDACTED_EMAIL,
   REDACTED_IP,
+  REDACTED_PHONE,
 } from '../../src/observability/sentry.js';
 
 describe('initSentry', () => {
@@ -274,6 +275,32 @@ describe('beforeSendForSentry', () => {
     expect(msg).not.toContain('12345678901');
     expect(msg).toContain('user');
     expect(msg).toContain('signed up');
+  });
+
+  it.each([
+    ['Italian +39 spaced', 'call +39 333 1234567 please'],
+    ['Italian +39 no spaces', 'call +393331234567 please'],
+    ['E.164 US spaced', 'call +1 555 123 4567 please'],
+    ['Italian 3-prefix mobile no country code', 'call 333 123 4567 please'],
+  ])('redacts free-text phone: %s', (_label, message) => {
+    const evt = { message } as never;
+    const out = beforeSendForSentry(evt, {} as never) as never as { message: string };
+    // None of the digits in the original phone shape survive.
+    const digits = message.replace(/[^\d+]/g, '');
+    expect(out.message).toContain(REDACTED_PHONE);
+    expect(out.message).not.toMatch(/\+?\d/);
+    expect(out.message).not.toBe(message);
+    expect(digits.replace('+', '').length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['Italian landline', 'call 02 1234 5678'],
+    ['time stamp', 'My flight is at 333pm'],
+    ['random number', 'Lorem ipsum 12345'],
+  ])('does NOT over-redact benign strings: %s', (_label, message) => {
+    const evt = { message } as never;
+    const out = beforeSendForSentry(evt, {} as never) as never as { message: string };
+    expect(out.message).not.toContain(REDACTED_PHONE);
   });
 
   it('keeps non-PII metadata (event_id, timestamp, sdk)', () => {

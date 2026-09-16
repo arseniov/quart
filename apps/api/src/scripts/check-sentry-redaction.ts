@@ -33,6 +33,8 @@ const FAKE_EMAIL_2 = 'second-leak@example.test';
 const FAKE_IPV4 = '198.51.100.42';
 const FAKE_IPV6 = '2001:db8::1';
 const FAKE_PHONE = '+391234567890';
+const FAKE_PHONE_FREE_IT = '+39 333 1234567';
+const FAKE_PHONE_FREE_US = '+1 555 123 4567';
 // 6L + 2D + 1L + 2D + 1L + 3D + 1L — matches the scrubber's CF regex.
 const FAKE_CF = 'ABCDEF12A34A567B';
 const FAKE_VAT = '12345678901';
@@ -45,6 +47,8 @@ const FORBIDDEN_SUBSTRINGS: readonly string[] = [
   FAKE_IPV4,
   FAKE_IPV6,
   FAKE_PHONE,
+  FAKE_PHONE_FREE_IT,
+  FAKE_PHONE_FREE_US,
   FAKE_CF,
   FAKE_VAT,
   FAKE_PASSWORD,
@@ -105,7 +109,9 @@ export function buildSyntheticEvent(): Record<string, unknown> {
   return {
     event_id: 'synthetic-event',
     timestamp: 1700000000,
-    message: `Failed for ${FAKE_EMAIL} from ${FAKE_IPV6} cf ${FAKE_CF}`,
+    // Free-text phone in message — the field-based `phone` key is already
+    // redacted by `isPIIKey`; this exercises the in-string PHONE_RE pass.
+    message: `call ${FAKE_PHONE_FREE_IT} or +39-333-1234567 backup`,
     transaction: `GET /users/${FAKE_EMAIL}`,
     request,
     user: { id: 'u-1', email: FAKE_EMAIL, ip_address: FAKE_IPV4, username: FAKE_EMAIL_2 },
@@ -119,6 +125,8 @@ export function buildSyntheticEvent(): Record<string, unknown> {
     extra: {
       password: FAKE_PASSWORD,
       nested: { refresh_token: FAKE_TOKEN, safe: 'ok' },
+      // Free-text phone nested under a non-PII key — only PHONE_RE catches it.
+      contact: FAKE_PHONE_FREE_US,
     },
     contexts: {
       app: { build: '1' },
@@ -152,10 +160,30 @@ export function buildSyntheticEvent(): Record<string, unknown> {
 export function verifyRedaction(): string[] {
   const failures: string[] = [];
   failures.push(...verifyScrubPass());
+  failures.push(...verifyNoOverRedaction());
   failures.push(...verifyCycleSafety());
   failures.push(...verifyDepthCap());
   failures.push(...verifyFailClosed());
   return failures;
+}
+
+/**
+ * Over-redaction guard: the phone regex must NOT touch strings that merely
+ * contain a phone-shaped substring (e.g. `333pm` is a time, not a number).
+ * A regression that loosens the regex and starts redacting benign text
+ * breaks breadcrumbs and message context — equally bad as a leak.
+ */
+export function verifyNoOverRedaction(): string[] {
+  const benign = 'My flight is at 333pm, ref 12345, call later';
+  const evt = { message: benign } as never;
+  const out = beforeSendForSentry(evt, {} as never) as never as { message: string } | null;
+  if (out === null) return ['over-redaction fixture was dropped instead of being scrubbed'];
+  if (out.message !== benign) {
+    return [
+      `over-redaction: benign message was mutated. expected ${JSON.stringify(benign)}, got ${JSON.stringify(out.message)}`,
+    ];
+  }
+  return [];
 }
 
 export function verifyScrubPass(): string[] {

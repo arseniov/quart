@@ -5,6 +5,7 @@ import { z } from 'zod';
 export const REDACTED = '[redacted]';
 export const REDACTED_EMAIL = '[redacted-email]';
 export const REDACTED_IP = '[redacted-ip]';
+export const REDACTED_PHONE = '[redacted-phone]';
 export const CYCLE_MARKER = '[cycle]';
 export const DEPTH_CAPPED_MARKER = '[depth-capped]';
 
@@ -17,6 +18,14 @@ const IP_RE =
 const CF_RE = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/gi;
 // Italian partita IVA: 11 digits (heuristic — could collide with other 11-digit ids).
 const VAT_RE = /\b\d{11}\b/g;
+// Phone: Italian +39 mobile (8-11 digits), generic E.164 (+CC up to 15 digits),
+// Italian 3-prefix mobile without country code (333 123 4567).
+// Alternatives are tried in order so `+39` wins over bare `3-prefix` and E.164.
+// ponytail: bounded quantifiers only; missing landlines (`02 1234 5678`) and
+// 4-digit numbers — false-positive risk outweighs the leak value. Add when a
+// landline-shaped leak is reported.
+const PHONE_RE =
+  /(?:\+39\s?\d{2,3}\s?\d{3,4}\s?\d{3,4})|(?:\+\d{1,3}(?:[\s.-]?\d{2,4}){2,5})|(?:\b3\d{2}[\s.-]?\d{3}[\s.-]?\d{3,4}\b)/g;
 
 // PII key set — matched case-insensitively. Add to it when new auth or PII fields appear.
 const PII_KEYS: ReadonlySet<string> = new Set([
@@ -237,6 +246,7 @@ function scrubText(s: string): string {
   return s
     .replace(EMAIL_RE, REDACTED_EMAIL)
     .replace(IP_RE, REDACTED_IP)
+    .replace(PHONE_RE, REDACTED_PHONE)
     .replace(CF_RE, REDACTED)
     .replace(VAT_RE, REDACTED);
 }
