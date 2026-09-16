@@ -51,16 +51,11 @@ interface FlowFixture {
  *    inferNeighborhood helper has a `ST_Within(geometry, geography)`
  *    type mismatch against empty seeded neighborhoods. The rls-isolation
  *    spec seeds issues the same way.
- *  - Comment + status-change writes are also seeded directly via DB
- *    because the controller-mediated path calls AuditService.write,
- *    which inserts into `audit_log.request_id` (UUID column) using
- *    `tenant.requestId` — currently populated from the request-id
- *    middleware's "req-N" string. Until that mismatch is fixed, the
- *    controller surface crashes with `invalid input syntax for type
- *    uuid` on every write. The HTTP path is still verified by:
- *      • 401 unauthenticated submit
- *      • 403 officer-without-role triage
- *      • 200 /admin/audit/verify with valid chain
+ *  - Comment + status-change writes go through controllers (POST /comments,
+ *    PATCH /issues/<id>/status) and assert audit rows land with a populated
+ *    request_id. The audit_log.request_id UUID-reject bug (gh #3) is fixed:
+ *    AuditService.buildRow coerces non-UUID requestIds to NULL so the
+ *    controller-mediated path no longer crashes with 22P02.
  *  - Triage endpoint is `PATCH /issues/<id>/status` with
  *    `{ status: 'acknowledged' }` (no "published" status for issues;
  *    the brief's `admin.issues.moderate` is for ideas, so we use the
@@ -136,34 +131,48 @@ describe('full triage flow (e2e)', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = (boot as Exclude<CreateTestAppResult, { skipped: true }>).db as unknown as Kysely<any>;
 
-    // 1. Citizen comments on the issue. Seeded directly because the
-    //    comment controller's audit.write crashes on the UUID mismatch
-    //    described in the file header. The polymorphic CommentsService
-    //    surface is already unit-tested; the e2e focus here is the
-    //    audit chain invariant.
-    await db
-      .insertInto('comments')
-      .values({
-        city_id: CITY_A,
-        parent_type: 'issue',
-        parent_id: d.issueId,
-        author_user_id: d.citizen.id,
+    // 1. Citizen comments on the issue through POST /comments.
+    //    Exercises the controller-mediated path that previously crashed
+    //    on audit_log.request_id (UUID column) when the request-id
+    //    middleware produced a non-UUID string.
+    const commentResp = await f.inject({
+      method: 'POST',
+      url: '/comments',
+      headers: { authorization: `Bearer ${d.citizen.token}` },
+      payload: {
+        targetType: 'issue',
+        targetId: d.issueId,
         body: 'Still there 3 days later',
-        status: 'visible',
-      })
-      .execute();
+      },
+    });
+    expect(commentResp.statusCode, `comment: ${commentResp.body}`).toBe(201);
 
     // 2. Officer (with admin.issues.status via municipality_officer role)
-    //    changes the issue status to "acknowledged".
-    await db
-      .updateTable('issues')
-      .set({ status: 'acknowledged', status_changed_at: new Date() })
-      .where('id', '=', d.issueId)
-      .execute();
+    //    changes the issue status to "acknowledged" through PATCH.
+    const statusResp = await f.inject({
+      method: 'PATCH',
+      url: `/issues/${d.issueId}/status`,
+      headers: { authorization: `Bearer ${d.officer.token}` },
+      payload: { status: 'acknowledged' },
+    });
+    expect(statusResp.statusCode, `status: ${statusResp.body}`).toBe(200);
 
-    // 3. Officer emits two audit rows (comment.create + issue.status).
-    await emitAudit(db, d.officer.id, CITY_A, 'comment.create', 'comment', randomUUID(), { issue_id: d.issueId });
-    await emitAudit(db, d.officer.id, CITY_A, 'issue.status', 'issue', d.issueId, { status: 'acknowledged' });
+    // 3. Both controller writes landed audit rows with a populated
+    //    request_id (the test never sets x-request-id, so the middleware
+    //    defaults to randomUUID()).
+    const auditRows = await db
+      .selectFrom('audit_log')
+      .select(['id', 'action', 'request_id'])
+      .where('city_id', '=', CITY_A)
+      .where('action', 'in', ['comment.create', 'issue.status'])
+      .orderBy('id', 'asc')
+      .execute();
+    expect(auditRows.length).toBeGreaterThanOrEqual(2);
+    for (const row of auditRows) {
+      expect(row.request_id, `audit row ${row.id} action=${row.action}`).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+    }
 
     // 4. /admin/audit/verify still reports a valid chain after all writes.
     const verify = await f.inject({
@@ -316,42 +325,6 @@ async function seedIssue(
     .returning('id')
     .executeTakeFirstOrThrow();
   return row.id as string;
-}
-
-// Insert an audit_log row the same way the production service does,
-// minus the broken `requestId` field — we supply a UUID directly. The
-// BEFORE-INSERT trigger (0014) overrides prev_hash/row_hash/key_version_id
-// but leaves our payload_canonical_sha256 + payload_redacted intact.
-async function emitAudit(
-  db: Kysely<unknown>,
-  actorUserId: string,
-  cityId: string,
-  action: string,
-  targetType: string,
-  targetId: string,
-  payload: unknown,
-): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const d = db as any;
-  await d
-    .insertInto('audit_log')
-    .values({
-      city_id: cityId,
-      actor_user_id: actorUserId,
-      on_behalf_of_user_id: null,
-      action,
-      target_type: targetType,
-      target_id: targetId,
-      request_id: randomUUID(),
-      ip: null,
-      user_agent: 'full-flow-e2e',
-      payload_canonical_sha256: 'a'.repeat(64),
-      payload_redacted: JSON.stringify(payload),
-      prev_hash: '0'.repeat(64),
-      row_hash: '0'.repeat(64),
-      key_version_id: sql`((SELECT id FROM quart_security.audit_key_versions WHERE status = 'active' ORDER BY version DESC LIMIT 1))`,
-    })
-    .execute();
 }
 
 async function mintSession(db: Kysely<unknown>, jwtSvc: JwtService, user: UserRow): Promise<SeededUser> {

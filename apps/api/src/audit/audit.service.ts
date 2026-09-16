@@ -8,6 +8,16 @@ import type { DB } from '@quart/db';
 import { ConfigService } from '../config/config.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
 
+// Loose UUID regex — mirrors the one in tenant-context.interceptor.ts.
+// `audit_log.request_id` is uuid-typed, but the request-id middleware
+// accepts any /^[A-Za-z0-9_-]{8,128}$/ header (e.g. `req-abc12345`).
+// Coerce non-UUIDs to NULL so the audit insert doesn't crash with 22P02.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function tryParseUuid(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return UUID_RE.test(value) ? value : null;
+}
+
 export interface AuditEvent {
   tenant: TenantContext;
   action: string;
@@ -26,7 +36,7 @@ export interface AuditRow {
   action: string;
   target_type: string;
   target_id: string;
-  request_id: string;
+  request_id: string | null;
   ip: string | null;
   user_agent: string | null;
   payload_canonical_sha256: string;
@@ -77,7 +87,7 @@ export class AuditService {
       action: ev.action,
       target_type: ev.targetType,
       target_id: ev.targetId,
-      request_id: ev.tenant.requestId,
+      request_id: tryParseUuid(ev.tenant.requestId),
       ip: ev.ip ?? null,
       user_agent: ev.userAgent ?? null,
       payload_canonical_sha256: payloadSha,

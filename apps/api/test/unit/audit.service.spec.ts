@@ -59,4 +59,34 @@ describe('AuditService.buildRow', () => {
     });
     expect(row.prev_hash).toBe(GENESIS_PREV_HASH);
   });
+
+  // ponytail: belt-and-suspenders for the requestId coercion — the
+  // middleware accepts any /^[A-Za-z0-9_-]{8,128}$/ header, so a
+  // `req-N` string flows through to the audit insert. Coerce to NULL
+  // instead of letting pg reject with 22P02 (gh issue #3).
+  it.each(['', 'req-abc12345', 'sweeper', 'not-a-uuid-at-all'])(
+    'coerces non-UUID requestId %j to NULL (avoids 22P02 on audit insert)',
+    async (bad) => {
+      const svc = new AuditService({ env: { AUDIT_HMAC_KEY: 'a'.repeat(64) } } as never);
+      const db = makeDb({ maxId: 0 });
+      const row = await svc.buildRow(db as never, {
+        tenant: { cityId: 'c', userId: 'u', isSuperAdmin: false, requestId: bad },
+        action: 'issue.create', targetType: 'issue', targetId: 'iss-1',
+        payload: {}, ip: null, userAgent: null,
+      });
+      expect(row.request_id).toBeNull();
+    },
+  );
+
+  it('passes through a valid UUID requestId unchanged', async () => {
+    const svc = new AuditService({ env: { AUDIT_HMAC_KEY: 'a'.repeat(64) } } as never);
+    const db = makeDb({ maxId: 0 });
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    const row = await svc.buildRow(db as never, {
+      tenant: { cityId: 'c', userId: 'u', isSuperAdmin: false, requestId: uuid },
+      action: 'issue.create', targetType: 'issue', targetId: 'iss-1',
+      payload: {}, ip: null, userAgent: null,
+    });
+    expect(row.request_id).toBe(uuid);
+  });
 });
