@@ -480,6 +480,9 @@ export interface NotificationDeliveriesTable {
   error_code: string | null;
   attempts: Generated<number>;
   last_attempt_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  // 0036 — added for the pending-deliveries sweeper (gh issue #1). The fan-out
+  // insert relies on the DB DEFAULT now() so application code stays unchanged.
+  created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 
 // 0033 — single-use email sign-in tokens. TTL 15 min from issuance;
