@@ -273,12 +273,35 @@ describe('PasswordResetService', () => {
     expect(state.rows).toHaveLength(0);
     expect(mailer.calls).toHaveLength(0);
     // Audit: request attempt is logged even when no user matches —
-    // operators need to see attempted enumeration. Target is the
-    // normalized email (no user id available).
+    // operators need to see attempted enumeration. targetId is a
+    // sha256 prefix of the normalized email (audit_log.target_id is
+    // varchar(64) — see password-reset.service.ts comment). The raw
+    // email stays in payload (jsonb is unbounded).
     expect(auditCalls).toHaveLength(1);
     expect(auditCalls[0]!.action).toBe('auth.password_reset_request');
-    expect(auditCalls[0]!.targetId).toBe('nobody@example.com');
-    expect(auditCalls[0]!.payload).toEqual({ found: false });
+    expect(auditCalls[0]!.targetId).toMatch(/^email:[0-9a-f]{40}$/);
+    expect(auditCalls[0]!.targetId.length).toBeLessThanOrEqual(64);
+    expect(auditCalls[0]!.payload).toEqual({ email: 'nobody@example.com', found: false });
+  });
+
+  it('issue for an unknown long email (> 64 chars) does NOT 500 (audit.target_id fits)', async () => {
+    // Regression guard for gh #4 follow-up: audit_log.target_id is
+    // varchar(64) (see migration 0006). Storing the raw email there on
+    // long addresses triggers 22001 string_data_right_truncation and
+    // 500s the request. The service must hash with sha256 + `email:`
+    // prefix so targetId fits regardless of email length.
+    const state: State = { users: [], rows: [] };
+    const { svc, auditCalls } = buildService(state);
+    const longEmail = 'a-very-long-local-part-that-far-exceeds-sixty-four-chars@example.com';
+    expect(longEmail.length).toBeGreaterThan(64);
+    await expect(svc.issue(longEmail)).resolves.toBeUndefined();
+    expect(auditCalls).toHaveLength(1);
+    expect(auditCalls[0]!.targetId.startsWith('email:')).toBe(true);
+    expect(auditCalls[0]!.targetId.length).toBeLessThanOrEqual(64);
+    // Payload keeps the raw email so operators can read the original
+    // input — jsonb has no length cap and payload_redacted scrubs at
+    // read time.
+    expect(auditCalls[0]!.payload).toMatchObject({ email: longEmail, found: false });
   });
 
   it('issue for a known email inserts a row and emails a reset URL', async () => {

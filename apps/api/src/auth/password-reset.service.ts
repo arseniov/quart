@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { hashPassword } from 'better-auth/crypto';
@@ -109,13 +109,18 @@ export class PasswordResetService {
       this.logger.debug(`forgot: no user for ${normalized}; skipping email`);
       // Audit the request attempt regardless — operators need to see
       // failed lookups as part of the chain. User id is unknown here,
-      // so targetId falls back to the email (citext-typed in users;
-      // this is the email AS-PRESENTED, normalized lowercase).
+      // so targetId falls back to a hash of the email (audit_log.target_id
+      // is varchar(64) and RFC-5321 emails run up to 254 chars — storing
+      // the raw email triggers 22001 string_data_right_truncation).
+      // The `email:` prefix disambiguates from UUIDs; operators grep the
+      // hash prefix to find related rows. Raw email stays in payload
+      // (jsonb is unbounded; payload_redacted scrubs at read time).
+      const emailHash = createHash('sha256').update(normalized).digest('hex').slice(0, 40);
       await this.audit.writeSystem(this.db.kysely, {
         action: 'auth.password_reset_request',
         targetType: 'user',
-        targetId: normalized,
-        payload: { found: false },
+        targetId: `email:${emailHash}`,
+        payload: { email: normalized, found: false },
       });
       return;
     }

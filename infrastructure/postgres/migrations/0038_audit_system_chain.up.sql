@@ -28,9 +28,15 @@ VALUES (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- 2. Chain trigger: when NEW.city_id is the sentinel, derive prev_hash
--- from the global chain head instead of the per-city head. Locking
--- still serializes (one global lock for the sentinel, per-city for
--- everything else).
+-- from the global chain head instead of the per-city head.
+--
+-- Trigger takes ONE global lock for sentinel + tenant. Tenant chains
+-- still branch per-city (prev_hash is scoped to city_id), but the lock
+-- itself is global so concurrent inserts can't interleave sentinel rows
+-- into a tenant chain. This is a known performance regression vs 0014's
+-- per-city lock; the upgrade path is per-city for tenants + global only
+-- when sentinel inserts. See the comment in audit.service.ts for the
+-- rationale.
 CREATE OR REPLACE FUNCTION quart_security.audit_log_chain_stamp()
 RETURNS trigger
 LANGUAGE plpgsql
