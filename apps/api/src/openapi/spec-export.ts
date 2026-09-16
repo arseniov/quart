@@ -178,22 +178,6 @@ export function readGitShortSha(repoRoot: string): string | null {
 }
 
 /**
- * Augment an OpenAPI doc with `x-internal-git-sha` extension. Returns a
- * shallow-copied doc — mutating the result leaves the original alone.
- */
-export function annotateWithGitSha(
-  doc: Record<string, unknown>,
-  sha: string | null,
-): Record<string, unknown> {
-  if (sha === null) return doc;
-  const info = (doc.info as Record<string, unknown> | undefined) ?? {};
-  return {
-    ...doc,
-    info: { ...info, 'x-internal-git-sha': sha },
-  };
-}
-
-/**
  * Read the JSON spec from disk if present. Returns null when the file
  * doesn't exist or can't be parsed — used to drive the diff report.
  *

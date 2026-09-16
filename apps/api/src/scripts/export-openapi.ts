@@ -69,7 +69,6 @@ import { NotificationsController } from '../notifications/notifications.controll
 import { SseController } from '../notifications/sse.controller.js';
 import { MetricsController } from '../observability/metrics.controller.js';
 import {
-  annotateWithGitSha,
   atomicWriteJson,
   diffOpenApi,
   readExistingSpec,
@@ -299,7 +298,16 @@ function collectTags(): Array<{ name: string }> {
   return [...seen].sort().map((name) => ({ name }));
 }
 
-async function main(): Promise<void> {
+/**
+ * Generate the OpenAPI document from controller metadata, normalised
+ * for stable diffs. Reused by the `export:openapi` writer and the
+ * `check:openapi-drift` script — same input → same bytes.
+ *
+ * Reads from `process.env` via `SwaggerEnvSchema`. Pure relative to env:
+ * no I/O outside `readAppVersion()` (which reads `apps/api/package.json`
+ * from `cwd`), no writes.
+ */
+export function generateSpec(): Record<string, unknown> {
   const swaggerEnv = SwaggerEnvSchema.parse(process.env);
 
   // `info.version` — env override wins, else pull from apps/api/package.json,
@@ -321,9 +329,13 @@ async function main(): Promise<void> {
     servers: parseSwaggerServers(swaggerEnv.SWAGGER_SERVERS).map((url) => ({ url })),
   });
 
+  return sortOpenApiKeys(rawDocument);
+}
+
+async function main(): Promise<void> {
+  const sorted = generateSpec();
+
   const workspaceRoot = resolve(process.cwd(), '../..');
-  const sorted = sortOpenApiKeys(rawDocument);
-  const withSha = annotateWithGitSha(sorted, readGitShortSha(workspaceRoot));
 
   const rawPath =
     process.env.OPENAPI_OUTPUT_PATH?.trim() || DEFAULT_OPENAPI_OUTPUT_PATH;
@@ -331,19 +343,19 @@ async function main(): Promise<void> {
   const { absolute, relative: relativePath } = resolveOutputPath(rawPath, workspaceRoot);
 
   const previous = readExistingSpec(absolute);
-  const { bytes } = await atomicWriteJson(absolute, withSha, beautify ? 2 : undefined);
+  const { bytes } = await atomicWriteJson(absolute, sorted, beautify ? 2 : undefined);
 
-  const delta = diffOpenApi(previous, withSha);
+  const delta = diffOpenApi(previous, sorted);
 
   const summary = {
     outputPath: relativePath,
     bytes,
     beautify,
-    paths: Object.keys((withSha.paths as Record<string, unknown> | undefined) ?? {}).length,
+    paths: Object.keys((sorted.paths as Record<string, unknown> | undefined) ?? {}).length,
     controllers: CONTROLLERS.length,
-    tags: (withSha.tags as Array<{ name: string }>).length,
+    tags: (sorted.tags as Array<{ name: string }>).length,
     securitySchemes: Object.keys(
-      (withSha.components as { securitySchemes?: Record<string, unknown> })?.securitySchemes ?? {},
+      (sorted.components as { securitySchemes?: Record<string, unknown> })?.securitySchemes ?? {},
     ),
     delta,
     gitSha: readGitShortSha(workspaceRoot),

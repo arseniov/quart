@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  annotateWithGitSha,
   atomicWriteJson,
   diffOpenApi,
   readExistingSpec,
@@ -155,22 +154,6 @@ describe('diffOpenApi (route-level delta)', () => {
   it('handles null prev (first run)', () => {
     const delta = diffOpenApi(null, { paths: { '/a': {} } });
     expect(delta.added).toEqual(['/a']);
-  });
-});
-
-describe('annotateWithGitSha (info extension field)', () => {
-  it('adds x-internal-git-sha to info when present', () => {
-    const doc = { info: { title: 'X', version: '1' }, paths: {} };
-    const out = annotateWithGitSha(doc, 'abc1234') as {
-      info: Record<string, unknown>;
-    };
-    expect(out.info['x-internal-git-sha']).toBe('abc1234');
-  });
-
-  it('returns the original doc unchanged when sha is null', () => {
-    const doc = { info: { title: 'X' }, paths: {} };
-    const out = annotateWithGitSha(doc, null);
-    expect(out).toBe(doc);
   });
 });
 

@@ -14,7 +14,8 @@
     "test:integration": "vitest run --mode=integration --pool=forks test/integration",
     "lint": "eslint src test",
     "test:e2e": "vitest run --mode=e2e --pool=forks test/e2e",
-    "export:openapi": "nest build && node dist/scripts/export-openapi.js"
+    "export:openapi": "nest build && node dist/scripts/export-openapi.js",
+    "check:openapi-drift": "nest build && node dist/scripts/check-openapi-drift.js"
   },
   "dependencies": {
     "@fastify/cookie": "9.4.0",

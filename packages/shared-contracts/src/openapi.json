@@ -26,8 +26,7 @@
   "info": {
     "description": "Mobile + Admin shared API",
     "title": "Quart API",
-    "version": "0.0.0",
-    "x-internal-git-sha": "6f58c5e"
+    "version": "0.0.0"
   },
   "openapi": "3.0.3",
   "paths": {
