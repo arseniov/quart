@@ -30,7 +30,12 @@ import { ValkeyService } from './valkey.service.js';
 
 interface RequestWithAuth {
   headers: Record<string, string | string[] | undefined>;
+  // Under @nestjs/platform-fastify the wrapped request's top-level `id`
+  // is Fastify's default (`'req-N'`); RequestIdMiddleware writes the real
+  // request id onto `raw.id`. Read both so the audit chain's `request_id`
+  // is populated.
   id?: string;
+  raw?: { id?: string };
   user?: AuthUser;
   tenant?: TenantContext;
 }
@@ -193,7 +198,7 @@ export class JwtAuthGuard implements CanActivate {
       cityId: claims.city_id,
       userId: claims.sub,
       isSuperAdmin: false,
-      requestId: req.id ?? '',
+      requestId: req.raw?.id ?? req.id ?? '',
     };
     req.user = user;
     req.tenant = tenant;

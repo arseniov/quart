@@ -11,7 +11,12 @@ import { DbService } from '../db/db.service.js';
 import { PERMISSIONS_KEY, type PermissionRequirement } from './permissions.decorator.js';
 
 interface RequestWithAuth {
+  // Under @nestjs/platform-fastify the wrapped request's top-level `id`
+  // is Fastify's default (`'req-N'`); RequestIdMiddleware writes the real
+  // request id onto `raw.id`. Read both so the audit chain's `request_id`
+  // is populated.
   id?: string;
+  raw?: { id?: string };
   user?: AuthUser;
 }
 
@@ -72,7 +77,7 @@ export class RbacGuard implements CanActivate {
         cityId: user.cityId,
         userId: user.id,
         isSuperAdmin: user.isSuperAdmin,
-        requestId: req.id ?? '',
+        requestId: req.raw?.id ?? req.id ?? '',
       },
       async (trx) => {
         // role_permissions.role_id is a UUID; user.roleSnapshot carries

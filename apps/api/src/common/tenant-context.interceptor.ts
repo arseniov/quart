@@ -16,6 +16,11 @@ import { SKIP_TENANT } from './decorators/skip-tenant.decorator.js';
 
 interface RequestWithTenant {
   id?: string;
+  // Under @nestjs/platform-fastify the Nest adapter wraps the Fastify
+  // request and exposes the raw one on `raw`. RequestIdMiddleware mutates
+  // the raw request's `id`, so read from both paths to keep the audit
+  // chain's `request_id` populated.
+  raw?: { id?: string };
   headers: Record<string, string | string[] | undefined>;
   tenant?: TenantContext;
 }
@@ -35,12 +40,12 @@ function headerString(
 }
 
 /**
- * Builds a `TenantContext` from the request-id middleware (`req.id`) and
- * the X-City-Id / X-User-Id / X-Is-Super-Admin headers. Requires a valid
- * X-City-Id UUID as the gate — partial headers (e.g. only X-Is-Super-Admin)
- * and missing city ids pass through with no context, since the 0011 RLS
- * migration grants catalog write purely on `app.is_super_admin` without a
- * city predicate.
+ * Builds a `TenantContext` from the request-id middleware (`req.raw.id` /
+ * `req.id`) and the X-City-Id / X-User-Id / X-Is-Super-Admin headers.
+ * Requires a valid X-City-Id UUID as the gate — partial headers (e.g. only
+ * X-Is-Super-Admin) and missing city ids pass through with no context,
+ * since the 0011 RLS migration grants catalog write purely on
+ * `app.is_super_admin` without a city predicate.
  *
  * Phase 3 replaces this with a JwtAuthGuard that populates `req.tenant`
  * before the interceptor runs.
@@ -78,7 +83,7 @@ export class TenantContextInterceptor implements NestInterceptor {
       cityId,
       userId: userIdRaw ?? null,
       isSuperAdmin: isSuperAdminRaw === 'true',
-      requestId: req.id ?? '',
+      requestId: req.raw?.id ?? req.id ?? '',
     };
   }
 }
