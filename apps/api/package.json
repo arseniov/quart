@@ -15,7 +15,8 @@
     "lint": "eslint src test",
     "test:e2e": "vitest run --mode=e2e --pool=forks test/e2e",
     "export:openapi": "nest build && node dist/scripts/export-openapi.js",
-    "check:openapi-drift": "nest build && node dist/scripts/check-openapi-drift.js"
+    "check:openapi-drift": "nest build && node dist/scripts/check-openapi-drift.js",
+    "check:sentry-redaction": "nest build && node dist/scripts/check-sentry-redaction.js"
   },
   "dependencies": {
     "@fastify/cookie": "9.4.0",
