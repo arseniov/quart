@@ -4,8 +4,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { hashPassword } from 'better-auth/crypto';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
-// `design:paramtypes` for the ConfigService + DbService constructor
-// parameters. Matches the pattern in magic-link.service.ts / jwt.service.ts.
+// `design:paramtypes` for the AuditService + ConfigService + DbService
+// constructor parameters. Matches the pattern in magic-link.service.ts /
+// jwt.service.ts.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ConfigService } from '../config/config.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -37,6 +40,11 @@ function generateToken(): string {
   return `${randomUUID()}${randomUUID().replace(/-/g, '')}`;
 }
 
+interface PasswordResetRow {
+  id: string;
+  user_id: string;
+}
+
 /**
  * Single-use password reset tokens.
  *
@@ -58,6 +66,7 @@ export class PasswordResetService {
   constructor(
     private readonly db: DbService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
     @Inject(PASSWORD_RESET_MAILER) private readonly mailer: Mailer,
   ) {}
 
@@ -72,6 +81,12 @@ export class PasswordResetService {
    * the magic-link UX (no invalidation on re-request).
    *
    * Returns `void` — the token must never live outside the mailer call.
+   *
+   * Audit (gh issue #4): the `forgot` event lands in the chain on
+   * success and on the no-send branch (`skip: true` for unknown
+   * emails — no state change, no chain pollution). The auth flow runs
+   * before any tenant exists, so we use the `__system` sentinel via
+   * AuditService.writeSystem.
    */
   async issue(email: string): Promise<void> {
     // Lowercase before lookup + insert: citext would compare
@@ -85,23 +100,48 @@ export class PasswordResetService {
       .where('email', '=', normalized)
       // No `.where('status', '=', 'active')` — let the reset succeed for
       // suspended accounts (admin can re-activate and the user can sign
-        // back in). Soft-deleted accounts have NULL email, so the lookup
-        // already misses them.
+      // back in). Soft-deleted accounts have NULL email, so the lookup
+      // already misses them.
       .executeTakeFirst();
 
     if (!user) {
       // No enumeration leak. Log at debug to leave an audit trace.
       this.logger.debug(`forgot: no user for ${normalized}; skipping email`);
+      // Audit the request attempt regardless — operators need to see
+      // failed lookups as part of the chain. User id is unknown here,
+      // so targetId falls back to the email (citext-typed in users;
+      // this is the email AS-PRESENTED, normalized lowercase).
+      await this.audit.writeSystem(this.db.kysely, {
+        action: 'auth.password_reset_request',
+        targetType: 'user',
+        targetId: normalized,
+        payload: { found: false },
+      });
       return;
     }
 
     const token = generateToken();
     const expiresAt = new Date(Date.now() + TTL_MS);
 
-    await this.db.kysely
-      .insertInto('password_resets')
-      .values({ user_id: user.id, token, expires_at: expiresAt } as never)
-      .execute();
+    // Audit + insert live in the same writeSystem transaction so the
+    // reset row and its chain entry are atomic.
+    await this.audit.writeSystem(
+      this.db.kysely,
+      {
+        action: 'auth.password_reset_request',
+        targetType: 'user',
+        targetId: user.id,
+        payload: { found: true },
+      },
+      async (trx) => {
+        const row = (await trx
+          .insertInto('password_resets')
+          .values({ user_id: user.id, token, expires_at: expiresAt } as never)
+          .returning('id')
+          .executeTakeFirst()) as { id: string } | undefined;
+        return row ? { targetId: row.id } : undefined;
+      },
+    );
 
     const url = `${this.config.env.MAGIC_LINK_BASE_URL}/auth/password/reset?token=${token}`;
     const subject = 'Reset your Quart password';
@@ -127,43 +167,69 @@ export class PasswordResetService {
    * mode (missing, consumed, expired, hash failure) so callers cannot
    * leak which step failed.
    *
-   * FIXME: audit chain integration pending — see gh issue #4. A
-   * successful reset changes `password_hash`, which is exactly the kind
-   * of event the chain exists to attest; until the "system pathway"
-   * audit event lands, successful resets are not in the HMAC chain.
+   * Audit (gh issue #4): on success, writeSystem records
+   * `auth.password_reset` in the chain with the row id as the
+   * targetId. On failure (`skip: true`) the audit row is suppressed —
+   * no state change, no chain pollution.
    */
   async reset(token: string, newPassword: string): Promise<{ ok: true } | { ok: false }> {
-    const row = await this.db.kysely
-      .updateTable('password_resets')
-      .set({ consumed_at: new Date() } as never)
-      .where('token', '=', token)
-      .where('consumed_at', 'is', null)
-      .where('expires_at', '>', new Date())
-      .returning('user_id')
-      .executeTakeFirst();
-
-    if (!row) return { ok: false };
-
-    let hash: string;
+    let consumedUserId: string | undefined;
+    let ok = false;
     try {
-      hash = await hashPassword(newPassword);
-    } catch (err) {
-      // Better Auth's hashPassword (scrypt) can throw on malformed input
-      // (extremely long passwords, NFKC overflow). The token is already
-      // consumed — fail closed rather than re-opening the row.
-      this.logger.error(
-        { err: String(err), user_id: (row as { user_id: string }).user_id },
-        'hashPassword failed during password reset',
+      await this.audit.writeSystem(
+        this.db.kysely,
+        {
+          action: 'auth.password_reset',
+          targetType: 'password_reset',
+          targetId: token,
+          payload: { tokenLength: token.length },
+        },
+        async (trx) => {
+          const row = (await trx
+            .updateTable('password_resets')
+            .set({ consumed_at: new Date() } as never)
+            .where('token', '=', token)
+            .where('consumed_at', 'is', null)
+            .where('expires_at', '>', new Date())
+            .returning(['id', 'user_id'])
+            .executeTakeFirst()) as PasswordResetRow | undefined;
+          if (!row) return { skip: true };
+          consumedUserId = row.user_id;
+
+          let hash: string;
+          try {
+            hash = await hashPassword(newPassword);
+          } catch (err) {
+            // Better Auth's hashPassword (scrypt) can throw on malformed
+            // input (extremely long passwords, NFKC overflow). The token
+            // is already consumed — fail closed rather than re-opening
+            // the row by suppressing the audit. Returning skip: true
+            // means "no audit row"; throwing bubbles up.
+            this.logger.error(
+              { err: String(err), user_id: row.user_id },
+              'hashPassword failed during password reset',
+            );
+            // Bail without writing the audit row — the row is consumed
+            // but the password is not. Surface as ok:false to caller.
+            return { skip: true };
+          }
+
+          await trx
+            .updateTable('users')
+            .set({ password_hash: hash } as never)
+            .where('id', '=', row.user_id)
+            .execute();
+
+          ok = true;
+          return { targetId: row.id };
+        },
       );
+    } catch (err) {
+      this.logger.error({ err: String(err) }, 'password reset transaction failed');
       return { ok: false };
     }
 
-    await this.db.kysely
-      .updateTable('users')
-      .set({ password_hash: hash } as never)
-      .where('id', '=', (row as { user_id: string }).user_id)
-      .execute();
-
+    if (!ok || !consumedUserId) return { ok: false };
     return { ok: true };
   }
 }

@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { describe, expect, it } from 'vitest';
 
+import { type AuditService, type SystemAuditEvent } from '../../src/audit/audit.service.js';
 import { MagicLinkController } from '../../src/auth/magic-link.controller.js';
 import { MAILER as MAGIC_LINK_MAILER } from '../../src/auth/magic-link.service.js';
 import { PasswordResetController } from '../../src/auth/password-reset.controller.js';
@@ -45,105 +46,141 @@ interface State {
  * `.updateTable().set().where().where().where().returning().executeTakeFirst()`
  * for consume. The stub mirrors both shapes — keeps the SQL invariant
  * (single-roundtrip atomic UPDATE, no SELECT-then-UPDATE) testable.
+ *
+ * `transaction().execute(fn)` opens a fake transaction so writeSystem's
+ * mutate callback can reuse the same builders (mirroring how a real
+ * Kysely transaction is a builder alias for the connection).
  */
 function makeDb(state: State) {
-  return {
-    kysely: {
-      selectFrom: (table: string) => ({
-        select: (cols: unknown) => ({
-          where: (col: unknown, op: unknown, val: unknown) => ({
-            executeTakeFirst: async () => {
-              if (table !== 'users') return undefined;
-              // Only the email lookup is exercised here.
-              const colName = Array.isArray(cols) ? (cols as string[])[0] : (cols as string);
-              if (colName !== 'id') return undefined;
-              const row = state.users.find(
-                (u) => op === '=' && (col as string) === 'email' && u.email === val,
-              );
-              return row ? { id: row.id } : undefined;
-            },
-          }),
-        }),
-      }),
-      insertInto: (_table: unknown) => ({
-        values: (v: Partial<PasswordResetRow>) => ({
-          execute: async () => {
-            state.rows.push({
-              id: '00000000-0000-0000-0000-000000000001',
-              user_id: '',
-              token: '',
-              expires_at: new Date(),
-              consumed_at: null,
-              created_at: new Date(),
-              ...v,
-            });
+  const pushRow = (v: Partial<PasswordResetRow>): PasswordResetRow => {
+    const row: PasswordResetRow = {
+      id: '00000000-0000-0000-0000-000000000001',
+      user_id: '',
+      token: '',
+      expires_at: new Date(),
+      consumed_at: null,
+      created_at: new Date(),
+      ...v,
+    };
+    state.rows.push(row);
+    return row;
+  };
+
+  const builders = {
+    selectFrom: (table: string) => ({
+      select: (cols: unknown) => ({
+        where: (col: unknown, op: unknown, val: unknown) => ({
+          executeTakeFirst: async () => {
+            if (table !== 'users') return undefined;
+            // Only the email lookup is exercised here.
+            const colName = Array.isArray(cols) ? (cols as string[])[0] : (cols as string);
+            if (colName !== 'id') return undefined;
+            const row = state.users.find(
+              (u) => op === '=' && (col as string) === 'email' && u.email === val,
+            );
+            return row ? { id: row.id } : undefined;
           },
         }),
       }),
-      // selectFrom for password_resets is intentionally absent: the
-      // service must never SELECT-then-UPDATE. The atomic consume is a
-      // single round-trip UPDATE-WHERE-RETURNING.
-      updateTable: (table: string) => {
-        const chain: {
-          set: unknown;
-          wheres: Array<(row: PasswordResetRow | UserRow) => boolean>;
-          returning: unknown;
-        } = {
-          set: undefined,
-          wheres: [],
-          returning: undefined,
-        };
-        const obj = {
-          set: (patch: Partial<PasswordResetRow> | Partial<UserRow>) => {
-            chain.set = patch;
-            return obj;
-          },
-          where: (col: unknown, op: unknown, val: unknown) => {
-            chain.wheres.push((row) => {
-              if (table === 'password_resets') {
-                const r = row as PasswordResetRow;
-                if (col === 'token' && op === '=') return r.token === val;
-                if (col === 'consumed_at' && op === 'is') {
-                  return val === null ? r.consumed_at === null : r.consumed_at !== null;
-                }
-                if (col === 'expires_at' && op === '>') {
-                  return r.expires_at.getTime() > (val as Date).getTime();
-                }
-                return true;
+    }),
+    insertInto: (_table: unknown) => ({
+      values: (v: Partial<PasswordResetRow>) => ({
+        execute: async () => {
+          pushRow(v);
+        },
+        returning: (_cols: unknown) => ({
+          executeTakeFirst: async () => pushRow(v),
+        }),
+      }),
+    }),
+    // selectFrom for password_resets is intentionally absent: the
+    // service must never SELECT-then-UPDATE. The atomic consume is a
+    // single round-trip UPDATE-WHERE-RETURNING.
+    updateTable: (table: string) => {
+      const chain: {
+        set: unknown;
+        wheres: Array<(row: PasswordResetRow | UserRow) => boolean>;
+        returning: unknown;
+      } = {
+        set: undefined,
+        wheres: [],
+        returning: undefined,
+      };
+      let returningCols: unknown = undefined;
+      const obj = {
+        set: (patch: Partial<PasswordResetRow> | Partial<UserRow>) => {
+          chain.set = patch;
+          return obj;
+        },
+        where: (col: unknown, op: unknown, val: unknown) => {
+          chain.wheres.push((row) => {
+            if (table === 'password_resets') {
+              const r = row as PasswordResetRow;
+              if (col === 'token' && op === '=') return r.token === val;
+              if (col === 'consumed_at' && op === 'is') {
+                return val === null ? r.consumed_at === null : r.consumed_at !== null;
               }
-              if (table === 'users') {
-                const u = row as UserRow;
-                if (col === 'id' && op === '=') return u.id === val;
-                return true;
+              if (col === 'expires_at' && op === '>') {
+                return r.expires_at.getTime() > (val as Date).getTime();
               }
               return true;
-            });
-            return obj;
-          },
-          returning: (_cols: unknown) => {
-            chain.returning = _cols;
-            return obj;
-          },
-          executeTakeFirst: async () => {
-            if (table === 'password_resets') {
-              const row = state.rows.find((r) => chain.wheres.every((p) => p(r)));
-              if (row) Object.assign(row, chain.set as Partial<PasswordResetRow>);
-              return row ? { user_id: row.user_id } : undefined;
             }
-            return undefined;
-          },
-          execute: async () => {
             if (table === 'users') {
-              const row = state.users.find((u) => chain.wheres.every((p) => p(u)));
-              if (row) Object.assign(row, chain.set as Partial<UserRow>);
-              return { numUpdatedRows: row ? 1n : 0n };
+              const u = row as UserRow;
+              if (col === 'id' && op === '=') return u.id === val;
+              return true;
             }
-            return { numUpdatedRows: 0n };
-          },
-        };
-        return obj;
-      },
+            return true;
+          });
+          return obj;
+        },
+        returning: (cols: unknown) => {
+          chain.returning = cols;
+          returningCols = cols;
+          return obj;
+        },
+        executeTakeFirst: async () => {
+          if (table === 'password_resets') {
+            const row = state.rows.find((r) => chain.wheres.every((p) => p(r)));
+            if (row) Object.assign(row, chain.set as Partial<PasswordResetRow>);
+            if (!row) return undefined;
+            // Mirror the columns the service selects.
+            if (Array.isArray(returningCols)) {
+              const out: Record<string, unknown> = {};
+              for (const c of returningCols as string[]) {
+                if (c === 'id') out.id = row.id;
+                if (c === 'user_id') out.user_id = row.user_id;
+              }
+              return out;
+            }
+            return { user_id: row.user_id };
+          }
+          return undefined;
+        },
+        execute: async () => {
+          if (table === 'users') {
+            const row = state.users.find((u) => chain.wheres.every((p) => p(u)));
+            if (row) Object.assign(row, chain.set as Partial<UserRow>);
+            return { numUpdatedRows: row ? 1n : 0n };
+          }
+          return { numUpdatedRows: 0n };
+        },
+      };
+      return obj;
     },
+  };
+
+  return {
+    kysely: {
+      transaction: () => ({
+        execute: async (fn: (trx: unknown) => Promise<unknown>) => fn(builders),
+      }),
+      ...builders,
+    },
+    // Trx-builder alias used by the audit writeSystem stub (mirrors
+    // how a real Kysely Transaction<DB> shares the connection's
+    // query builder surface).
+    __trxBuilders: builders,
   };
 }
 
@@ -197,8 +234,31 @@ function makeRow(overrides: Partial<PasswordResetRow> = {}): PasswordResetRow {
 
 function buildService(state: State, mailer = makeMailer()) {
   const db = makeDb(state);
-  const svc = new PasswordResetService(db as never, configStub(), mailer);
-  return { db, svc, mailer };
+  const auditCalls: Array<{ action: string; targetId: string; payload: unknown }> = [];
+  const audit = {
+    async writeSystem(
+      _db: unknown,
+      ev: SystemAuditEvent,
+      mutate?: (trx: unknown) => Promise<{ skip?: boolean; targetId?: string } | void>,
+    ) {
+      const trx = (db as unknown as { __trxBuilders?: unknown }).__trxBuilders ?? (db as never).kysely;
+      const result = mutate ? await mutate(trx) : undefined;
+      if (!result || !('skip' in result) || !result.skip) {
+        auditCalls.push({
+          action: ev.action,
+          targetId: result && 'targetId' in result && result.targetId ? result.targetId : ev.targetId,
+          payload: ev.payload,
+        });
+      }
+    },
+  };
+  const svc = new PasswordResetService(
+    db as never,
+    configStub(),
+    audit as unknown as AuditService,
+    mailer,
+  );
+  return { db, svc, mailer, auditCalls };
 }
 
 // ============================================================================
@@ -208,15 +268,22 @@ function buildService(state: State, mailer = makeMailer()) {
 describe('PasswordResetService', () => {
   it('issue for an unknown email does NOT insert or send (no enumeration leak)', async () => {
     const state: State = { users: [], rows: [] };
-    const { svc, mailer } = buildService(state);
+    const { svc, mailer, auditCalls } = buildService(state);
     await svc.issue('nobody@example.com');
     expect(state.rows).toHaveLength(0);
     expect(mailer.calls).toHaveLength(0);
+    // Audit: request attempt is logged even when no user matches —
+    // operators need to see attempted enumeration. Target is the
+    // normalized email (no user id available).
+    expect(auditCalls).toHaveLength(1);
+    expect(auditCalls[0]!.action).toBe('auth.password_reset_request');
+    expect(auditCalls[0]!.targetId).toBe('nobody@example.com');
+    expect(auditCalls[0]!.payload).toEqual({ found: false });
   });
 
   it('issue for a known email inserts a row and emails a reset URL', async () => {
     const state: State = { users: [makeUser()], rows: [] };
-    const { svc, mailer } = buildService(state);
+    const { svc, mailer, auditCalls } = buildService(state);
     await svc.issue('a@example.com');
     expect(state.rows).toHaveLength(1);
     const row = state.rows[0]!;
@@ -229,14 +296,23 @@ describe('PasswordResetService', () => {
     expect(mailer.calls[0]!.body).toContain(
       `https://api.quart.app/auth/password/reset?token=${row.token}`,
     );
+    // Audit: request event lands with the reset row id (targetId
+    // overrides after the insert).
+    expect(auditCalls).toHaveLength(1);
+    expect(auditCalls[0]!.action).toBe('auth.password_reset_request');
+    expect(auditCalls[0]!.targetId).toBe('00000000-0000-0000-0000-000000000001');
+    expect(auditCalls[0]!.payload).toEqual({ found: true });
   });
 
   it('issue lowercases the email before lookup + insert (citext defense in depth)', async () => {
     const state: State = { users: [makeUser({ email: 'user@example.com' })], rows: [] };
-    const { svc, mailer } = buildService(state);
+    const { svc, mailer, auditCalls } = buildService(state);
     await svc.issue('USER@EXAMPLE.COM');
     expect(state.rows).toHaveLength(1);
     expect(mailer.calls[0]!.to).toBe('user@example.com');
+    // Audit's targetId is the user id, but lowercase email flows
+    // through the user lookup.
+    expect(auditCalls[0]!.targetId).toBe('00000000-0000-0000-0000-000000000001');
   });
 
   it('issue generates a fresh token each call (no reuse across requests)', async () => {
@@ -258,7 +334,7 @@ describe('PasswordResetService', () => {
 
   it('reset on a valid token updates password_hash and returns { ok: true }', async () => {
     const state: State = { users: [makeUser({ password_hash: 'old-hash' })], rows: [makeRow()] };
-    const { svc } = buildService(state);
+    const { svc, auditCalls } = buildService(state);
     const r = await svc.reset(VALID_TOKEN, 'NewStrongPassword!!1');
     expect(r).toEqual({ ok: true });
     expect(state.users[0]!.password_hash).not.toBe('old-hash');
@@ -274,6 +350,11 @@ describe('PasswordResetService', () => {
         password: 'NewStrongPassword!!1',
       }),
     ).resolves.toBe(true);
+    // Audit: success path writes auth.password_reset with the
+    // password_resets row id as targetId.
+    expect(auditCalls).toHaveLength(1);
+    expect(auditCalls[0]!.action).toBe('auth.password_reset');
+    expect(auditCalls[0]!.targetId).toBe('00000000-0000-0000-0000-000000000001');
   });
 
   it('reset on a failure mode does NOT touch password_hash (regression guard)', async () => {
@@ -291,10 +372,13 @@ describe('PasswordResetService', () => {
         users: [makeUser({ password_hash: 'old-hash' })],
         rows: row ? [row] : [],
       };
-      const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+      const { svc, auditCalls } = buildService(state, makeMailer());
       const result = await svc.reset(VALID_TOKEN, 'NewStrongPassword!!1');
       expect(result, label).toEqual({ ok: false });
       expect(state.users[0]!.password_hash, label).toBe('old-hash');
+      // Failure modes must NOT land an audit row — no state change,
+      // no chain pollution.
+      expect(auditCalls, label).toHaveLength(0);
     }
   });
 
@@ -350,8 +434,7 @@ describe('PasswordResetService', () => {
 describe('PasswordResetController', () => {
   it('forgot proxies to service.issue and always returns { sent: true }', async () => {
     const state: State = { users: [makeUser()], rows: [] };
-    const mailer = makeMailer();
-    const svc = new PasswordResetService(makeDb(state) as never, configStub(), mailer);
+    const { svc, mailer } = buildService(state);
     const c = new PasswordResetController(svc as never);
 
     const r = await c.forgot({ email: 'a@example.com' });
@@ -362,8 +445,7 @@ describe('PasswordResetController', () => {
 
   it('forgot returns { sent: true } even when the user is unknown (no enumeration)', async () => {
     const state: State = { users: [], rows: [] };
-    const mailer = makeMailer();
-    const svc = new PasswordResetService(makeDb(state) as never, configStub(), mailer);
+    const { svc, mailer } = buildService(state);
     const c = new PasswordResetController(svc as never);
     expect(await c.forgot({ email: 'nobody@example.com' })).toEqual({ sent: true });
     expect(mailer.calls).toHaveLength(0);
@@ -379,7 +461,7 @@ describe('PasswordResetController', () => {
 
   it('reset proxies to service.reset and surfaces { ok: true }', async () => {
     const state: State = { users: [makeUser()], rows: [makeRow()] };
-    const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+    const { svc } = buildService(state);
     const c = new PasswordResetController(svc as never);
     expect(await c.reset({ token: VALID_TOKEN, newPassword: 'NewStrongPassword!!1' })).toEqual({ ok: true });
   });
@@ -392,7 +474,7 @@ describe('PasswordResetController', () => {
     ] as const;
     for (const [label, row] of cases) {
       const state: State = row ? { users: [makeUser()], rows: [row] } : { users: [makeUser()], rows: [] };
-      const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+      const { svc } = buildService(state);
       const c = new PasswordResetController(svc as never);
       expect(
         await c.reset({ token: VALID_TOKEN, newPassword: 'NewStrongPassword!!1' }),
@@ -410,7 +492,7 @@ describe('PasswordResetController', () => {
 
   it('issuing twice does not invalidate the prior token', async () => {
     const state: State = { users: [makeUser()], rows: [] };
-    const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+    const { svc } = buildService(state);
     const c = new PasswordResetController(svc as never);
 
     await c.forgot({ email: 'a@example.com' });
@@ -425,7 +507,7 @@ describe('PasswordResetController', () => {
 
   it('request + reset + re-reset: second reset fails (single-use)', async () => {
     const state: State = { users: [makeUser()], rows: [] };
-    const svc = new PasswordResetService(makeDb(state) as never, configStub(), makeMailer());
+    const { svc } = buildService(state);
     const c = new PasswordResetController(svc as never);
 
     await c.forgot({ email: 'a@example.com' });

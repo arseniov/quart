@@ -3,10 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
-// `design:paramtypes` for the ConfigService + DbService constructor
-// parameters. Matches the pattern in jwt.service.ts / valkey.service.ts /
-// db.service.ts — without it the Nest DI runtime sees `Object` and can't
-// match the test's `.overrideProvider(ConfigService).useValue(stub)`.
+// `design:paramtypes` for the AuditService + ConfigService + DbService
+// constructor parameters. Matches the pattern in jwt.service.ts /
+// valkey.service.ts / db.service.ts — without it the Nest DI runtime
+// sees `Object` and can't match the test's
+// `.overrideProvider(ConfigService).useValue(stub)`.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ConfigService } from '../config/config.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -35,6 +38,11 @@ function generateToken(): string {
   return `${randomUUID()}${randomUUID().replace(/-/g, '')}`;
 }
 
+interface MagicLinkRow {
+  id: string;
+  email: string;
+}
+
 /**
  * Single-use email sign-in links. Admin-managed (no tenant RLS — see
  * 0033_magic_links.up.sql comment). Reads use `db.kysely` directly to
@@ -49,6 +57,7 @@ export class MagicLinkService {
   constructor(
     private readonly db: DbService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
     @Inject(MAILER) private readonly mailer: Mailer,
   ) {}
 
@@ -70,10 +79,28 @@ export class MagicLinkService {
     const token = generateToken();
     const expiresAt = new Date(Date.now() + TTL_MS);
 
-    await this.db.kysely
-      .insertInto('magic_links')
-      .values({ email: normalized, token, expires_at: expiresAt } as never)
-      .execute();
+    // Audit + insert in the same writeSystem transaction so the
+    // magic_links row and the chain entry are atomic.
+    await this.audit.writeSystem(
+      this.db.kysely,
+      {
+        action: 'auth.magic_link_request',
+        targetType: 'magic_link',
+        // Token is the public reference (mailer-only); once we know the
+        // row id, mutate overrides targetId so the chain lands on the
+        // actual uuid.
+        targetId: token,
+        payload: { email: normalized },
+      },
+      async (trx) => {
+        const row = (await trx
+          .insertInto('magic_links')
+          .values({ email: normalized, token, expires_at: expiresAt } as never)
+          .returning('id')
+          .executeTakeFirst()) as { id: string } | undefined;
+        return row ? { targetId: row.id } : undefined;
+      },
+    );
 
     const url = `${this.config.env.MAGIC_LINK_BASE_URL}/auth/magic-link/verify?token=${token}`;
     // Italian-first per spec. Wire i18n.service.ts when the email
@@ -90,26 +117,41 @@ export class MagicLinkService {
    *
    * The UPDATE-WHERE-RETURNING is a single round-trip: Postgres only
    * matches one row under `consumed_at IS NULL`, so two concurrent
-   * verify calls can't both win. The OLD row's email is returned by
-   * the same statement, so there's no separate SELECT.
+   * verify calls can't both win. The OLD row's email AND id are
+   * returned by the same statement, so there's no separate SELECT.
    *
-   * FIXME: audit chain integration pending — see gh issue #N.
-   * `AuditService.write` requires a `TenantContext` (cityId/userId),
-   * but a magic-link verify runs before either exists. A "system
-   * pathway" audit event (e.g. `actor_user_id IS NULL` + a sentinel
-   * `city_id`) is the smallest change; until that lands, successful
-   * verifies are not in the HMAC chain. Tracking issue will be opened.
+   * Audit chain (gh issue #4): on success, writeSystem records
+   * `auth.magic_link_consume` in the HMAC chain via the `__system`
+   * sentinel city. On failure (`skip: true`), the audit row is
+   * suppressed — no state change, no chain pollution.
    */
   async consume(token: string): Promise<{ email: string } | null> {
-    const row = await this.db.kysely
-      .updateTable('magic_links')
-      .set({ consumed_at: new Date() } as never)
-      .where('token', '=', token)
-      .where('consumed_at', 'is', null)
-      .where('expires_at', '>', new Date())
-      .returning('email')
-      .executeTakeFirst();
-    return row ?? null;
+    let consumed: MagicLinkRow | undefined;
+    await this.audit.writeSystem(
+      this.db.kysely,
+      {
+        action: 'auth.magic_link_consume',
+        targetType: 'magic_link',
+        // Token is the public reference; mutate overrides targetId to
+        // the row's UUID once we know which one we consumed.
+        targetId: token,
+        payload: { tokenLength: token.length },
+      },
+      async (trx) => {
+        const row = (await trx
+          .updateTable('magic_links')
+          .set({ consumed_at: new Date() } as never)
+          .where('token', '=', token)
+          .where('consumed_at', 'is', null)
+          .where('expires_at', '>', new Date())
+          .returning(['id', 'email'])
+          .executeTakeFirst()) as MagicLinkRow | undefined;
+        if (!row) return { skip: true };
+        consumed = row;
+        return { targetId: row.id };
+      },
+    );
+    return consumed ? { email: consumed.email } : null;
   }
 }
 
