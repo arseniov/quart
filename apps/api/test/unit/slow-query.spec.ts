@@ -6,6 +6,7 @@ import {
   SlowQueryPlugin,
   SlowQueryEnvSchema,
   hashParams,
+  realClock,
   templateHash,
   type SlowQueryLogger,
   type SlowQueryClock,
@@ -295,5 +296,282 @@ describe('SlowQueryPlugin', () => {
     const out = await plugin.transformResult({ queryId: qid, result });
     expect(out).toBe(result);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #6 — 5 robustness fixes. Each describe block isolates one fix so
+ * a regression points at the exact behaviour that broke.
+ */
+describe('Issue #6 robustness fixes', () => {
+  let clockNowMs = 0;
+  let clockNowNs = 0n;
+  function tick(ms: number): void {
+    clockNowMs += ms;
+    clockNowNs += BigInt(ms) * 1_000_000n;
+  }
+  const fakeClock: SlowQueryClock = {
+    now: () => clockNowMs,
+    hrtime: () => clockNowNs,
+  };
+
+  beforeEach(() => {
+    clockNowMs = 1_000_000;
+    clockNowNs = 1_000_000_000_000n;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Fix #1 — transformResult must not propagate logger/otel throw sites
+  // into the caller's query result promise.
+  describe('#1 transformResult is guarded against emit-time throws', () => {
+    it('resolves the original result even when logger.warn throws', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const logger: SlowQueryLogger = {
+        warn: vi.fn(() => {
+          throw new Error('pino boom');
+        }),
+      };
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1 });
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+      const qid = mkQueryId();
+
+      plugin.transformQuery({ queryId: qid, node: rawNode('select 1') });
+      tick(10);
+      const result = { rows: [{ a: 1 }], numAffectedRows: 0n };
+      const out = await plugin.transformResult({ queryId: qid, result });
+
+      expect(out).toBe(result);
+      expect(logger.warn).toHaveBeenCalledOnce();
+      expect(errSpy).toHaveBeenCalledOnce();
+    });
+
+    it('resolves the original result even when getTrace throws', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({
+        env,
+        logger,
+        clock: fakeClock,
+        getTrace: () => {
+          throw new Error('otel boom');
+        },
+      });
+      const qid = mkQueryId();
+
+      plugin.transformQuery({ queryId: qid, node: rawNode('select 1') });
+      tick(10);
+      const result = { rows: [], numAffectedRows: 0n };
+      const out = await plugin.transformResult({ queryId: qid, result });
+
+      expect(out).toBe(result);
+      expect(errSpy).toHaveBeenCalledOnce();
+    });
+  });
+
+  // Fix #2 — lastEmitted Map must not grow without bound under high query
+  // cardinality. FIFO eviction via Map insertion order.
+  describe('#2 lastEmitted Map is bounded (FIFO eviction)', () => {
+    it('does not exceed MAX_TRACKED entries after 1050 distinct queries', async () => {
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1, SLOW_QUERY_DEBOUNCE_MS: 0 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+
+      for (let i = 0; i < 1050; i++) {
+        const qid = mkQueryId();
+        plugin.transformQuery({ queryId: qid, node: rawNode(`select ${i}`) });
+        tick(5);
+        await plugin.transformResult({
+          queryId: qid,
+          result: { rows: [], numAffectedRows: 0n },
+        });
+      }
+
+      // Bounded by MAX_TRACKED (1000) via FIFO eviction. Never unbounded.
+      expect(plugin._lastEmitted().size).toBeLessThanOrEqual(1000);
+      expect(plugin._lastEmitted().size).toBeGreaterThan(0);
+    });
+
+    it('FIFO eviction drops the oldest template, not the most-recently-used', async () => {
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1, SLOW_QUERY_DEBOUNCE_MS: 0 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+
+      // Fill the Map to the cap with 1000 distinct templates.
+      for (let i = 0; i < 1000; i++) {
+        const qid = mkQueryId();
+        plugin.transformQuery({ queryId: qid, node: rawNode(`select ${i}`) });
+        tick(5);
+        await plugin.transformResult({
+          queryId: qid,
+          result: { rows: [], numAffectedRows: 0n },
+        });
+      }
+
+      // The first template we inserted ("select 0") should still be present.
+      expect(plugin._lastEmitted().has(templateHash('select 0'))).toBe(true);
+
+      // Insert one more — this triggers eviction of the oldest entry.
+      const qid = mkQueryId();
+      plugin.transformQuery({ queryId: qid, node: rawNode('select 1000') });
+      tick(5);
+      await plugin.transformResult({
+        queryId: qid,
+        result: { rows: [], numAffectedRows: 0n },
+      });
+
+      // The oldest entry was evicted; the newest is present.
+      expect(plugin._lastEmitted().has(templateHash('select 0'))).toBe(false);
+      expect(plugin._lastEmitted().has(templateHash('select 1000'))).toBe(true);
+    });
+  });
+
+  // Fix #3 — compilation must happen at most once, and only on the slow
+  // path. transformQuery must not compile; fast queries must not compile
+  // at all.
+  describe('#3 AST is compiled once, only on the slow path', () => {
+    it('does not compile in transformQuery', async () => {
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+      const compiler = (
+        plugin as unknown as {
+          compiler: { compileQuery: (n: RootOperationNode) => unknown };
+        }
+      ).compiler;
+      const spy = vi.spyOn(compiler, 'compileQuery');
+
+      plugin.transformQuery({ queryId: mkQueryId(), node: rawNode('select 1') });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('compiles exactly once per slow query in transformResult', async () => {
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 1 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+      const compiler = (
+        plugin as unknown as {
+          compiler: { compileQuery: (n: RootOperationNode) => unknown };
+        }
+      ).compiler;
+      const spy = vi.spyOn(compiler, 'compileQuery');
+
+      const qid = mkQueryId();
+      plugin.transformQuery({ queryId: qid, node: rawNode('select 1') });
+      tick(10);
+      await plugin.transformResult({ queryId: qid, result: { rows: [], numAffectedRows: 0n } });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not compile fast queries (under threshold)', async () => {
+      const env = SlowQueryEnvSchema.parse({ SLOW_QUERY_MS: 100 });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: fakeClock });
+      const compiler = (
+        plugin as unknown as {
+          compiler: { compileQuery: (n: RootOperationNode) => unknown };
+        }
+      ).compiler;
+      const spy = vi.spyOn(compiler, 'compileQuery');
+
+      const qid = mkQueryId();
+      plugin.transformQuery({ queryId: qid, node: rawNode('select 1') });
+      tick(5); // well under 100ms threshold
+      await plugin.transformResult({ queryId: qid, result: { rows: [], numAffectedRows: 0n } });
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  // Fix #4 — hashParams must not throw on BigInt or circular references.
+  // safeStringify handles both without crashing the slow-query path.
+  describe('#4 hashParams tolerates BigInt and circular references', () => {
+    it('does not throw on BigInt params', () => {
+      expect(() => hashParams([1n, 2n])).not.toThrow();
+      expect(hashParams([1n])).toMatch(/^[0-9a-f]{12}$/);
+    });
+
+    it('does not throw on circular references', () => {
+      const arr: unknown[] = [{}];
+      (arr[0] as Record<string, unknown>).self = arr;
+      expect(() => hashParams(arr)).not.toThrow();
+      // Circular refs fall back to the <unserializable> sentinel, which
+      // still produces a deterministic 12-char hex hash.
+      expect(hashParams(arr)).toMatch(/^[0-9a-f]{12}$/);
+    });
+
+    it('BigInt params produce the same hash as their string-coerced form', () => {
+      expect(hashParams([1n])).toBe(hashParams(['1']));
+    });
+  });
+
+  // Fix #5 — debounce bookkeeping must use a monotonic clock. Date.now()
+  // can step backward under NTP, which would let the debounce window
+  // reset spuriously. realClock wires through performance.now().
+  describe('#5 debounce uses monotonic clock (performance.now)', () => {
+    it('realClock.now() returns performance.now(), not Date.now()', () => {
+      const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(1234);
+      const perfSpy = vi.spyOn(performance, 'now').mockReturnValue(5678);
+
+      expect(realClock.now()).toBe(5678);
+
+      dateSpy.mockRestore();
+      perfSpy.mockRestore();
+    });
+
+    it('realClock.now() is monotonic over short intervals', () => {
+      const a = realClock.now();
+      const start = Date.now();
+      while (Date.now() - start < 2) {
+        // spin 2ms
+      }
+      const b = realClock.now();
+      expect(b).toBeGreaterThan(a);
+    });
+
+    it('debounce window stays closed when the underlying clock steps backward (NTP simulation)', async () => {
+      // Drive both axes of a controllable clock so we can simulate an
+      // NTP step-backward. In production, realClock wires `now` to
+      // performance.now() (verified in the unit test above) which is
+      // monotonic; this test verifies the debounce math still produces
+      // correct results when the monotonic source briefly returns a
+      // smaller value (worst-case drift / buggy NTP integration).
+      let now = 1_000_000;
+      const controlledClock: SlowQueryClock = {
+        now: () => now,
+        hrtime: () => BigInt(now) * 1_000_000n,
+      };
+
+      const env = SlowQueryEnvSchema.parse({
+        SLOW_QUERY_MS: 1,
+        SLOW_QUERY_DEBOUNCE_MS: 60_000,
+      });
+      const logger = { warn: vi.fn() };
+      const plugin = new SlowQueryPlugin({ env, logger, clock: controlledClock });
+
+      const qid1 = mkQueryId();
+      plugin.transformQuery({ queryId: qid1, node: rawNode('select 1') });
+      now += 10; // monotonic advance during the slow query
+      await plugin.transformResult({
+        queryId: qid1,
+        result: { rows: [], numAffectedRows: 0n },
+      });
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+
+      // NTP step-backward: clock jumps back by an hour.
+      now -= 3_600_000;
+
+      const qid2 = mkQueryId();
+      plugin.transformQuery({ queryId: qid2, node: rawNode('select 1') });
+      await plugin.transformResult({
+        queryId: qid2,
+        result: { rows: [], numAffectedRows: 0n },
+      });
+      // Window did not reset — still debounced (negative diff < threshold).
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 
 import { DefaultQueryCompiler } from 'kysely';
 import type {
@@ -26,7 +27,8 @@ import { getActiveTraceContext } from '../observability/otel.js';
  * - traceId/spanId attached only when an active OTel span is sampled
  *   (graceful fallback when OTEL_ENABLED=false).
  * - Hot path: only branches when the elapsed clock exceeds threshold;
- *   fast queries never serialise params or call into the redact list.
+ *   fast queries never compile the AST, serialise params, or call into
+ *   the redact list.
  *
  * ponytail: thresholds + redact paths + debounce window are the
  * production-relevant knobs; everything else is test wiring.
@@ -51,16 +53,17 @@ export interface SlowQueryLogger {
 }
 
 export interface SlowQueryClock {
-  /** Wall-clock millisecond timestamp used for debounce bookkeeping. */
+  /** Monotonic millisecond timestamp used for debounce bookkeeping. */
   now: () => number;
   /** Monotonic nanosecond timestamp used for elapsed measurement. */
   hrtime: () => bigint;
 }
 
-/** Production defaults — wall clock for debounce, monotonic hrtime for
- *  elapsed. Tests inject a fake clock to control both axes deterministically. */
+/** Production defaults — performance.now() for debounce (monotonic ms,
+ *  unaffected by NTP step / clock skew), hrtime for elapsed. Tests inject
+ *  a fake clock to control both axes deterministically. */
 export const realClock: SlowQueryClock = {
-  now: () => Date.now(),
+  now: () => performance.now(),
   hrtime: () => process.hrtime.bigint(),
 };
 
@@ -80,20 +83,35 @@ interface PendingQuery {
   /** Nanosecond timestamp captured at transformQuery time, sourced from
    *  the injected clock (defaults to `process.hrtime.bigint()`). */
   startNs: bigint;
-  /** Captured at transformQuery time so transformResult never re-walks
-   *  the AST on the slow path. Falls back to '<compile-error>' if the
-   *  Kysely compiler throws on an unexpected node (defensive: never
-   *  break the actual query). */
-  sql: string;
-  paramCount: number;
-  /** SHA-256 prefix (12 hex chars) of the JSON-serialised param array.
-   *  Traceability, never raw. */
-  paramsHash: string;
+  /** Raw AST node — compilation is deferred to the slow path so fast
+   *  queries never pay the Kysely compiler cost. The WeakMap entry is
+   *  deleted in transformResult, so this only lives until the query
+   *  completes (success or error). */
+  node: RootOperationNode;
+}
+
+/** Bounded FIFO bucket for the per-template debounce Map. Map preserves
+ *  insertion order, so the oldest debounce key is the first evicted
+ *  once we hit the cap. Tests don't need to know this number. */
+const MAX_TRACKED = 1000;
+
+/** JSON.stringify that survives BigInt (stringified via replacer) and
+ *  circular refs (caught and replaced with a sentinel). Used by hashParams
+ *  so an adversarial parameter can't crash the slow-query path. */
+function safeStringify(value: unknown): string {
+  try {
+    return (
+      JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) ??
+      '<unserializable>'
+    );
+  } catch {
+    return '<unserializable>';
+  }
 }
 
 /** Public for testing — keeps the production code free of test-only asserts. */
 export function hashParams(params: ReadonlyArray<unknown>): string {
-  return createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 12);
+  return createHash('sha256').update(safeStringify(params)).digest('hex').slice(0, 12);
 }
 
 /** Template hash used as the debounce bucket key. 16 hex chars = 64 bits,
@@ -113,9 +131,9 @@ export class SlowQueryPlugin implements KyselyPlugin {
    *  is fine for the template hash + sql_chars metadata we log (we never
    *  log the SQL body itself, only its SHA-256 prefix). */
   private readonly compiler = new DefaultQueryCompiler();
-  /** Last-emit timestamp per template hash (ms). Pruned implicitly via
-   *  the monotonic clock; in long-running processes this is bounded by
-   *  the cardinality of distinct slow queries. */
+  /** Last-emit timestamp per template hash (ms, monotonic source).
+   *  Bounded at MAX_TRACKED via FIFO eviction; long-running processes
+   *  with high query cardinality stay memory-bounded. */
   private readonly lastEmitted = new Map<string, number>();
   /** WeakMap so cancelled queries don't leak entries. Kysely guarantees
    *  that every transformQuery is paired with a transformResult for the
@@ -133,25 +151,14 @@ export class SlowQueryPlugin implements KyselyPlugin {
   }
 
   transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
-    try {
-      const compiled = this.compiler.compileQuery(args.node);
-      this.pending.set(args.queryId, {
-        startNs: this.clock.hrtime(),
-        sql: compiled.sql,
-        paramCount: compiled.parameters.length,
-        paramsHash: hashParams(compiled.parameters),
-      });
-    } catch {
-      // Don't let observability break the query path. The pending slot
-      // still records a start so transformResult can branch on elapsed
-      // and skip logging for this query.
-      this.pending.set(args.queryId, {
-        startNs: this.clock.hrtime(),
-        sql: '<compile-error>',
-        paramCount: 0,
-        paramsHash: '',
-      });
-    }
+    // Capture timing + raw AST only; compilation is deferred to the
+    // slow path in transformResult. The pending slot is deleted as
+    // soon as transformResult fires, so an orphan from a cancelled
+    // query is freed when the queryId object is GC'd.
+    this.pending.set(args.queryId, {
+      startNs: this.clock.hrtime(),
+      node: args.node,
+    });
     return args.node;
   }
 
@@ -162,25 +169,53 @@ export class SlowQueryPlugin implements KyselyPlugin {
     if (!pending) return args.result;
 
     const elapsedMs = Number(this.clock.hrtime() - pending.startNs) / 1e6;
-    if (elapsedMs >= this.thresholdMs) {
-      this.maybeEmit(pending, elapsedMs);
+    if (elapsedMs < this.thresholdMs) return args.result;
+
+    // Lazy compile: only spend Kysely compiler cycles when this query
+    // actually crossed the slow threshold. Fast queries never compile.
+    let compiled: { sql: string; parameters: ReadonlyArray<unknown> };
+    try {
+      compiled = this.compiler.compileQuery(pending.node);
+    } catch {
+      // Defensive: an unexpected AST node should never break the
+      // query path. Log a sentinel so operators see it happened.
+      compiled = { sql: '<compile-error>', parameters: [] };
+    }
+    try {
+      this.maybeEmit(compiled, elapsedMs);
+    } catch (e) {
+      // Never let observability break the caller. The logger is the
+      // most likely throw site (otel / pino serialization edge cases)
+      // but getTrace + hashParams are also covered by this guard.
+      console.error('slow-query plugin: emit failed', e);
     }
     return args.result;
   }
 
-  private maybeEmit(p: PendingQuery, elapsedMs: number): void {
-    const bucket = templateHash(p.sql);
+  private maybeEmit(
+    compiled: { sql: string; parameters: ReadonlyArray<unknown> },
+    elapsedMs: number,
+  ): void {
+    const bucket = templateHash(compiled.sql);
     const now = this.clock.now();
     const last = this.lastEmitted.get(bucket);
     if (last !== undefined && now - last < this.debounceMs) return;
+    // Bound the bucket Map: under load (1k+ distinct slow queries)
+    // the unbounded Map would leak indefinitely. FIFO eviction via
+    // insertion order is acceptable for debounce bookkeeping — the
+    // oldest debounce key is the most stale.
+    if (this.lastEmitted.size >= MAX_TRACKED) {
+      const oldest = this.lastEmitted.keys().next().value;
+      if (oldest !== undefined) this.lastEmitted.delete(oldest);
+    }
     this.lastEmitted.set(bucket, now);
 
     const slowQuery: Record<string, unknown> = {
       duration_ms: Math.round(elapsedMs),
       sql_hash: bucket,
-      sql_chars: p.sql.length,
-      param_count: p.paramCount,
-      params_hash: p.paramsHash || undefined,
+      sql_chars: compiled.sql.length,
+      param_count: compiled.parameters.length,
+      params_hash: hashParams(compiled.parameters) || undefined,
     };
     // Opt-in: only attach the raw (already-redacted) params when the
     // operator explicitly enables it. The pino redact list covers
