@@ -483,6 +483,11 @@ export interface NotificationDeliveriesTable {
   // 0036 — added for the pending-deliveries sweeper (gh issue #1). The fan-out
   // insert relies on the DB DEFAULT now() so application code stays unchanged.
   created_at: ColumnType<Date, Date | string | undefined, never>;
+  // 0037 — dead-letter bound for the sweeper. Increments on each skip; once
+  // it reaches MAX_SWEEP_ATTEMPTS the sweeper flips status to 'failed' with
+  // error_code = 'sweep_dead_letter' so the row surfaces in T57's DLQ viewer.
+  sweep_attempts: Generated<number>;
+  last_swept_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 // 0033 — single-use email sign-in tokens. TTL 15 min from issuance;
