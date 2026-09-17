@@ -297,6 +297,7 @@ describe('beforeSendForSentry', () => {
     ['Italian landline', 'call 02 1234 5678'],
     ['time stamp', 'My flight is at 333pm'],
     ['random number', 'Lorem ipsum 12345'],
+    ['year-shaped E.164', 'Release scheduled for 2026, was +1 2024 before'],
   ])('does NOT over-redact benign strings: %s', (_label, message) => {
     const evt = { message } as never;
     const out = beforeSendForSentry(evt, {} as never) as never as { message: string };

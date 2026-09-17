@@ -174,7 +174,7 @@ export function verifyRedaction(): string[] {
  * breaks breadcrumbs and message context — equally bad as a leak.
  */
 export function verifyNoOverRedaction(): string[] {
-  const benign = 'My flight is at 333pm, ref 12345, call later';
+  const benign = 'My flight is at 333pm, ref 12345, call later. Release +1 2024 next quarter.';
   const evt = { message: benign } as never;
   const out = beforeSendForSentry(evt, {} as never) as never as { message: string } | null;
   if (out === null) return ['over-redaction fixture was dropped instead of being scrubbed'];

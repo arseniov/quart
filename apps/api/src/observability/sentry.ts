@@ -25,7 +25,7 @@ const VAT_RE = /\b\d{11}\b/g;
 // 4-digit numbers — false-positive risk outweighs the leak value. Add when a
 // landline-shaped leak is reported.
 const PHONE_RE =
-  /(?:\+39\s?\d{2,3}\s?\d{3,4}\s?\d{3,4})|(?:\+\d{1,3}(?:[\s.-]?\d{2,4}){2,5})|(?:\b3\d{2}[\s.-]?\d{3}[\s.-]?\d{3,4}\b)/g;
+  /(?:\+39\s?\d{2,3}\s?\d{3,4}\s?\d{3,4})|(?:\+\d{1,3}(?:[\s.-]?\d){6,14})|(?:\b3\d{2}[\s.-]?\d{3}[\s.-]?\d{3,4}\b)/g;
 
 // PII key set — matched case-insensitively. Add to it when new auth or PII fields appear.
 const PII_KEYS: ReadonlySet<string> = new Set([
