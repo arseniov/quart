@@ -152,27 +152,49 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
       .catch(() => undefined);
   };
 
-  // Naive SQL splitter that respects `$$...$$` dollar quoting and `--`
-  // line comments. Good enough for our migrations: no string literals
-  // contain `;`, no nested `/* */`, no `DO $$ ... $$` with `;` inside
-  // the dollar-quoted body except for terminators (which `$$` suppresses).
+  // SQL splitter that respects `--` line comments, `$$...$$` dollar
+  // quoting, and `'...'` / `"..."` single/double-quoted strings (skips
+  // `;` inside any of those). Doesn't handle `E'\\b'` escapes or
+  // `/* */` block comments — add if a migration needs them.
   const splitStatements = (sql: string): string[] => {
     const out: string[] = [];
     let buf = '';
     let i = 0;
     let inDollar = false;
+    let quote: "'" | '"' | null = null;
     while (i < sql.length) {
       const c = sql[i] ?? '';
       const next = sql[i + 1] ?? '';
+      if (quote) {
+        buf += c;
+        // SQL escape: '' inside a ' string is a literal quote, not the
+        // end. Same for "" inside " strings.
+        if (c === quote && next === quote) {
+          buf += next;
+          i += 2;
+          continue;
+        }
+        if (c === quote) quote = null;
+        i += 1;
+        continue;
+      }
       if (c === '-' && next === '-') {
-        while (i < sql.length && sql[i] !== '\n') i += 1;
-        buf += '\n';
+        while (i < sql.length && sql[i] !== '\n') {
+          buf += sql[i];
+          i += 1;
+        }
         continue;
       }
       if (c === '$' && next === '$') {
         inDollar = !inDollar;
         buf += '$$';
         i += 2;
+        continue;
+      }
+      if (c === "'" || c === '"') {
+        quote = c;
+        buf += c;
+        i += 1;
         continue;
       }
       if (c === ';' && !inDollar) {
