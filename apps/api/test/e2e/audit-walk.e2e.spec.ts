@@ -180,25 +180,27 @@ describe('audit chain walk (e2e)', () => {
     const d = data!;
 
     // Snapshot the chain length before tampering so the assertion can pin
-    // down the broken row by id.
+    // down the broken row by id. With 0040's unified global-id chain,
+    // every new row chains from the previous id, so a fresh row hashes
+    // correctly regardless of city_id.
     const before = (await sql<{ c: number }>`SELECT count(*)::int AS c FROM audit_log`.execute(db))
       .rows[0]?.c;
 
-    // Insert a row whose prev_hash chains from the previous row's row_hash
-    // (so the walker reaches it) but whose row_hash is bogus (so it breaks
-    // at THIS row, not an earlier one). citizenB's city matches its tenant.
-    const lastRowHash = (
-      await sql<{ row_hash: string }>`SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1`.execute(db)
-    ).rows[0]?.row_hash ?? GENESIS_PREV_HASH;
-    const tamperedId = (
-      await sql`INSERT INTO audit_log (
+    // Insert a row whose hashes the trigger computes validly (we cannot
+    // bypass it on the INSERT path — it overrides prev/row_hash). Then
+    // UPDATE the row's row_hash to a bogus value. UPDATE is only allowed
+    // for the bootstrap role that owns the table (quart_app is INSERT-
+    // only by 0014), so the test runs as the e2e harness's bootstrap
+    // connection and models the same tamper surface an operator would
+    // have to defend against.
+    const tamperedId = (await sql`INSERT INTO audit_log (
           city_id, actor_user_id, action, target_type, target_id, request_id,
           payload_canonical_sha256, payload_redacted, prev_hash, row_hash, key_version_id
         ) VALUES (
           ${d.citizenB.cityId}, ${d.citizenB.id}, 'test.tamper', 'synthetic', ${randomUUID()}, ${randomUUID()},
-          ${'b'.repeat(64)}, '{}'::jsonb, ${lastRowHash}, ${'c'.repeat(64)}, ${await activeAuditKeyVersionId(db)}
-        ) RETURNING id`.execute(db)
-    ).rows[0]?.id;
+          ${'b'.repeat(64)}, '{}'::jsonb, ${GENESIS_PREV_HASH}, ${GENESIS_PREV_HASH}, ${await activeAuditKeyVersionId(db)}
+        ) RETURNING id`.execute(db)).rows[0]?.id;
+    await sql`UPDATE audit_log SET row_hash = ${'c'.repeat(64)} WHERE id = ${tamperedId}`.execute(db);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fastify = (booted.app as any).getHttpAdapter().getInstance() as FastifyLike;

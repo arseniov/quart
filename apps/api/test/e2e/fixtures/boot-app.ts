@@ -151,6 +151,20 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
       )
       .catch(() => undefined);
   };
+  // gh #8 prerequisite: 0038 seeds a sentinel city with slug `__system`,
+  // but `cities_slug_check` (from 0001) forbids underscores. 0001 installs
+  // the check inline — drop it AFTER 0001 finishes so 0038's INSERT lands
+  // on a fresh boot. Idempotent.
+  let droppedAfter0001 = false;
+  const dropCitiesSlugCheck = async (): Promise<void> => {
+    await db
+      .executeQuery(
+        CompiledQuery.raw(
+          `ALTER TABLE cities DROP CONSTRAINT IF EXISTS cities_slug_check`,
+        ),
+      )
+      .catch(() => undefined);
+  };
 
   // SQL splitter that respects `--` line comments, `$$...$$` dollar
   // quoting, and `'...'` / `"..."` single/double-quoted strings (skips
@@ -261,6 +275,13 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
         if (!droppedAfter0024 && name === '0024_fix_permissions_code_constraint') {
           await dropPermissionsCheck();
           droppedAfter0024 = true;
+        }
+        // 0001 installs cities_slug_check inline; drop it once after the
+        // migration commits so 0038's sentinel insert lands. Same pattern
+        // as the permissions shim above. Idempotent.
+        if (!droppedAfter0001 && name === '0001_geography') {
+          await dropCitiesSlugCheck();
+          droppedAfter0001 = true;
         }
         failures.delete(name);
       } catch (err) {
