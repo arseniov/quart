@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
 import { computeRowHash, GENESIS_PREV_HASH } from '@quart/db';
+import { describe, it, expect, vi } from 'vitest';
 
 import { VerifyController } from '../../src/audit/verify.controller.js';
 

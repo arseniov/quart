@@ -1,4 +1,5 @@
 import { Controller, Get, Header } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   Counter,
@@ -8,8 +9,7 @@ import {
   collectDefaultMetrics,
 } from 'prom-client';
 
-import { QueueService } from '../queue/queue.service.js';
-import { ApiTags } from '@nestjs/swagger';
+import type { QueueService } from '../queue/queue.service.js';
 
 /**
  * Process-local Prometheus registry. `collectDefaultMetrics()` registers the

@@ -8,6 +8,7 @@ import type { FastifyRequest } from 'fastify';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
+
 import { PERMISSIONS_KEY, type PermissionRequirement } from './permissions.decorator.js';
 
 interface RequestWithAuth {

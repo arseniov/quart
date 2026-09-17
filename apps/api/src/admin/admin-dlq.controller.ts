@@ -39,7 +39,7 @@ const Q = z.object({
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminDlqController {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+   
   constructor(private readonly queues: QueueService) {}
 
   @Get()

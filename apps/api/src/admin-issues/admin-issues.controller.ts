@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -38,9 +40,7 @@ import type { AdminIssue } from './admin-issues.service.js';
 // `design:paramtypes` for the AdminIssuesService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AdminIssuesService } from './admin-issues.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;

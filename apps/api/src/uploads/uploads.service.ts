@@ -1,5 +1,6 @@
-import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+
+import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import type { Client as MinioClient } from 'minio';
 import sharp from 'sharp';
 

@@ -6,8 +6,8 @@ import { AuthModule } from '../auth/auth.module.js';
 import { ConfigService } from '../config/config.service.js';
 import { DbModule } from '../db/db.module.js';
 
-import { MINIO_CLIENT, UploadsService } from './uploads.service.js';
 import { UploadsController } from './uploads.controller.js';
+import { MINIO_CLIENT, UploadsService } from './uploads.service.js';
 
 @Module({
   imports: [AuthModule, AuditModule, DbModule],

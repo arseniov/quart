@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import {
   Body, Controller, HttpCode, HttpStatus, Post, Req, UnauthorizedException, UseGuards, UsePipes,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 
 import type { AuthUser } from './decorators/current-user.decorator.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
@@ -17,9 +19,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { JwtService } from './jwt.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { MfaService } from './mfa.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const EnrollSchema = z.object({}).strict(); // body shape only — verify happens after QR scan
 const VerifySchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
 const BackupSchema = z.object({ code: z.string().regex(/^[0-9a-f]{32}$/) });

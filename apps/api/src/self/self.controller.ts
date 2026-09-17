@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -13,9 +15,7 @@ import { UpdateProfileSchema, type UpdateProfileBody } from './self.dto.js';
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SelfService } from './self.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;

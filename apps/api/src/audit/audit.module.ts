@@ -2,8 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module.js';
 
-import { AuditService } from './audit.service.js';
 import { AuditInterceptor } from './audit.interceptor.js';
+import { AuditService } from './audit.service.js';
 import { VerifyController } from './verify.controller.js';
 
 @Module({

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { sql } from 'kysely';
 import type { TenantContext } from '@quart/shared-types';
+import { sql } from 'kysely';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor — see queue.module.ts for precedent.

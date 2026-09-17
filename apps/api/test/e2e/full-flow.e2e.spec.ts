@@ -78,7 +78,7 @@ describe('full triage flow (e2e)', () => {
     // ponytail: pin the active audit HMAC key to the env value, same
     // shim audit-walk.e2e.spec.ts uses, so audit/verify agrees with
     // what the BEFORE-INSERT trigger stamps on rows.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const booted = boot as Exclude<CreateTestAppResult, { skipped: true }>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (booted.db as any)
@@ -120,7 +120,7 @@ describe('full triage flow (e2e)', () => {
     throw new Error('test precondition not met (docker or seed failure)');
   };
   const fastify = (): FastifyLike =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (boot as Exclude<CreateTestAppResult, { skipped: true }>).app.getHttpAdapter()
       .getInstance() as unknown as FastifyLike;
 

@@ -34,7 +34,7 @@ interface IssueCountRow {
 @ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
 export class AdminDashboardController {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+   
   constructor(private readonly db: DbService) {}
 
   @Get()

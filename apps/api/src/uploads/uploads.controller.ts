@@ -1,26 +1,28 @@
 import { BadRequestException, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { TenantContext } from '@quart/shared-types';
+import type { FastifyRequest } from 'fastify';
 
-import { CurrentTenant } from '../common/decorators/current-tenant.decorator.js';
+import type { AuditService } from '../audit/audit.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CurrentTenant } from '../common/decorators/current-tenant.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the AuditService constructor parameter.
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { AuditService } from '../audit/audit.service.js';
+ 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the DbService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
+
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the UploadsService constructor parameter.
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { UploadsService } from './uploads.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-
+ 
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
+
+import type { UploadsService } from './uploads.service.js';
+
 /**
  * Fastify multipart — `main.ts` registers `@fastify/multipart` globally and
  * `req.file()` yields the first part. We pass `limits.fileSize` so busboy

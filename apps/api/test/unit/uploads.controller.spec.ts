@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { UploadsController } from '../../src/uploads/uploads.controller.js';
-import { UploadsService } from '../../src/uploads/uploads.service.js';
+import type { UploadsService } from '../../src/uploads/uploads.service.js';
 
 function makeReq(opts: {
   file?: ReturnType<typeof vi.fn>;

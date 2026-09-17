@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
@@ -15,11 +16,10 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const PatchKeySchema = z.object({
   locale: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
   value: z.string().min(0).max(10_000),

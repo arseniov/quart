@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -11,11 +12,10 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 const AuditQuerySchema = z.object({
   actor: z.string().uuid().optional(),
   action: z.string().optional(),

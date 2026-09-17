@@ -1,4 +1,5 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { computeRowHash, GENESIS_PREV_HASH } from '@quart/db';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -7,8 +8,6 @@ import { MfaGuard } from '../auth/mfa.guard.js';
 import { ConfigService } from '../config/config.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 // ponytail: ceiling for the chain walk — full-table reads are fine until the
 // table grows past this. Bump + paginate if production logs exceed it.

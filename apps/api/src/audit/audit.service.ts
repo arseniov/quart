@@ -1,6 +1,6 @@
+import { Injectable } from '@nestjs/common';
 import { canonicalSha256, computeRowHash, GENESIS_PREV_HASH } from '@quart/db';
 import type { DB } from '@quart/db';
-import { Injectable } from '@nestjs/common';
 import type { Kysely, Transaction } from 'kysely';
 import { sql } from 'kysely';
 

@@ -39,7 +39,7 @@ describe('pii roundtrip (e2e)', () => {
     // The harness already set KEK_BASE64 in env; the `app.kek_material` GUC
     // is per-session so we have to SET LOCAL on the same connection the
     // query runs on. Kysely's per-query `connection()` call wraps it.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     piiDb = createDb({ connectionString: process.env.DATABASE_URL! }) as unknown as Kysely<DB>;
   }, 120_000);
 

@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
@@ -6,14 +7,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
 import { CreateCommentBody, ListCommentsQuery, ReactBody, UpdateCommentBody } from './comments.dto.js';
-import { CommentsService } from './comments.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { CommentsService } from './comments.service.js';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;
   tenant: TenantContext;

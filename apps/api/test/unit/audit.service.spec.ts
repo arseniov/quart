@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AuditService, SYSTEM_AUDIT_ACTOR, SYSTEM_AUDIT_CITY_ID } from '../../src/audit/audit.service.js';
 import { computeRowHash, GENESIS_PREV_HASH } from '@quart/db';
+import { describe, it, expect, vi } from 'vitest';
+
+import { AuditService, SYSTEM_AUDIT_ACTOR, SYSTEM_AUDIT_CITY_ID } from '../../src/audit/audit.service.js';
 
 // ponytail: Kysely query-builder shape can't be expressed statically without
 // the real types; the stubs only need to return the rows buildRow reads.

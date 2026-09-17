@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
-import { type Observable } from 'rxjs';
 import type { FastifyRequest } from 'fastify';
+import { type Observable } from 'rxjs';
+
 import { parseImpersonationHeader } from './decorators/impersonation.decorator.js';
 
 @Injectable()

@@ -2,8 +2,8 @@ import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
-import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
 import { AdminModule } from './admin/admin.module.js';
+import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
 import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -15,8 +15,8 @@ import { TenantContextInterceptor } from './common/tenant-context.interceptor.js
 import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
-import { IdeasModule } from './ideas/ideas.module.js';
 import { I18nModule } from './i18n/i18n.module.js';
+import { IdeasModule } from './ideas/ideas.module.js';
 import { IssuesModule } from './issues/issues.module.js';
 import { LoggerModule } from './logger/logger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -50,7 +50,7 @@ function parseThrottlerEnvOrDefault() {
   try {
     return ThrottlerEnvSchema.parse(process.env);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[throttler] env parse failed; disabling throttler:', err);
     return ThrottlerEnvSchema.parse({ THROTTLE_ENABLED: false });
   }

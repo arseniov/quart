@@ -1,10 +1,12 @@
 import { Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -17,9 +19,7 @@ import {
 // `design:paramtypes` for the controller constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { NotificationsService } from './notifications.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 interface AuthedRequest extends FastifyRequest {
   tenant: TenantContext;
 }

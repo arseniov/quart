@@ -3,9 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MfaController } from '../../src/auth/mfa.controller.js';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { JwtService } from '../../src/auth/jwt.service.js';
+import { MfaController } from '../../src/auth/mfa.controller.js';
 import type { MfaService } from '../../src/auth/mfa.service.js';
 
 const jwtKey = randomBytes(32).toString('hex');

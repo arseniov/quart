@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -21,9 +23,7 @@ import type { CreateBody, ListQuery, UpdateBody, VoteBody } from './polls.dto.js
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PollsService } from './polls.service.js';
 import type { Poll } from './polls.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('polls')
 @ApiGlobalResponses()
 @ApiTags('polls')

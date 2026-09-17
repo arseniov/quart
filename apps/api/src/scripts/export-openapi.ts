@@ -61,6 +61,7 @@ import { MfaController } from '../auth/mfa.controller.js';
 import { PhoneOtpController } from '../auth/phone-otp.controller.js';
 import { CitiesController } from '../cities/cities.controller.js';
 import { CommentsController } from '../comments/comments.controller.js';
+import { readAppVersion } from '../common/app-version.js';
 import { HealthController } from '../health/health.controller.js';
 import { I18nController } from '../i18n/i18n.controller.js';
 import { IdeasController } from '../ideas/ideas.controller.js';
@@ -82,7 +83,6 @@ import {
   SWAGGER_API_COOKIE_NAME,
   SWAGGER_BEARER_NAME,
 } from '../openapi/swagger.config.js';
-import { readAppVersion } from '../common/app-version.js';
 import { PollsController } from '../polls/polls.controller.js';
 import { SavedItemsController } from '../saved-items/saved-items.controller.js';
 import { SearchController } from '../search/search.controller.js';

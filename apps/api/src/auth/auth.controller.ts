@@ -1,4 +1,5 @@
 import { All, Controller, Req, Res } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { SkipTenant } from '../common/decorators/skip-tenant.decorator.js';
@@ -8,7 +9,6 @@ import { SkipTenant } from '../common/decorators/skip-tenant.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service.js';
 import { Public } from './public.decorator.js';
-import { ApiTags } from '@nestjs/swagger';
 
 /**
  * Mounts Better Auth's HTTP handler at /auth/*.

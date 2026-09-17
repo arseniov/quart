@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseImpersonationHeader } from '../../src/auth/decorators/impersonation.decorator.js';
 
 describe('parseImpersonationHeader', () => {

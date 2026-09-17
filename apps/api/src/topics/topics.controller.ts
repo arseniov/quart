@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -15,9 +17,7 @@ import type { Topic } from './topics.service.js';
 // `design:paramtypes` for the TopicsService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TopicsService } from './topics.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 @Controller('topics')
 @ApiGlobalResponses()
 @ApiTags('topics')

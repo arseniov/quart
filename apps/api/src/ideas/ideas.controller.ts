@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
@@ -28,9 +30,7 @@ import type { Idea, IdeaComment } from './ideas.service.js';
 // `design:paramtypes` for the IdeasService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { IdeasService } from './ideas.service.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 // Class-level guards apply to every route. Public read endpoints (list/get)
 // use @Public-decorated equivalents via @RequirePermission which the
 // RbacGuard treats as "no requirement → allow" when user is set. JwtAuthGuard

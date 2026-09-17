@@ -1,7 +1,8 @@
 import { DocumentBuilder, type SwaggerCustomOptions } from '@nestjs/swagger';
 
-import { readAppVersion } from '../common/app-version.js';
 import { cookieNameFor } from '../auth/cookie.policy.js';
+import { readAppVersion } from '../common/app-version.js';
+
 import {
   type SwaggerEnv,
   parseSwaggerServers,

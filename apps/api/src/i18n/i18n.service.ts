@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
-import { AuditService } from '../audit/audit.service.js';
+import type { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the DbService constructor parameter.
