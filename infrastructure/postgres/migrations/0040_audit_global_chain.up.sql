@@ -20,6 +20,16 @@
 --
 -- The advisory lock (`pg_advisory_xact_lock`) was already global in 0038,
 -- so concurrency semantics survive — only the prev_hash lookup changes.
+--
+-- RLS-bypass contract: SECURITY DEFINER makes the chain-head SELECT run as
+-- the function owner. That owner MUST bypass RLS (BYPASSRLS attribute) for
+-- the SELECT to see rows in every city + the sentinel row. The migration
+-- bootstrap role `quart` is a Postgres image SUPERUSER (which implicitly
+-- bypasses RLS) today, so the trigger works — but if the role is ever
+-- downgraded to non-superuser, BYPASSRLS must be granted explicitly:
+--     ALTER ROLE quart BYPASSRLS;
+-- This dependency is not silent: a missing bypass surfaces as the chain
+-- silently forking at GENESIS on the first row of each city.
 SET search_path = public, quart_security;
 
 CREATE OR REPLACE FUNCTION quart_security.audit_log_chain_stamp()
