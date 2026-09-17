@@ -36,4 +36,8 @@ jobs:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run lint typecheck test --filter=...[origin/main]
+      - name: OpenAPI drift check
+        run: pnpm --filter @quart/api check:openapi-drift
+      - name: Sentry redaction check
+        run: pnpm --filter @quart/api check:sentry-redaction
       - run: pnpm dlx gitleaks detect --redact --no-git -v

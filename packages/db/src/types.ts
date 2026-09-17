@@ -109,6 +109,22 @@ export interface MfaChallengesTable {
   consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
+// 0026 — backup codes + TOTP replay protection.
+// The TOTP secret itself is carried in the verified JWT (stateless), so
+// this row holds only backup-code hashes and a last_used_step timestamp.
+export interface MfaCredentialsTable {
+  id: Generated<string>;
+  user_id: string;
+  city_id: string;
+  type: 'totp';
+  label: string;
+  backup_codes_hash: string[];
+  backup_codes_used_at: ColumnType<unknown, unknown | undefined, unknown>; // jsonb
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+  enrolled_at: ColumnType<Date, Date | string | undefined, never>;
+  last_used_step: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+}
+
 // ============================================================================
 // 0003 RBAC
 // ============================================================================
@@ -329,6 +345,9 @@ export interface CommentReactionsTable {
 // ============================================================================
 
 export interface AuditLogTable {
+  // pg returns int8 (bigserial) as a JS string at runtime, even though this is
+  // typed `number` for the Kysely builder. Callers cast through `as never` /
+  // `String(...)` when they need a stable representation.
   id: Generated<number>; // bigserial
   city_id: string;
   actor_user_id: string | null;
@@ -352,9 +371,12 @@ export interface AuditLogTable {
 
 export interface AuditAnchorsTable {
   id: Generated<string>;
-  merkle_root: string; // char(64)
-  row_range_start: number; // bigint
-  row_range_end: number; // bigint
+  // SHA-256 concatenation hash of the latest audit_log row_hash sequence.
+  // Renamed from `merkle_root` in 0029: it's not a Merkle tree root.
+  // pg returns int8 (bigserial) as a JS string — see the audit_log.id comment above.
+  anchor_hash: string; // char(64)
+  row_range_start: string; // bigint — pg returns int8 as string
+  row_range_end: string; // bigint — pg returns int8 as string
   tsa_response: Buffer;
   tsa_url: string;
   tsa_cert_sha256: string; // char(64)
@@ -400,7 +422,7 @@ export interface PiiKeyVersionsTable {
   id: Generated<string>;
   city_id: string;
   version: number;
-  status: 'active' | 'rotating' | 'retired' | 'pending';
+  status: 'active' | 'retiring' | 'retired'; // quart_security.key_status
   dek_encrypted: Buffer;
   kek_id: string;
   created_at: ColumnType<Date, Date | string | undefined, never>;
@@ -433,6 +455,12 @@ export interface PushSubscriptionsTable {
   locale: string;
   app_version: string;
   device_platform: 'ios' | 'android' | 'web';
+  // 'invalid' is set by the push worker when Expo rejects the token
+  // (DeviceNotRegistered / InvalidCredentials). Default 'active' for new rows.
+  status: Generated<'active' | 'invalid'>;
+  // Tracks when the worker last marked the token invalid (0031).
+  // Revocation (`revoked_at`) is user-initiated and orthogonal.
+  invalidated_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   revoked_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
@@ -440,11 +468,61 @@ export interface PushSubscriptionsTable {
 export interface NotificationDeliveriesTable {
   id: Generated<string>;
   notification_id: string;
-  push_subscription_id: string;
+  // Nullable from migration 0032 onward: email-channel rows don't reference a
+  // push_subscription. Channel discriminates push vs email rows.
+  push_subscription_id: string | null;
+  // Per-channel fan-out (T38): 'push' for Expo, 'email' for SES.
+  channel: Generated<'push' | 'email'>;
+  // Captured at fan-out time so the email worker is stateless and a later
+  // user.email change can't invalidate a pending retry.
+  recipient_email: string | null;
   status: 'pending' | 'delivered' | 'failed';
   error_code: string | null;
   attempts: Generated<number>;
   last_attempt_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  // 0036 — added for the pending-deliveries sweeper (gh issue #1). The fan-out
+  // insert relies on the DB DEFAULT now() so application code stays unchanged.
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+  // 0037 — dead-letter bound for the sweeper. Increments on each skip; once
+  // it reaches MAX_SWEEP_ATTEMPTS the sweeper flips status to 'failed' with
+  // error_code = 'sweep_dead_letter' so the row surfaces in T57's DLQ viewer.
+  sweep_attempts: Generated<number>;
+  last_swept_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+}
+
+// 0033 — single-use email sign-in tokens. TTL 15 min from issuance;
+// consumed_at marks the row as used. Admin-managed (no tenant RLS).
+export interface MagicLinksTable {
+  id: Generated<string>;
+  email: string;
+  token: string;
+  expires_at: ColumnType<Date, Date | string, Date | string>;
+  consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+}
+
+// 0034 — single-use password reset tokens. TTL 60 min. The token column
+// is unique; consumption is atomic via UPDATE-WHERE-RETURNING.
+export interface PasswordResetsTable {
+  id: Generated<string>;
+  user_id: string;
+  token: string;
+  expires_at: ColumnType<Date, Date | string, Date | string>;
+  consumed_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+}
+
+// ============================================================================
+// 0027 Saved items
+// ============================================================================
+
+export interface SavedItemsTable {
+  id: Generated<string>;
+  city_id: string;
+  user_id: string;
+  kind: 'issue' | 'idea' | 'poll';
+  target_id: string;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 
 // ============================================================================
@@ -492,6 +570,7 @@ export interface DB {
   auth_sessions: AuthSessionsTable;
   mfa_factors: MfaFactorsTable;
   mfa_challenges: MfaChallengesTable;
+  mfa_credentials: MfaCredentialsTable;
 
   permissions: PermissionsTable;
   roles: RolesTable;
@@ -527,6 +606,9 @@ export interface DB {
   notifications: NotificationsTable;
   push_subscriptions: PushSubscriptionsTable;
   notification_deliveries: NotificationDeliveriesTable;
+  saved_items: SavedItemsTable;
+  magic_links: MagicLinksTable;
+  password_resets: PasswordResetsTable;
 
   dsar_requests: DsarRequestsTable;
   feature_flags: FeatureFlagsTable;
