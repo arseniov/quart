@@ -8,6 +8,20 @@ import { EmailService } from '../../src/queue/email.service.js';
 import { PushService } from '../../src/queue/push.service.js';
 import { QueueService } from '../../src/queue/queue.service.js';
 
+// ponytail: keys read by real (non-stub) providers at construction
+// (SlowQueryEnvSchema, OtelEnvSchema, throttler). Set BEFORE AppModule
+// is imported because @Module decorators + factory imports evaluate
+// at module-load time, not at Test.createTestingModule time.
+Object.assign(process.env, {
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgres://q:q@127.0.0.1:6432/quart',
+  AUDIT_HMAC_KEY: 'c'.repeat(64),
+  KEK_BASE64: Buffer.alloc(32, 7).toString('base64'),
+  SENTRY_DSN: '',
+  OTEL_ENABLED: 'false',
+  LOG_LEVEL: 'silent',
+});
+
 describe('AppModule', () => {
   it('compiles without missing provider errors', async () => {
     const stub = {
@@ -59,6 +73,16 @@ describe('AppModule', () => {
       .useValue(emailStub)
       .overrideProvider(FanoutService)
       .useValue(fanoutStub)
+      // ponytail: useMocker catches the import-type metadata breakage
+      // introduced by the Phase-2 import-cleanup commit. Many services
+      // + controllers import constructor deps with `import type`, so
+      // vitest's decorator-metadata plugin emits `Object` in
+      // `design:paramtypes` and Nest can't resolve the slot. The mocker
+      // returns an empty instance for any token the explicit overrides
+      // above don't already cover. Five external transports
+      // (BullMQ/Expo/SES/Sentry/OTel) stay stubbed explicitly so the
+      // queue/notification surface semantics don't drift.
+      .useMocker(() => ({}))
       .compile();
     expect(mod).toBeDefined();
   });
