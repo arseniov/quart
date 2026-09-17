@@ -12,7 +12,10 @@ import { RequirePermission } from '../rbac/permissions.decorator.js';
 import { RbacGuard } from '../rbac/rbac.guard.js';
 
 import { CreateCommentBody, ListCommentsQuery, ReactBody, UpdateCommentBody } from './comments.dto.js';
-import type { CommentsService } from './comments.service.js';
+// Value (not `import type`) so vitest's decorator-metadata plugin emits
+// `design:paramtypes` for the CommentsService constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { CommentsService } from './comments.service.js';
 
 interface AuthedRequest extends FastifyRequest {
   user: AuthUser;

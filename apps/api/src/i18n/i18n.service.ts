@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
-import type { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
+// Value (not `import type`) so vitest's decorator-metadata plugin emits
+// `design:paramtypes` for the AuditService constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the DbService constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports

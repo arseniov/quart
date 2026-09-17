@@ -11,7 +11,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
  
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 
-import type { NotificationsSubscriber } from './notifications-subscriber.service.js';
+// Value (not `import type`) so vitest's decorator-metadata plugin emits
+// `design:paramtypes` for the NotificationsSubscriber constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { NotificationsSubscriber } from './notifications-subscriber.service.js';
 
 const HEARTBEAT_MS = 25_000;
 

@@ -73,16 +73,13 @@ describe('AppModule', () => {
       .useValue(emailStub)
       .overrideProvider(FanoutService)
       .useValue(fanoutStub)
-      // ponytail: useMocker catches the import-type metadata breakage
-      // introduced by the Phase-2 import-cleanup commit. Many services
-      // + controllers import constructor deps with `import type`, so
-      // vitest's decorator-metadata plugin emits `Object` in
-      // `design:paramtypes` and Nest can't resolve the slot. The mocker
-      // returns an empty instance for any token the explicit overrides
-      // above don't already cover. Five external transports
-      // (BullMQ/Expo/SES/Sentry/OTel) stay stubbed explicitly so the
-      // queue/notification surface semantics don't drift.
-      .useMocker(() => ({}))
+      // ponytail: .useMocker removed on 2026-09-17 after a follow-up
+      // commit reverted the import-cleanup conversions of constructor
+      // deps to value imports in 7 services/controllers. The mocker is
+      // no longer needed for the original failure mode but remains
+      // available as defensive coverage if a future import-type
+      // regression slips in.
+      // .useMocker(() => ({}))
       .compile();
     expect(mod).toBeDefined();
   });

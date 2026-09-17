@@ -9,7 +9,10 @@ import {
   collectDefaultMetrics,
 } from 'prom-client';
 
-import type { QueueService } from '../queue/queue.service.js';
+// Value (not `import type`) so vitest's decorator-metadata plugin emits
+// `design:paramtypes` for the QueueService constructor parameter.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { QueueService } from '../queue/queue.service.js';
 
 /**
  * Process-local Prometheus registry. `collectDefaultMetrics()` registers the

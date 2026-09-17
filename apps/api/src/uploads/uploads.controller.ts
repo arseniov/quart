@@ -3,7 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { TenantContext } from '@quart/shared-types';
 import type { FastifyRequest } from 'fastify';
 
-import type { AuditService } from '../audit/audit.service.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -21,7 +22,8 @@ import { DbService } from '../db/db.service.js';
  
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 
-import type { UploadsService } from './uploads.service.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { UploadsService } from './uploads.service.js';
 
 /**
  * Fastify multipart — `main.ts` registers `@fastify/multipart` globally and
