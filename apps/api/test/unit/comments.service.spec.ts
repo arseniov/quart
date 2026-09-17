@@ -1,6 +1,6 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { CommentsService } from '../../src/comments/comments.service.js';
 import type { DbService } from '../../src/db/db.service.js';
@@ -15,12 +15,10 @@ import type { TenantContext } from '../../src/db/run-in-tenant-tx.js';
 type Row = Record<string, unknown>;
 
 function makeTrx(scenarios: Row[][]) {
-  let queue = [...scenarios];
-  let current: Row[] | null = null;
+  const queue = [...scenarios];
   const pop = (): Row[] => {
     const next = queue.shift();
     if (!next) throw new Error('trx stub: no more queued rows');
-    current = next;
     return next;
   };
   const terminal = {

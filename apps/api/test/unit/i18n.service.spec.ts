@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuditService } from '../../src/audit/audit.service.js';
 import type { AuthUser } from '../../src/auth/decorators/current-user.decorator.js';
 import type { DbService } from '../../src/db/db.service.js';
-import type { TenantContext } from '../../src/db/run-in-tenant-tx.js';
 import { I18nService } from '../../src/i18n/i18n.service.js';
 
 type Row = Record<string, unknown>;
@@ -39,13 +38,6 @@ const user = {
   cityId: 'c-1',
   isSuperAdmin: false,
 } as unknown as AuthUser;
-
-const tenant: TenantContext = {
-  cityId: 'c-1',
-  userId: 'u-1',
-  isSuperAdmin: false,
-  requestId: 'req-1',
-};
 
 describe('I18nService', () => {
   let svc: I18nService;
