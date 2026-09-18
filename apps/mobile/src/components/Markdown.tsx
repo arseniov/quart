@@ -13,7 +13,7 @@ import remarkStringify from 'remark-stringify';
 const STRICT_SCHEMA = {
   ...defaultSchema,
   tagNames: ['p', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'br', 'h2', 'h3'],
-  attributes: { a: ['href'], code: ['className'] },
+  attributes: { a: ['href'] },
   protocols: { href: ['https', 'mailto'] },
 };
 
@@ -33,6 +33,6 @@ export function sanitize(source: string): string {
 }
 
 export function SafeMarkdown({ source }: { source: string }) {
-  const safe = useMemo(() => sanitize(source ?? ''), [source]);
+  const safe = useMemo(() => sanitize(source), [source]);
   return <Markdown>{safe}</Markdown>;
 }

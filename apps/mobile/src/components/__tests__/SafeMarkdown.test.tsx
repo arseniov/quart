@@ -19,6 +19,12 @@ describe('sanitize (markdown pipeline)', () => {
     expect(sanitize('hello **bold**')).toContain('hello');
   });
 
+  it('preserves fenced code blocks without leaking className', () => {
+    const out = sanitize('```js\nconst x = 1;\n```');
+    expect(out).toContain('const x = 1;');
+    expect(out).not.toContain('language-');
+  });
+
   it('strips javascript: URLs', () => {
     const out = sanitize('[click](javascript:alert(1))');
     expect(out).not.toContain('javascript:');
