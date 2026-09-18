@@ -95,8 +95,7 @@
     "about": "Informazioni",
     "logout": "Esci",
     "exportData": "Esporta i miei dati",
-    "deleteAccount": "Elimina account",
-    "saved": "Salvati"
+    "deleteAccount": "Elimina account"
   },
   "notifications": {
     "permissionDenied": "Permesso notifiche negato. Abilitalo nelle impostazioni di sistema per ricevere aggiornamenti."

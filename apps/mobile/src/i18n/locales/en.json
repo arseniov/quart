@@ -95,8 +95,7 @@
     "about": "About",
     "logout": "Log out",
     "exportData": "Export my data",
-    "deleteAccount": "Delete account",
-    "saved": "Saved"
+    "deleteAccount": "Delete account"
   },
   "notifications": {
     "permissionDenied": "Notifications permission denied. Enable it in system settings to receive updates."

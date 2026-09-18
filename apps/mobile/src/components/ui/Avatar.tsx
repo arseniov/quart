@@ -23,16 +23,10 @@ export function Avatar({ uri, name, size = 64 }: AvatarProps) {
   return (
     <View
       accessibilityLabel={`Avatar placeholder for ${name}`}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: tokens.color.primary.light,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      className="bg-primary items-center justify-center"
+      style={{ width: size, height: size, borderRadius: size / 2 }}
     >
-      <Text style={{ color: tokens.color.text.onPrimary.light, fontSize, fontWeight: '600' }}>
+      <Text className="text-text-onPrimary font-semibold" style={{ fontSize }}>
         {initial}
       </Text>
     </View>

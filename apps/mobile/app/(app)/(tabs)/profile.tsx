@@ -7,7 +7,6 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 const LINKS = [
   { key: 'title', href: '/settings' as const },
   { key: 'notifications', href: '/settings/notifications' as const },
-  { key: 'saved', href: '/saved' as const },
 ];
 
 export default function ProfileScreen() {
