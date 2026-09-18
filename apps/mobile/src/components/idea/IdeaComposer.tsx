@@ -2,7 +2,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { View, Text, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, Text, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useCreateIdea } from '@/api/hooks/useIdea';
 import { useRouter } from 'expo-router';
 
@@ -31,7 +31,11 @@ export function IdeaComposer() {
   });
 
   return (
-    <View className="flex-1 bg-bg p-4">
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      className="flex-1 bg-bg"
+    >
+      <View className="flex-1 p-4">
       <Controller
         control={control}
         name="title"
@@ -79,6 +83,7 @@ export function IdeaComposer() {
           <Text className="text-text-onPrimary font-semibold">{t('idea.compose.submit')}</Text>
         )}
       </Pressable>
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
