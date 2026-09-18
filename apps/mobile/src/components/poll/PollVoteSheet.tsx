@@ -35,19 +35,22 @@ export function PollVoteSheet({ poll }: { poll: Poll }) {
   return (
     <View>
       <Text className="text-text-primary font-semibold mb-3">{t('poll.vote')}</Text>
-      {poll.options.map((o) => (
-        <Pressable
-          key={o.id}
-          accessibilityRole="radio"
-          accessibilityState={{ selected: false }}
-          onPress={() => vote.mutate(o.id)}
-          disabled={vote.isPending}
-          className="border border-border bg-surface rounded-md p-3 mb-2"
-        >
-          <Text className="text-text-primary">{o.label}</Text>
-        </Pressable>
-      ))}
-      {vote.isPending && <ActivityIndicator />}
+      {poll.options.map((o) => {
+        const selected = vote.variables === o.id;
+        return (
+          <Pressable
+            key={o.id}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            onPress={() => vote.mutate(o.id)}
+            disabled={vote.isPending}
+            className={`border rounded-md p-3 mb-2 ${selected ? 'border-primary bg-primary/5' : 'border-border bg-surface'}`}
+          >
+            <Text className="text-text-primary">{o.label}</Text>
+          </Pressable>
+        );
+      })}
+      {vote.isPending && <ActivityIndicator className="mt-2" />}
       {vote.isError && (
         <Text accessibilityLiveRegion="polite" className="text-error mt-2">
           {t('errors.generic')}
