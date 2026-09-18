@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { IssueCreateSchema } from '@quart/shared-types';
 import { useDraftIssueStore } from '@/stores/draft-issue';
-import { useCreateIssue } from '@/api/hooks/useIssue';
+import { useCreateIssue, OfflineQueuedError } from '@/api/hooks/useIssue';
 import { apiClient } from '@/api/client';
 import { queryKeys } from '@/api/query-client';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -80,8 +80,16 @@ export default function NewIssueScreen() {
       await create.mutateAsync(parsed);
       reset();
       router.back();
-    } catch {
-      Alert.alert(t('errors.generic'));
+    } catch (e) {
+      // ponytail: OfflineQueuedError → the request hit the queue, surface "will sync" UX and route home.
+      //          Anything else is treated as a real failure.
+      if (e instanceof OfflineQueuedError) {
+        reset();
+        router.back();
+        Alert.alert(t('issue.queued'));
+      } else {
+        Alert.alert(t('errors.generic'));
+      }
     }
   };
 

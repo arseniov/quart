@@ -84,7 +84,8 @@
     "event.assigned": "Assigned",
     "event.commented": "Commented",
     "event.photo_added": "Photo added",
-    "timeline.title": "Timeline"
+    "timeline.title": "Timeline",
+    "queued": "Will sync when online"
   },
   "map": {
     "issue": "Issue",

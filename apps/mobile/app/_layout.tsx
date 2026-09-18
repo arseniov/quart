@@ -15,6 +15,7 @@ import {
   configureNotificationHandler,
   configureAndroidChannels,
 } from '@/lib/notifications';
+import { startAutoFlush } from '@/lib/connectivity';
 
 initSentry();
 
@@ -27,6 +28,10 @@ export default function RootLayout() {
     // ponytail: listener lives for app lifetime; refactor to root-level useEffect cleanup when needed
     return () => sub?.remove();
   }, []);
+
+  // ponytail: subscribe once at root so an offline→online transition anywhere in the app triggers
+  //          a flush. Cleanup runs on unmount (in practice never, but it satisfies strict-mode).
+  useEffect(() => startAutoFlush(), []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

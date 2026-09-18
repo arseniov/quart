@@ -84,7 +84,8 @@
     "event.assigned": "Assegnata",
     "event.commented": "Commentata",
     "event.photo_added": "Foto aggiunta",
-    "timeline.title": "Storico"
+    "timeline.title": "Storico",
+    "queued": "Sincronizzerà appena online"
   },
   "map": {
     "issue": "Problema",
