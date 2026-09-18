@@ -22,7 +22,7 @@ if (!i18n.isInitialized) {
 }
 
 export function t(lng: SupportedLng, key: string, params?: Record<string, unknown>): string {
-  return i18n.getFixedT(lng)(key, params);
+  return params ? i18n.getFixedT(lng)(key, params) : i18n.getFixedT(lng)(key);
 }
 
 export default i18n;
