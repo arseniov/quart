@@ -8,8 +8,12 @@ jest.mock('@/lib/auth', () => ({
   loadTokens: jest.fn(),
 }));
 jest.mock('@/lib/device-fingerprint', () => ({ deviceFingerprint: jest.fn().mockResolvedValue('fp') }));
+jest.mock('@/api/hooks/useRegisterDevice', () => ({
+  useRegisterDevice: () => ({ mutateAsync: jest.fn().mockResolvedValue(undefined) }),
+  NotificationsPermissionError: class extends Error {},
+}));
 jest.mock('@tanstack/react-query', () => ({
-  useMutation: (cfg: any) => ({ mutate: cfg.mutationFn }),
+  useMutation: (cfg: any) => ({ mutate: cfg.mutationFn, mutateAsync: cfg.mutationFn }),
   useQuery: () => ({ data: null, isPending: false }),
   QueryClient: class {},
   QueryClientProvider: ({ children }: any) => children,

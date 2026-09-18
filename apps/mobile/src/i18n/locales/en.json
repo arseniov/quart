@@ -102,6 +102,8 @@
     "deleteAccount": "Delete account"
   },
   "notifications": {
+    "title": "Notifications",
+    "empty": "All caught up",
     "permissionDenied": "Notifications permission denied. Enable it in system settings to receive updates."
   },
   "privacy": {

@@ -102,6 +102,8 @@
     "deleteAccount": "Elimina account"
   },
   "notifications": {
+    "title": "Notifiche",
+    "empty": "Tutto a posto",
     "permissionDenied": "Permesso notifiche negato. Abilitalo nelle impostazioni di sistema per ricevere aggiornamenti."
   },
   "privacy": {
