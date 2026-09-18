@@ -5,7 +5,7 @@ import { useMe } from '@/api/hooks/useMe';
 export default function AppLayout() {
   const { data: me, isPending } = useMe();
 
-  if (isPending) return null; // splash handles pending
+  if (isPending) return null; // ponytail: blank screen during auth bootstrap; Phase 5 wires expo-splash-screen
   if (!me) return <Redirect href="/login" />;
   if (me.needs_onboarding) return <Redirect href="/onboarding/city" />;
 
@@ -16,20 +16,6 @@ export default function AppLayout() {
       <Stack.Screen name="onboarding/neighborhood" options={{ headerShown: true }} />
       <Stack.Screen name="onboarding/topics" options={{ headerShown: true }} />
       <Stack.Screen name="onboarding/notifications-prompt" options={{ headerShown: true }} />
-      <Stack.Screen name="issue/new" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="issue/[id]" />
-      <Stack.Screen name="idea/[id]" />
-      <Stack.Screen name="poll/[id]" />
-      <Stack.Screen name="user/[id]" />
-      <Stack.Screen name="notifications" />
-      <Stack.Screen name="saved" />
-      <Stack.Screen name="search" />
-      <Stack.Screen name="settings/index" />
-      <Stack.Screen name="settings/account" />
-      <Stack.Screen name="settings/notifications" />
-      <Stack.Screen name="settings/language" />
-      <Stack.Screen name="settings/privacy" />
-      <Stack.Screen name="settings/about" />
     </Stack>
   );
 }
