@@ -40,4 +40,5 @@ export const queryKeys = {
   notifications: () => ['notifications'] as const,
   saved: () => ['saved-items'] as const,
   neighborhoods: (cityId: string | undefined) => ['neighborhoods', cityId] as const,
+  topicSubscriptions: () => ['me', 'topic-subscriptions'] as const,
 } as const;

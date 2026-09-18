@@ -95,7 +95,26 @@
     "about": "About",
     "logout": "Log out",
     "exportData": "Export my data",
-    "deleteAccount": "Delete account"
+    "deleteAccount": "Delete account",
+    "saved": "Saved"
+  },
+  "notifications": {
+    "permissionDenied": "Notifications permission denied. Enable it in system settings to receive updates."
+  },
+  "privacy": {
+    "policy": "Privacy policy",
+    "intro": "Manage how your data is processed, exported, or removed.",
+    "exportRequested": "Export requested",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "This action cannot be undone."
+  },
+  "account": {
+    "email": "Email",
+    "phone": "Phone"
+  },
+  "about": {
+    "version": "Version",
+    "copyright": "Copyright"
   },
   "errors": {
     "network": "You appear to be offline.",

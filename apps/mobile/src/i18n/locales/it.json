@@ -95,7 +95,26 @@
     "about": "Informazioni",
     "logout": "Esci",
     "exportData": "Esporta i miei dati",
-    "deleteAccount": "Elimina account"
+    "deleteAccount": "Elimina account",
+    "saved": "Salvati"
+  },
+  "notifications": {
+    "permissionDenied": "Permesso notifiche negato. Abilitalo nelle impostazioni di sistema per ricevere aggiornamenti."
+  },
+  "privacy": {
+    "policy": "Informativa privacy",
+    "intro": "Gestisci come i tuoi dati vengono trattati, esportati o rimossi.",
+    "exportRequested": "Richiesta di esportazione inviata",
+    "deleteConfirmTitle": "Eliminare il tuo account?",
+    "deleteConfirmBody": "Questa azione non può essere annullata."
+  },
+  "account": {
+    "email": "Email",
+    "phone": "Telefono"
+  },
+  "about": {
+    "version": "Versione",
+    "copyright": "Copyright"
   },
   "errors": {
     "network": "Connessione assente. Riprova.",
