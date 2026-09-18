@@ -5,7 +5,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 
 const LINKS = [
-  { key: 'settings', href: '/settings' as const },
+  { key: 'title', href: '/settings' as const },
   { key: 'notifications', href: '/settings/notifications' as const },
   { key: 'saved', href: '/saved' as const },
 ];

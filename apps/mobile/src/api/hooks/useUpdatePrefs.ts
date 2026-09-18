@@ -22,7 +22,7 @@ export function useTopicSubscriptions() {
     queryKey: queryKeys.topicSubscriptions(),
     queryFn: async () => {
       const r = await apiClient.get<{ topic_ids: string[] }>('/me/topic-subscriptions');
-      return r.data.topic_ids;
+      return r.data;
     },
     staleTime: 60_000,
   });

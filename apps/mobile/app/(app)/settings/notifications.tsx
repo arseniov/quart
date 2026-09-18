@@ -14,7 +14,8 @@ export default function NotificationsSettings() {
   const { t } = useTranslation();
   const lng = i18n.language ?? 'en';
   const { data: topics, isPending: topicsPending } = useTopics();
-  const { data: subscribed = [], isPending: subsPending } = useTopicSubscriptions();
+  const { data: subs = { topic_ids: [] }, isPending: subsPending } = useTopicSubscriptions();
+  const subscribed = subs.topic_ids;
   const update = useUpdateTopicSubscriptions();
 
   const toggleTopic = (id: string) => {
