@@ -14,6 +14,6 @@ describe('i18n', () => {
   });
 
   it('falls back to EN for unknown key in IT', () => {
-    expect(t('it', 'nonexistent.key' as never)).toBe('nonexistent.key');
+    expect(t('it', 'onlyInEn')).toBe('EN-only value');
   });
 });

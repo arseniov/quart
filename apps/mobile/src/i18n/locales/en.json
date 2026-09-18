@@ -103,5 +103,6 @@
     "back": "Back",
     "loading": "Loading…",
     "retry": "Retry"
-  }
+  },
+  "onlyInEn": "EN-only value"
 }

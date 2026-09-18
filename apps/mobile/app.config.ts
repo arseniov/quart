@@ -1,5 +1,7 @@
 import type { ExpoConfig } from 'expo/config';
 
+const BRAND_COLOR = '#FF6B35'; // GH #13: plan still shows #FF6B35; theme primary.light is now #D44E15
+
 const config: ExpoConfig = {
   name: 'Quart',
   slug: 'quart',
@@ -49,7 +51,7 @@ const config: ExpoConfig = {
     ],
     adaptiveIcon: {
       foregroundImage: './assets/images/icon.png',
-      backgroundColor: '#FF6B35',
+      backgroundColor: BRAND_COLOR,
     },
   },
   notification: {
@@ -79,7 +81,7 @@ const config: ExpoConfig = {
     [
       'expo-notifications',
       {
-        color: '#FF6B35',
+        color: BRAND_COLOR,
       },
     ],
     'expo-localization',

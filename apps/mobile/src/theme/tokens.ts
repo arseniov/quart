@@ -20,7 +20,6 @@ export const tokens = {
   fontSize: { xs: 12, sm: 14, md: 16, lg: 18, xl: 22, '2xl': 28, '3xl': 36 },
   fontWeight: { regular: '400', medium: '500', semibold: '600', bold: '700' },
   lineHeight: { tight: 1.2, normal: 1.5, relaxed: 1.75 },
+  // ponytail: hitSlop token defined for Phase 5+ Touchable/Pressable; inline 44 on first consumer
   hitSlop: { min: 44 }, // WCAG 2.5.5 target size
 } as const;
-
-export type Tokens = typeof tokens;

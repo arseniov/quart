@@ -14,13 +14,13 @@ if (!i18n.isInitialized) {
     resources,
     lng: 'it',
     fallbackLng: 'en',
-    supportedLngs: supportedLngs as unknown as string[],
+    supportedLngs: [...supportedLngs],
     interpolation: { escapeValue: false },
-    compatibilityJSON: 'v4',
     returnEmptyString: false,
   });
 }
 
+// ponytail: per-call getFixedT creates a fresh translator; memoize per-lng if profile shows cost
 export function t(lng: SupportedLng, key: string, params?: Record<string, unknown>): string {
   return params ? i18n.getFixedT(lng)(key, params) : i18n.getFixedT(lng)(key);
 }

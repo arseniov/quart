@@ -27,6 +27,7 @@ const config: Config = {
       borderRadius: tokens.radius,
       fontSize: tokens.fontSize,
       fontWeight: tokens.fontWeight,
+      lineHeight: tokens.lineHeight,
     },
   },
   plugins: [],

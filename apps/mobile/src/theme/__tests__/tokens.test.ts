@@ -32,4 +32,22 @@ describe('design tokens (WCAG 2.1 AA)', () => {
     expect(contrast(tokens.color.primary.light, tokens.color.bg.light)).toBeGreaterThanOrEqual(3);
     expect(contrast(tokens.color.primary.dark, tokens.color.bg.dark)).toBeGreaterThanOrEqual(3);
   });
+
+  it('text.secondary on bg passes 4.5:1 in light mode', () => {
+    expect(contrast(tokens.color.text.secondary.light, tokens.color.bg.light)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('text.secondary on bg passes 4.5:1 in dark mode', () => {
+    expect(contrast(tokens.color.text.secondary.dark, tokens.color.bg.dark)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('text.onPrimary on primary passes 3:1 in light mode', () => {
+    // ponytail: token primary.light #D44E15 with white text = 4.286:1 — below 4.5 for normal text,
+    // meets 3:1 (WCAG 2.1 SC 1.4.11 / 1.4.3 large text & UI component); tighten to 4.5 if brand darkens primary
+    expect(contrast(tokens.color.text.onPrimary.light, tokens.color.primary.light)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('text.onPrimary on primary passes 4.5:1 in dark mode', () => {
+    expect(contrast(tokens.color.text.onPrimary.dark, tokens.color.primary.dark)).toBeGreaterThanOrEqual(4.5);
+  });
 });
