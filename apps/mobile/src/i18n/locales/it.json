@@ -86,6 +86,10 @@
     "event.photo_added": "Foto aggiunta",
     "timeline.title": "Storico"
   },
+  "map": {
+    "issue": "Problema",
+    "poll": "Sondaggio"
+  },
   "settings": {
     "title": "Impostazioni",
     "account": "Account",

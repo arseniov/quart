@@ -41,4 +41,5 @@ export const queryKeys = {
   saved: () => ['saved-items'] as const,
   neighborhoods: (cityId: string | undefined) => ['neighborhoods', cityId] as const,
   topicSubscriptions: () => ['me', 'topic-subscriptions'] as const,
+  mapMarkers: (cityId: string | undefined) => ['map', 'markers', cityId] as const,
 } as const;

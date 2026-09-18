@@ -86,6 +86,10 @@
     "event.photo_added": "Photo added",
     "timeline.title": "Timeline"
   },
+  "map": {
+    "issue": "Issue",
+    "poll": "Poll"
+  },
   "settings": {
     "title": "Settings",
     "account": "Account",
