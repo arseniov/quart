@@ -1,21 +1,16 @@
 // src/api/PersistProvider.tsx
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { queryClient, persister } from './query-client';
 
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function PersistProvider({ children }: { children: ReactNode }) {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
-  if (!hydrated) return null;
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
-      onSuccess={() => {
-        // resume paused mutations after hydrate
-      }}
+      persistOptions={{ persister, maxAge: ONE_WEEK_MS }}
+      onSuccess={() => queryClient.resumePausedMutations()}
     >
       {children}
     </PersistQueryClientProvider>
