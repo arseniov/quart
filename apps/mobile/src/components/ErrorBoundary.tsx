@@ -14,7 +14,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 
   override componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // @ts-expect-error - Sentry stub doesn't export Sentry; optional chain no-ops until migration lands
+    // @ts-expect-error — sentry stub at src/observability/sentry.ts exports only initSentry(); Sentry.Sentry?. namespace arrives with @sentry/react-native migration (GH #12), Phase 5d.
     Sentry.Sentry?.captureException?.(error, { extra: info as unknown as Record<string, unknown> });
   }
 

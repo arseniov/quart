@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
+import { queryKeys } from '@/api/query-client';
 
 export interface OnboardingInput {
   city_id: string;
@@ -15,7 +16,7 @@ export function useCompleteOnboarding() {
       await apiClient.post('/me/onboarding', input);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['me'] });
+      qc.invalidateQueries({ queryKey: queryKeys.me() });
     },
   });
 }

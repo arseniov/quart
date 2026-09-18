@@ -16,6 +16,7 @@ export default function LoginScreen() {
   });
 
   const onSubmit = handleSubmit(async (data) => {
+    if (login.isPending) return;
     try {
       await login.mutateAsync(data);
       router.replace('/');

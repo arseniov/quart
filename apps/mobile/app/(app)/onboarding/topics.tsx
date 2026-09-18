@@ -10,7 +10,8 @@ export default function OnboardingTopics() {
   const { t } = useTranslation();
   const router = useRouter();
   const { data, isPending } = useTopics();
-  const { topic_ids, toggleTopic } = useOnboardingStore();
+  const topic_ids = useOnboardingStore((s) => s.topic_ids);
+  const toggleTopic = useOnboardingStore((s) => s.toggleTopic);
 
   return (
     <View className="flex-1 bg-bg">

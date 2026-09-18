@@ -8,8 +8,8 @@ describe('ProgressBar', () => {
     expect(getByLabelText('Step 2 of 4')).toBeTruthy();
   });
 
-  it('renders N step indicators', () => {
-    const { getAllByLabelText } = render(<ProgressBar current={1} total={3} />);
-    expect(getAllByLabelText(/^Step \d+ of 3/)).toHaveLength(3);
+  it('renders one combined accessibility label', () => {
+    const { getByLabelText } = render(<ProgressBar current={1} total={3} />);
+    expect(getByLabelText('Step 1 of 3')).toBeTruthy();
   });
 });

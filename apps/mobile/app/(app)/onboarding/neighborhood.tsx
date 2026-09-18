@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { apiClient } from '@/api/client';
+import { queryKeys } from '@/api/query-client';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { ProgressBar } from '@/components/ProgressBar';
 
@@ -14,7 +15,7 @@ export default function OnboardingNeighborhood() {
   const setNeighborhood = useOnboardingStore((s) => s.setNeighborhood);
 
   const { data, isPending } = useQuery({
-    queryKey: ['neighborhoods', city],
+    queryKey: queryKeys.neighborhoods(city),
     queryFn: async () => {
       if (!city) return [];
       const r = await apiClient.get<{ neighborhoods: Array<{ id: string; name: string }> }>(

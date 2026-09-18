@@ -1,5 +1,5 @@
 // app/(app)/onboarding/notifications-prompt.tsx
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View, Text, Pressable, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -10,10 +10,19 @@ import { ProgressBar } from '@/components/ProgressBar';
 export default function OnboardingNotificationsPrompt() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const { city, neighborhood, topic_ids, notification_topics, toggleNotificationTopic } =
-    useOnboardingStore();
+  const city = useOnboardingStore((s) => s.city);
+  const neighborhood = useOnboardingStore((s) => s.neighborhood);
+  const topic_ids = useOnboardingStore((s) => s.topic_ids);
+  const notification_topics = useOnboardingStore((s) => s.notification_topics);
+  const toggleNotificationTopic = useOnboardingStore((s) => s.toggleNotificationTopic);
   const complete = useCompleteOnboarding();
   const locale = i18n.language;
+
+  // deep-link guard: a direct push to this screen skips city/neighborhood;
+  // bounce the user back to the city screen so the wizard stays ordered.
+  if (!city || !neighborhood) {
+    return <Redirect href="/onboarding/city" />;
+  }
 
   const enable = async () => {
     const { status } = await Notifications.requestPermissionsAsync();
@@ -29,8 +38,8 @@ export default function OnboardingNotificationsPrompt() {
   const submit = async () => {
     try {
       await complete.mutateAsync({
-        city_id: city!,
-        neighborhood_id: neighborhood!,
+        city_id: city,
+        neighborhood_id: neighborhood,
         topic_ids,
         preferred_locale: locale,
       });
