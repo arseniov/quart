@@ -1,10 +1,7 @@
 // src/api/client.ts
-import Constants from 'expo-constants';
 import { deviceFingerprint } from '@/lib/device-fingerprint';
 import { loadTokens, saveTokens, clearTokens } from '@/lib/auth';
-
-const BASE = (Constants.expoConfig?.extra as { EXPO_PUBLIC_API_URL?: string } | undefined)
-  ?.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { BASE_URL } from '@/lib/env';
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public data?: unknown) {
@@ -21,7 +18,7 @@ export interface ApiResponse<T> {
 async function refreshAccessToken(): Promise<string | null> {
   const tokens = await loadTokens();
   if (!tokens) return null;
-  const r = await fetch(`${BASE}/auth/refresh`, {
+  const r = await fetch(`${BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -33,7 +30,13 @@ async function refreshAccessToken(): Promise<string | null> {
     await clearTokens();
     return null;
   }
-  const json = (await r.json()) as { access_token: string; refresh_token: string };
+  let json: { access_token: string; refresh_token: string };
+  try {
+    json = (await r.json()) as typeof json;
+  } catch {
+    await clearTokens();
+    return null;
+  }
   await saveTokens({ accessToken: json.access_token, refreshToken: json.refresh_token });
   return json.access_token;
 }
@@ -47,7 +50,7 @@ export interface RequestOptions {
 }
 
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<ApiResponse<T>> {
-  const url = path.startsWith('http') ? path : `${BASE}${path}`;
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Device-Fingerprint': await deviceFingerprint(),
@@ -66,6 +69,8 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
     });
 
+  // ponytail: two concurrent 401s trigger parallel /auth/refresh calls; if collision rate matters,
+  //        wrap `refreshAccessToken()` in a module-level `Promise<string|null> in-flight` cache.
   let r = await doFetch();
   if (r.status === 401 && !opts.skipAuth && opts.retryOn401 !== false) {
     const fresh = await refreshAccessToken();

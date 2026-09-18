@@ -38,7 +38,9 @@ export async function deviceFingerprint(): Promise<string> {
   return cached;
 }
 
-export function _resetFingerprintForTests() {
-  cached = null;
-  salt = null;
-}
+export const _resetFingerprintForTests = __DEV__
+  ? () => {
+      cached = null;
+      salt = null;
+    }
+  : () => {};

@@ -21,6 +21,7 @@ jest.mock('expo-crypto', () => ({
 
 import { deviceFingerprint, _resetFingerprintForTests } from '../device-fingerprint';
 import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
 
 describe('deviceFingerprint', () => {
   beforeEach(() => {
@@ -33,6 +34,10 @@ describe('deviceFingerprint', () => {
   it('returns 64 hex chars', async () => {
     const fp = await deviceFingerprint();
     expect(fp).toMatch(/^[0-9a-f]{64}$/);
+    expect(Crypto.digestStringAsync).toHaveBeenCalledWith(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      expect.stringContaining('app.quart.mobile'),
+    );
   });
 
   it('is stable across calls within session', async () => {
