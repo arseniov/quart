@@ -34,6 +34,7 @@ export const queryKeys = {
   poll: (id: string) => ['poll', id] as const,
   issues: (filters: unknown) => ['issues', filters] as const,
   issue: (id: string) => ['issue', id] as const,
+  issueCategories: () => ['issue-categories'] as const,
   ideas: (filters: unknown) => ['ideas', filters] as const,
   idea: (id: string) => ['idea', id] as const,
   notifications: () => ['notifications'] as const,
