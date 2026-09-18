@@ -6,18 +6,11 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { osmStyle } from '@/lib/map-style';
 import { tokens } from '@/theme/tokens';
+import type { MapMarker } from '@/api/hooks/useMapMarkers';
 
 // ponytail: hardcoded fallback until Phase 12+ hooks this to the user's selected city (useMe.city_id → geocode)
 export const DEFAULT_CITY_CENTER: [number, number] = [12.4964, 41.9028]; // Rome
 const DEFAULT_ZOOM = 11;
-
-export interface MapMarker {
-  id: string;
-  kind: 'issue' | 'poll';
-  lat: number;
-  lng: number;
-  title: string;
-}
 
 function markerColor(kind: MapMarker['kind']): string {
   // semantic tokens are flat strings (error/info), not {light,dark}
