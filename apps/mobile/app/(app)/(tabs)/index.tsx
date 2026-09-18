@@ -11,8 +11,17 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const feedFilter = useUiStore((s) => s.feedFilter);
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending, refetch, isRefetching } =
-    useFeed(feedFilter === 'all' ? {} : { kind: feedFilter });
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = useFeed(feedFilter === 'all' ? {} : { kind: feedFilter });
 
   return (
     <View className="flex-1 bg-bg">
@@ -28,7 +37,18 @@ export default function HomeScreen() {
         </Pressable>
       </View>
       <FilterChips />
-      {isPending ? (
+      {isError ? (
+        <View className="px-4 py-12 items-center">
+          <Text className="text-text-secondary text-center mb-3">{t('errors.network')}</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => refetch()}
+            className="bg-primary px-4 py-2 rounded-md"
+          >
+            <Text className="text-text-onPrimary font-semibold">{t('common.retry')}</Text>
+          </Pressable>
+        </View>
+      ) : isPending ? (
         <View>
           <FeedItemSkeleton />
           <FeedItemSkeleton />

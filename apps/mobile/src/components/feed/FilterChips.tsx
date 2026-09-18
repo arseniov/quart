@@ -6,7 +6,8 @@ const FILTERS: FeedFilter[] = ['all', 'poll', 'idea', 'issue'];
 
 export function FilterChips() {
   const { t } = useTranslation();
-  const { feedFilter, setFeedFilter } = useUiStore();
+  const feedFilter = useUiStore((s) => s.feedFilter);
+  const setFeedFilter = useUiStore((s) => s.setFeedFilter);
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-3 py-2">
       {FILTERS.map((f) => {
