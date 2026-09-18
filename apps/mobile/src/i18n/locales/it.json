@@ -1,0 +1,107 @@
+{
+  "app": { "name": "Quart" },
+  "nav": {
+    "home": "Home",
+    "polls": "Sondaggi",
+    "ideas": "Idee",
+    "map": "Mappa",
+    "profile": "Profilo"
+  },
+  "auth": {
+    "login.title": "Accedi",
+    "login.email": "Email",
+    "login.password": "Password",
+    "login.submit": "Accedi",
+    "login.orPhone": "oppure accedi con il telefono",
+    "login.orGoogle": "Continua con Google",
+    "login.noAccount": "Non hai un account?",
+    "login.signup": "Registrati",
+    "signup.title": "Crea account",
+    "signup.handle": "Nome utente",
+    "signup.displayName": "Nome visualizzato",
+    "signup.submit": "Registrati",
+    "phoneOtp.title": "Verifica telefono",
+    "phoneOtp.sent": "Codice inviato a {{number}}",
+    "phoneOtp.submit": "Verifica",
+    "forgotPassword.title": "Recupera password",
+    "forgotPassword.submit": "Invia link"
+  },
+  "onboarding": {
+    "city.title": "In quale città vivi?",
+    "city.search": "Cerca la tua città",
+    "neighborhood.title": "In quale quartiere?",
+    "topics.title": "Cosa ti interessa?",
+    "topics.skip": "Salta",
+    "locale.title": "Lingua preferita",
+    "notifications.title": "Vuoi ricevere notifiche?",
+    "notifications.enable": "Abilita notifiche",
+    "notifications.later": "Più tardi"
+  },
+  "feed": {
+    "title": "Nella tua zona",
+    "filter.all": "Tutto",
+    "filter.poll": "Sondaggi",
+    "filter.idea": "Idee",
+    "filter.issue": "Segnalazioni",
+    "empty": "Niente di nuovo per ora",
+    "loadMore": "Carica altro",
+    "pullToRefresh": "Rilascia per aggiornare"
+  },
+  "poll": {
+    "vote": "Vota",
+    "voted": "Hai votato",
+    "results": "Risultati",
+    "closesAt": "Chiude il {{date}}",
+    "totalVotes": "{{count}} voti"
+  },
+  "idea": {
+    "compose.title": "Nuova idea",
+    "compose.body": "Descrivi la tua idea",
+    "compose.submit": "Pubblica",
+    "upvote": "Sostieni",
+    "comment": "Commenta",
+    "comments": "{{count}} commenti"
+  },
+  "issue": {
+    "new.title": "Segnala un problema",
+    "new.stepCategory": "Categoria",
+    "new.stepPhotos": "Foto",
+    "new.stepLocation": "Posizione",
+    "new.stepDescription": "Descrizione",
+    "new.addPhoto": "Aggiungi foto",
+    "new.submit": "Invia segnalazione",
+    "new.success": "Segnalazione inviata",
+    "status.open": "Aperta",
+    "status.acknowledged": "Presa in carico",
+    "status.in_progress": "In lavorazione",
+    "status.resolved": "Risolta",
+    "status.closed": "Chiusa",
+    "status.rejected": "Respinta",
+    "timeline.title": "Storico"
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "account": "Account",
+    "notifications": "Notifiche",
+    "language": "Lingua",
+    "privacy": "Privacy",
+    "about": "Informazioni",
+    "logout": "Esci",
+    "exportData": "Esporta i miei dati",
+    "deleteAccount": "Elimina account"
+  },
+  "errors": {
+    "network": "Connessione assente. Riprova.",
+    "generic": "Qualcosa è andato storto.",
+    "validation": "Controlla i campi evidenziati.",
+    "needsConnection": "Servono i dati per questa azione."
+  },
+  "common": {
+    "cancel": "Annulla",
+    "ok": "OK",
+    "save": "Salva",
+    "back": "Indietro",
+    "loading": "Caricamento…",
+    "retry": "Riprova"
+  }
+}

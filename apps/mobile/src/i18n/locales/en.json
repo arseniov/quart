@@ -1,0 +1,107 @@
+{
+  "app": { "name": "Quart" },
+  "nav": {
+    "home": "Home",
+    "polls": "Polls",
+    "ideas": "Ideas",
+    "map": "Map",
+    "profile": "Profile"
+  },
+  "auth": {
+    "login.title": "Sign in",
+    "login.email": "Email",
+    "login.password": "Password",
+    "login.submit": "Sign in",
+    "login.orPhone": "or sign in with phone",
+    "login.orGoogle": "Continue with Google",
+    "login.noAccount": "No account?",
+    "login.signup": "Sign up",
+    "signup.title": "Create account",
+    "signup.handle": "Username",
+    "signup.displayName": "Display name",
+    "signup.submit": "Sign up",
+    "phoneOtp.title": "Verify phone",
+    "phoneOtp.sent": "Code sent to {{number}}",
+    "phoneOtp.submit": "Verify",
+    "forgotPassword.title": "Reset password",
+    "forgotPassword.submit": "Send link"
+  },
+  "onboarding": {
+    "city.title": "Which city do you live in?",
+    "city.search": "Search your city",
+    "neighborhood.title": "Which neighborhood?",
+    "topics.title": "What are you interested in?",
+    "topics.skip": "Skip",
+    "locale.title": "Preferred language",
+    "notifications.title": "Stay in the loop?",
+    "notifications.enable": "Enable notifications",
+    "notifications.later": "Later"
+  },
+  "feed": {
+    "title": "In your area",
+    "filter.all": "All",
+    "filter.poll": "Polls",
+    "filter.idea": "Ideas",
+    "filter.issue": "Issues",
+    "empty": "Nothing new yet",
+    "loadMore": "Load more",
+    "pullToRefresh": "Release to refresh"
+  },
+  "poll": {
+    "vote": "Vote",
+    "voted": "You voted",
+    "results": "Results",
+    "closesAt": "Closes {{date}}",
+    "totalVotes": "{{count}} votes"
+  },
+  "idea": {
+    "compose.title": "New idea",
+    "compose.body": "Describe your idea",
+    "compose.submit": "Publish",
+    "upvote": "Upvote",
+    "comment": "Comment",
+    "comments": "{{count}} comments"
+  },
+  "issue": {
+    "new.title": "Report an issue",
+    "new.stepCategory": "Category",
+    "new.stepPhotos": "Photos",
+    "new.stepLocation": "Location",
+    "new.stepDescription": "Description",
+    "new.addPhoto": "Add photo",
+    "new.submit": "Submit report",
+    "new.success": "Report submitted",
+    "status.open": "Open",
+    "status.acknowledged": "Acknowledged",
+    "status.in_progress": "In progress",
+    "status.resolved": "Resolved",
+    "status.closed": "Closed",
+    "status.rejected": "Rejected",
+    "timeline.title": "Timeline"
+  },
+  "settings": {
+    "title": "Settings",
+    "account": "Account",
+    "notifications": "Notifications",
+    "language": "Language",
+    "privacy": "Privacy",
+    "about": "About",
+    "logout": "Log out",
+    "exportData": "Export my data",
+    "deleteAccount": "Delete account"
+  },
+  "errors": {
+    "network": "You appear to be offline.",
+    "generic": "Something went wrong.",
+    "validation": "Check the highlighted fields.",
+    "needsConnection": "This action needs a connection."
+  },
+  "common": {
+    "cancel": "Cancel",
+    "ok": "OK",
+    "save": "Save",
+    "back": "Back",
+    "loading": "Loading…",
+    "retry": "Retry"
+  }
+}
