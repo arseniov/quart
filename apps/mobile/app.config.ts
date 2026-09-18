@@ -23,7 +23,6 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'app.quart.mobile',
-    associatedDomains: ['applinks:quart.app'],
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'Used to mark issues on the map.',
       NSCameraUsageDescription: 'Used to take photos of issues you report.',
@@ -48,7 +47,6 @@ const config: ExpoConfig = {
       'POST_NOTIFICATIONS',
       'VIBRATE',
     ],
-    googleServicesFile: './google-services.json',
     adaptiveIcon: {
       foregroundImage: './assets/images/icon.png',
       backgroundColor: '#FF6B35',
@@ -56,7 +54,6 @@ const config: ExpoConfig = {
   },
   notification: {
     icon: './assets/icons/notification.png',
-    color: '#FF6B35',
   },
   plugins: [
     'expo-router',
