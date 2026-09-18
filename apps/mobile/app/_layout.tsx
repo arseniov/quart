@@ -8,7 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/theme/nativewind';
 import { queryClient } from '@/api/query-client';
 import { initSentry } from '@/observability/sentry';
-import '../i18n';
+import '../src/i18n';
 
 initSentry();
 
