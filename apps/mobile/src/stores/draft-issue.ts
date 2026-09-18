@@ -1,20 +1,14 @@
 import { create } from 'zustand';
 
-export interface DraftLocation {
-  lat: number;
-  lng: number;
-  address: string | undefined;
-}
-
 interface DraftIssue {
   category_id: string | undefined;
   photos: string[];
-  location: DraftLocation | undefined;
-  description_i18n: { it: string; en: string | undefined };
+  location: { lat: number; lng: number; address?: string } | undefined;
+  description_i18n: { it: string; en?: string };
   step: 1 | 2 | 3 | 4;
   addPhoto: (uri: string) => void;
   removePhoto: (uri: string) => void;
-  setLocation: (loc: DraftLocation | undefined) => void;
+  setLocation: (loc: { lat: number; lng: number; address?: string } | undefined) => void;
   setDescription: (lang: 'it' | 'en', text: string) => void;
   setStep: (step: 1 | 2 | 3 | 4) => void;
   reset: () => void;
@@ -23,8 +17,8 @@ interface DraftIssue {
 const empty = {
   category_id: undefined,
   photos: [] as string[],
-  location: undefined,
-  description_i18n: { it: '', en: undefined } as { it: string; en: string | undefined },
+  location: undefined as { lat: number; lng: number; address?: string } | undefined,
+  description_i18n: { it: '', en: undefined } as unknown as { it: string; en?: string },
   step: 1 as const,
 };
 
@@ -36,5 +30,6 @@ export const useDraftIssueStore = create<DraftIssue>((set) => ({
   setDescription: (lang, text) =>
     set((s) => ({ description_i18n: { ...s.description_i18n, [lang]: text } })),
   setStep: (step) => set({ step }),
-  reset: () => set({ ...empty, photos: [], description_i18n: { it: '', en: undefined } }),
+  reset: () =>
+    set({ ...empty, photos: [...empty.photos], description_i18n: { ...empty.description_i18n } }),
 }));

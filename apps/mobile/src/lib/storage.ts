@@ -1,6 +1,6 @@
 import { MMKV } from 'react-native-mmkv';
 
-// Two instances: non-sensitive + sensitive. Sensitive uses SecureStore (Task 18).
+// ponytail: add SecureStore instance here in Task 18 (sensitive) alongside the non-sensitive MMKV
 // ponytail: sync API required by @tanstack/query-sync-storage-persister contract.
 // MMKV itself is sync, so this is zero-cost.
 const mmkv = new MMKV({ id: 'quart.cache' });
