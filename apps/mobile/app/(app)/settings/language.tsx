@@ -21,6 +21,7 @@ export default function LanguageSettings() {
   const onSelect = (lng: SupportedLng) => {
     if (lng === current) return;
     void i18n.changeLanguage(lng); // immediate UI refresh; persisted on next launch via onboarding/save
+    // TODO: rollback i18n.changeLanguage on mutate error — currently optimistic without recovery (Phase 11 follow-up)
     updateMe.mutate({ preferred_locale: lng });
   };
 

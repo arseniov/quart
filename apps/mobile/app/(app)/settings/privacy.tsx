@@ -20,6 +20,7 @@ export default function PrivacySettings() {
       onSuccess: (data) => {
         Alert.alert(t('privacy.exportRequested'), data.request_id);
       },
+      onError: () => Alert.alert(t('errors.generic')),
     });
   };
 
@@ -36,6 +37,7 @@ export default function PrivacySettings() {
               qc.clear();
               router.replace('/login');
             },
+            onError: () => Alert.alert(t('errors.generic')),
           });
         },
       },

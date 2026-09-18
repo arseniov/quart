@@ -22,7 +22,7 @@ export default function NotificationsSettings() {
     const next = subscribed.includes(id)
       ? subscribed.filter((x) => x !== id)
       : [...subscribed, id];
-    update.mutate(next);
+    update.mutate(next, { onError: () => Alert.alert(t('errors.generic')) });
   };
 
   const onPushToggle = async (value: boolean) => {
@@ -33,8 +33,8 @@ export default function NotificationsSettings() {
     }
   };
 
-  const labelOf = (name_i18n: { it?: string; en?: string }) =>
-    name_i18n?.[lng as 'it' | 'en'] ?? name_i18n?.en ?? name_i18n?.it ?? '';
+  const labelOf = (name_i18n: { it: string; en: string }) =>
+    name_i18n[lng as 'it' | 'en'] ?? name_i18n.en;
 
   return (
     <View className="flex-1 bg-bg">
