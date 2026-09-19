@@ -86,7 +86,7 @@ async function flushOne(action: QueuedAction): Promise<boolean> {
     if (action.kind === 'create_issue') {
       await apiClient.post('/issues', action.payload);
     } else if (action.kind === 'mark_notification_read') {
-      await apiClient.post(`/notifications/${action.notificationId}/read`);
+      await apiClient.post(`/me/notifications/${action.notificationId}/read`);
     }
     return true;
   } catch {

@@ -120,7 +120,7 @@ describe('flushQueue', () => {
 
     await flushQueue();
 
-    expect(mApi.post).toHaveBeenCalledWith('/notifications/n-1/read');
+    expect(mApi.post).toHaveBeenCalledWith('/me/notifications/n-1/read');
     expect(loadQueue()).toHaveLength(0);
   });
 
