@@ -1,14 +1,24 @@
 // app/(app)/(tabs)/map.tsx
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { router } from 'expo-router';
 import { View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { useMapMarkers } from '@/api/hooks/useMapMarkers';
 import { useMe } from '@/api/hooks/useMe';
 import { IssueMap } from '@/components/issue/IssueMap';
+import { MapEmptyState } from '@/components/issue/MapEmptyState';
 
 export default function MapScreen() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const { data, isPending, isError, refetch } = useMapMarkers(me?.city_id);
+
+  const needsOnboarding = !!me && (me.needs_onboarding || !me.city_id);
+  useEffect(() => {
+    if (needsOnboarding) router.replace('/onboarding/city');
+  }, [needsOnboarding]);
+
+  if (needsOnboarding) return null;
 
   return (
     <View className="flex-1 bg-bg">
@@ -31,6 +41,8 @@ export default function MapScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator />
         </View>
+      ) : (data ?? []).length === 0 ? (
+        <MapEmptyState />
       ) : (
         <IssueMap markers={data ?? []} />
       )}

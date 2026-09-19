@@ -106,7 +106,17 @@
   },
   "map": {
     "issue": "Problema",
-    "poll": "Sondaggio"
+    "poll": "Sondaggio",
+    "empty": {
+      "title": "Ancora nessun problema o sondaggio nella tua zona.",
+      "subtitle": "Tocca qui sotto per segnalarne uno — la tua segnalazione aiuta i vicini.",
+      "flagAction": "Segnala un problema",
+      "browseFeed": "Sfoglia il feed invece"
+    },
+    "noCity": {
+      "title": "Scegli prima la tua città",
+      "action": "Continua la registrazione"
+    }
   },
   "settings": {
     "title": "Impostazioni",

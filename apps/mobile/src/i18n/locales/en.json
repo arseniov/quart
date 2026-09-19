@@ -106,7 +106,17 @@
   },
   "map": {
     "issue": "Issue",
-    "poll": "Poll"
+    "poll": "Poll",
+    "empty": {
+      "title": "No issues or polls in your area yet.",
+      "subtitle": "Tap below to flag one — your report helps neighbors stay informed.",
+      "flagAction": "Flag an issue",
+      "browseFeed": "Browse the feed instead"
+    },
+    "noCity": {
+      "title": "Pick your city first",
+      "action": "Continue onboarding"
+    }
   },
   "settings": {
     "title": "Settings",
