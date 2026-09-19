@@ -37,6 +37,9 @@ export const queryKeys = {
   issueCategories: () => ['issue-categories'] as const,
   ideas: (filters: unknown) => ['ideas', filters] as const,
   idea: (id: string) => ['idea', id] as const,
+  ideaComments: (ideaId: string) => ['idea-comments', ideaId] as const,
+  ideaComment: (ideaId: string, commentId: string) =>
+    ['idea-comments', ideaId, commentId] as const,
   notifications: () => ['notifications'] as const,
   saved: () => ['saved-items'] as const,
   neighborhoods: (cityId: string | undefined) => ['neighborhoods', cityId] as const,

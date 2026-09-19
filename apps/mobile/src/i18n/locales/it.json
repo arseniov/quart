@@ -67,7 +67,17 @@
     "compose.submit": "Pubblica",
     "upvote": "Sostieni",
     "comment": "Commenta",
-    "comments": "{{count}} commenti"
+    "comments": {
+      "count": "{{count}} commenti",
+      "title": "Commenti",
+      "empty": "Sii il primo a commentare.",
+      "placeholder": "Aggiungi un commento…",
+      "submit": "Commenta",
+      "submitting": "Pubblicazione…",
+      "failed": "Impossibile pubblicare il commento. Riprova.",
+      "charCount": "{{count}} / 5000",
+      "loading": "Caricamento commenti…"
+    }
   },
   "issue": {
     "new.title": "Segnala un problema",

@@ -67,7 +67,17 @@
     "compose.submit": "Publish",
     "upvote": "Upvote",
     "comment": "Comment",
-    "comments": "{{count}} comments"
+    "comments": {
+      "count": "{{count}} comments",
+      "title": "Comments",
+      "empty": "Be the first to comment.",
+      "placeholder": "Add a comment…",
+      "submit": "Comment",
+      "submitting": "Posting…",
+      "failed": "Couldn't post your comment. Try again.",
+      "charCount": "{{count}} / 5000",
+      "loading": "Loading comments…"
+    }
   },
   "issue": {
     "new.title": "Report an issue",
