@@ -398,6 +398,9 @@ importers:
       '@types/react':
         specifier: ~19.1.0
         version: 19.1.17
+      eslint:
+        specifier: ^9.17.0
+        version: 9.17.0(jiti@1.21.7)
       jest:
         specifier: 29.7.0
         version: 29.7.0(@types/node@22.10.2)

@@ -2,7 +2,7 @@ import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
 import i18n from '@/i18n';
-import { IssueEventSchema } from '@/api/hooks/useIssue';
+import type { IssueEventSchema } from '@/api/hooks/useIssue';
 
 export type IssueEvent = z.infer<typeof IssueEventSchema>;
 

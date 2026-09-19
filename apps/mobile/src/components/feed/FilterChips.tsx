@@ -1,4 +1,4 @@
-import { View, Pressable, Text, ScrollView } from 'react-native';
+import { Pressable, Text, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useUiStore, type FeedFilter } from '@/stores/ui';
 

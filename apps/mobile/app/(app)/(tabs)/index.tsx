@@ -18,7 +18,6 @@ export default function HomeScreen() {
     isFetchingNextPage,
     isPending,
     isError,
-    error,
     refetch,
     isRefetching,
   } = useFeed(feedFilter === 'all' ? {} : { kind: feedFilter });

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ApiError, apiClient } from '@/api/client';
 import { queryKeys } from '@/api/query-client';
-import { IssueCreateSchema } from '@quart/shared-types';
+import type { IssueCreateSchema } from '@quart/shared-types';
 import { enqueue } from '@/lib/offline-queue';
 
 // ponytail: thrown by useCreateIssue when the create request fails in a way we treat as transient.
