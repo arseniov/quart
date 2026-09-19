@@ -218,11 +218,5 @@ export async function getStorageStats(deps: Deps = defaultDeps()): Promise<Stora
 }
 
 // ponytail: MapLibre v11 `OfflinePack` exposes no `getSize()` and the native OfflineManager
-//          owns its tile DB outside our `bundleDir`. We prefer the `sizeBytes` recorded in
-//          `manifest.json` (populated from progress events); only fall back to the on-disk
-//          dir size sum when the manifest is missing.
-export async function computeBundleSize(cityAreaId: string, deps: Deps = defaultDeps()): Promise<number> {
-  const manifest = await readManifest(cityAreaId, deps);
-  if (manifest) return manifest.sizeBytes;
-  return deps.computeSize(getBundleDir(cityAreaId, deps));
-}
+//          owns its tile DB outside our `bundleDir`. The transient `sizeBytes` is recorded in
+//          `manifest.json` by `OfflineDownloadButton.fetchTiles` from progress events.
