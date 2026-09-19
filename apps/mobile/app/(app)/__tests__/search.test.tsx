@@ -62,6 +62,19 @@ function typeAndDebounce(
   });
 }
 
+function typeWithoutDebounce(
+  input: { props: { onChangeText: (v: string) => void } },
+  value: string,
+  ms: number,
+) {
+  act(() => {
+    input.props.onChangeText(value);
+  });
+  act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+}
+
 describe('SearchScreen', () => {
   beforeAll(async () => {
     await i18n.changeLanguage('en');
@@ -139,6 +152,25 @@ describe('SearchScreen', () => {
       expect(getByTestId('feed-item-iss-1')).toBeTruthy();
       expect(getByTestId('feed-item-p-1')).toBeTruthy();
     });
+  });
+
+  it('does not fire the search when typed input sits below the 250ms debounce', async () => {
+    mUseMe.mockReturnValue({ data: makeMe(), isPending: false });
+    mUseSearch.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    const { getByLabelText } = render(<SearchScreen />);
+    const input = getByLabelText('Search query');
+    const callsBefore = mUseSearch.mock.calls.length;
+    typeWithoutDebounce(input, 'buca', 249);
+    // Still inside the 250ms window — the component updates debounced state
+    // only after the timer fires, so the q arg passed to useSearch is still empty.
+    const latest = mUseSearch.mock.calls[mUseSearch.mock.calls.length - 1][0];
+    expect(latest.q).toBe('');
+    expect(mUseSearch.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
   it('shows error + retry button when useSearch reports an error', async () => {

@@ -9,7 +9,7 @@ import { queryKeys } from '@/api/query-client';
 import type { SearchFilters } from '@/api/query-client';
 import type { ApiError } from '@/api/client';
 
-export type SearchKind = 'poll' | 'idea' | 'issue';
+export type SearchKind = NonNullable<SearchFilters['kind']>;
 
 export interface SearchHit {
   id: string;

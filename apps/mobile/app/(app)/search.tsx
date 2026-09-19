@@ -94,6 +94,7 @@ export default function SearchScreen() {
             <Pressable
               hitSlop={SEARCH_HIT_SLOP}
               accessibilityRole="button"
+              accessibilityLabel={t('common.retry')}
               onPress={() => refetch()}
               className="bg-primary px-4 py-2 rounded-md"
             >
@@ -112,6 +113,7 @@ export default function SearchScreen() {
             <Pressable
               hitSlop={SEARCH_HIT_SLOP}
               accessibilityRole="button"
+              accessibilityLabel={t('search.suggestIdea')}
               onPress={() => router.push('/idea/compose')}
               className="bg-primary px-4 py-2 rounded-md"
             >

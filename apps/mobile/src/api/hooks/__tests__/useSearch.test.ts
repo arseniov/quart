@@ -64,8 +64,9 @@ describe('useSearch', () => {
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const url = mGet.mock.calls[0][0] as string;
-    expect(url).toContain('neighborhoodId=n-9');
-    expect(url).toContain('kind=poll');
+    const params = new URL(url, 'http://x').searchParams;
+    expect(params.get('neighborhoodId')).toBe('n-9');
+    expect(params.get('kind')).toBe('poll');
   });
 
   it('surfaces a network error from apiClient.get', async () => {
