@@ -2,6 +2,12 @@ import type { ExpoConfig } from 'expo/config';
 
 const BRAND_COLOR = '#D44E15'; // GH #13: brand color finalized during Phase 2 (was #FF6B35 in plan); tokens + Android adaptive icon + notification accent now aligned.
 
+// ponytail: GH #24 — Android Google Sign-In reads google-services.json via the
+//        Expo config plugin. Default to a local file; EAS secrets override via
+//        GOOGLE_SERVICES_JSON_FILE (build env). See .easignore for which files
+//        stay out of the upload payload.
+const GOOGLE_SERVICES_FILE = process.env.GOOGLE_SERVICES_JSON_FILE || './google-services.json';
+
 const config: ExpoConfig = {
   name: 'Quart',
   slug: 'quart',
@@ -12,6 +18,10 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   owner: 'quart-app',
   runtimeVersion: { policy: 'appVersion' },
+  // ponytail: GH #24 — Android google-services.json path. Plugin reads this
+  //          when bundling the Android project. File is git-ignored via
+  //          .gitignore; .easignore keeps it out of EAS upload.
+  googleServicesFile: GOOGLE_SERVICES_FILE,
   updates: {
     fallbackToCacheTimeout: 0,
     url: 'https://u.expo.dev/00000000-0000-0000-0000-000000000000',
@@ -75,6 +85,9 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-secure-store',
+    // ponytail: GH #24 — Google Sign-In plugin reads googleServicesFile above
+    //          and wires the iOS URL scheme + Android Gradle plugin at prebuild.
+    '@react-native-google-signin/google-signin',
     [
       'expo-camera',
       {

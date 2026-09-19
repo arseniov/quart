@@ -10,3 +10,8 @@ web-build/
 *.mobileprovision
 google-services.json
 service-account.json
+
+# GH #24: Google Sign-In Android config — sourced from GOOGLE_SERVICES_JSON_FILE
+# env var at build time. The local google-services.json is git-ignored and
+# EAS-ignored; provide the file via EAS secret (base64 or path) per profile.
+# See apps/mobile/app.config.ts -> googleServicesFile.
