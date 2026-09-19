@@ -18,4 +18,22 @@ describe('SocialButton', () => {
     );
     expect(getByLabelText('Sign in with Google')).toBeTruthy();
   });
+
+  it('renders the branded Apple SVG icon with a testID', () => {
+    const { getByTestId } = render(
+      <SocialButton provider="apple" label="Sign in with Apple" onPress={() => {}} />,
+    );
+    const icon = getByTestId('social-icon-apple');
+    expect(icon).toBeTruthy();
+    expect(icon.props.source).toBeDefined();
+  });
+
+  it('renders the branded Google SVG icon with a testID', () => {
+    const { getByTestId } = render(
+      <SocialButton provider="google" label="Sign in with Google" onPress={() => {}} />,
+    );
+    const icon = getByTestId('social-icon-google');
+    expect(icon).toBeTruthy();
+    expect(icon.props.source).toBeDefined();
+  });
 });
