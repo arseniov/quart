@@ -10,18 +10,22 @@ import { useUser } from '@/api/hooks/useUser';
  *   - deep link `/user/{id}` from notification payloads
  *
  * Reads `GET /users/:id` and renders the sanitized DTO. 404/410 are
- * surfaced as "user not found" rather than swallowed — the screen needs
- * to distinguish a deleted user from a never-existed one.
+ * surfaced distinctly: 404 → "not found", 410 → "deleted" — never
+ * conflated, so broken deep-links can be diagnosed by their cause.
  */
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, i18n } = useTranslation();
 
-  const { data, isPending, isError, refetch } = useUser(id);
+  const { data, isPending, isError, error, refetch } = useUser(id);
 
   if (!id) return null;
 
-  const isDeleted = isError && (data === undefined);
+  const errorKey = isError
+    ? error?.status === 410
+      ? 'user.profile.deleted'
+      : 'user.profile.notFound'
+    : null;
 
   return (
     <View className="flex-1 bg-bg">
@@ -30,11 +34,12 @@ export default function UserProfileScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator />
         </View>
-      ) : isDeleted || isError ? (
+      ) : errorKey ? (
         <View className="flex-1 p-4 items-center justify-center">
-          <Text className="text-text-secondary text-center mb-3">{t('user.profile.notFound')}</Text>
+          <Text className="text-text-secondary text-center mb-3">{t(errorKey)}</Text>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('common.retry')}
             onPress={() => refetch()}
             className="bg-primary px-4 py-2 rounded-md"
           >
@@ -48,6 +53,7 @@ export default function UserProfileScreen() {
               <Image
                 source={{ uri: data.avatarUrl }}
                 style={{ width: 96, height: 96, borderRadius: 48, marginBottom: 12 }}
+                accessibilityLabel={data.displayName}
                 accessibilityIgnoresInvertColors
               />
             ) : (
@@ -61,7 +67,9 @@ export default function UserProfileScreen() {
               </View>
             )}
             <Text className="text-text-primary text-xl font-semibold">{data.displayName}</Text>
-            <Text className="text-text-secondary text-sm mb-2">@{data.handle}</Text>
+            <Text className="text-text-secondary text-sm mb-2">
+              {t('user.profile.handle', { handle: data.handle })}
+            </Text>
             <Text className="text-text-secondary text-xs">
               {t('user.profile.joinedAt', { date: new Date(data.joinedAt).toLocaleDateString(i18n.language) })}
             </Text>

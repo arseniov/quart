@@ -42,11 +42,7 @@ export class UsersService {
   /**
    * Lookup a user by id and return a sanitized public projection.
    *
-   * - 404 if the row does not exist.
-   * - 410 if the row exists but `status = 'deleted'` (DSAR soft-delete).
-   *   We still return 404 for `suspended` because the public should not
-   *   distinguish "suspended" from "absent" — only "deleted" deserves the
-   *   explicit gone signal so broken bookmarks can be diagnosed.
+   * We return 200 for `suspended` (treated like `active`) — only `deleted` deserves the explicit gone signal.
    *
    * The stats counts run as three parallel `countAll`s on the per-user
    * content tables. They're unfiltered by status — including drafts

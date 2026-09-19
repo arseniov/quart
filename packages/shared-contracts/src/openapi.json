@@ -2657,17 +2657,11 @@
     "/users/{id}": {
       "get": {
         "responses": {
-          "200": {
-            "description": ""
+          "404": {
+            "description": "User does not exist"
           },
-          "401": {
-            "description": "Unauthenticated"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "429": {
-            "description": "Too Many Requests"
+          "410": {
+            "description": "User soft-deleted"
           }
         },
         "tags": [

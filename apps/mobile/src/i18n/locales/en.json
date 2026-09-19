@@ -158,7 +158,8 @@
       "ideasCount": "Ideas",
       "issuesCount": "Issues",
       "pollsCount": "Polls",
-      "notFound": "User not found."
+      "notFound": "User not found.",
+      "deleted": "User deleted."
     }
   },
   "errors": {

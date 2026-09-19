@@ -30,7 +30,6 @@ function makeDb(opts: {
   };
   proxy['select'] = fn;
   proxy['where'] = fn;
-  proxy['execute'] = vi.fn(async () => []);
   proxy['executeTakeFirst'] = vi.fn(async () => {
     const which = callOrder[callIdx++];
     if (which === 'users') return userRow;

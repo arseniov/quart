@@ -158,7 +158,8 @@
       "ideasCount": "Idee",
       "issuesCount": "Segnalazioni",
       "pollsCount": "Sondaggi",
-      "notFound": "Utente non trovato."
+      "notFound": "Utente non trovato.",
+      "deleted": "Utente eliminato"
     }
   },
   "errors": {
