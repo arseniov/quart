@@ -104,6 +104,14 @@
     "timeline.title": "Timeline",
     "queued": "Will sync when online"
   },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search polls, ideas, issues…",
+    "inputLabel": "Search query",
+    "prompt": "Type to search across your city.",
+    "empty": "No matches for \"{{q}}\".",
+    "suggestIdea": "Suggest an idea"
+  },
   "map": {
     "issue": "Issue",
     "poll": "Poll",

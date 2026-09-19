@@ -46,4 +46,12 @@ export const queryKeys = {
   topicSubscriptions: () => ['me', 'topic-subscriptions'] as const,
   mapMarkers: (cityId: string | undefined) => ['map', 'markers', cityId] as const,
   user: (id: string) => ['user', id] as const,
+  search: (filters: SearchFilters) => ['search', filters] as const,
 } as const;
+
+export interface SearchFilters {
+  q?: string | undefined;
+  city_id?: string | undefined;
+  neighborhood_id?: string | undefined;
+  kind?: 'poll' | 'idea' | 'issue' | undefined;
+}

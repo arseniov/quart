@@ -104,6 +104,14 @@
     "timeline.title": "Storico",
     "queued": "Sincronizzerà appena online"
   },
+  "search": {
+    "title": "Cerca",
+    "placeholder": "Cerca sondaggi, idee, segnalazioni…",
+    "inputLabel": "Query di ricerca",
+    "prompt": "Scrivi per cercare nella tua città.",
+    "empty": "Nessun risultato per \"{{q}}\".",
+    "suggestIdea": "Suggerisci un'idea"
+  },
   "map": {
     "issue": "Problema",
     "poll": "Sondaggio",

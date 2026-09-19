@@ -6,6 +6,7 @@ import { FeedItemSkeleton } from '@/components/feed/FeedItemSkeleton';
 import { FilterChips } from '@/components/feed/FilterChips';
 import { useUiStore } from '@/stores/ui';
 import { useRouter } from 'expo-router';
+import { minHitSlop } from '@/a11y/hit-slop';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -26,14 +27,27 @@ export default function HomeScreen() {
     <View className="flex-1 bg-bg">
       <View className="flex-row items-center justify-between px-4 pt-4 pb-2">
         <Text className="text-text-primary text-2xl">{t('feed.title')}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('issue.new.title')}
-          onPress={() => router.push('/issue/new')}
-          className="bg-primary px-3 py-2 rounded-md"
-        >
-          <Text className="text-text-onPrimary font-semibold">+</Text>
-        </Pressable>
+        <View className="flex-row">
+          <Pressable
+            hitSlop={minHitSlop()}
+            accessibilityRole="button"
+            accessibilityLabel={t('search.title')}
+            onPress={() => router.push('/search')}
+            className="bg-surface border border-border px-3 py-2 rounded-md mr-2"
+            testID="feed-search-btn"
+          >
+            <Text className="text-text-primary font-semibold">⌕</Text>
+          </Pressable>
+          <Pressable
+            hitSlop={minHitSlop()}
+            accessibilityRole="button"
+            accessibilityLabel={t('issue.new.title')}
+            onPress={() => router.push('/issue/new')}
+            className="bg-primary px-3 py-2 rounded-md"
+          >
+            <Text className="text-text-onPrimary font-semibold">+</Text>
+          </Pressable>
+        </View>
       </View>
       <FilterChips />
       {isError ? (
