@@ -6,7 +6,7 @@ import { memo } from 'react';
 
 const PLACEHOLDER = require('../../../assets/images/icon.png');
 
-export type ImageCachedProps = ImageProps & { source: ImageProps['source'] };
+export type ImageCachedProps = Omit<ImageProps, 'source'> & { source: NonNullable<ImageProps['source']> };
 
 function ImageCachedBase(props: ImageCachedProps) {
   return (
