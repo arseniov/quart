@@ -89,6 +89,7 @@ import { SearchController } from '../search/search.controller.js';
 import { SelfController } from '../self/self.controller.js';
 import { TopicsController } from '../topics/topics.controller.js';
 import { UploadsController } from '../uploads/uploads.controller.js';
+import { UsersController } from '../users/users.controller.js';
 
 export const DEFAULT_OPENAPI_OUTPUT_PATH = 'packages/shared-contracts/src/openapi.json';
 
@@ -139,6 +140,7 @@ const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   SelfController,
   TopicsController,
   UploadsController,
+  UsersController,
 ];
 
 // ---------------------------------------------------------------------------

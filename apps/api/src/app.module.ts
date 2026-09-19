@@ -33,6 +33,7 @@ import { throttlerModuleForRootAsync } from './security/throttler.config.js';
 import { SelfModule } from './self/self.module.js';
 import { TopicsModule } from './topics/topics.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
+import { UsersModule } from './users/users.module.js';
 
 /**
  * Try to parse the throttler env. Wrapped in a try/catch so a missing
@@ -81,6 +82,7 @@ function parseThrottlerEnvOrDefault() {
     SelfModule,
     AdminModule,
     UploadsModule,
+    UsersModule,
     ObservabilityModule,
     // ThrottlerModule is registered AFTER AuthModule so the factory's
     // `inject: [ValkeyService]` resolves. ValkeyService is exported by
