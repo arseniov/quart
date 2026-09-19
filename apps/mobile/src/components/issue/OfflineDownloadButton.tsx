@@ -3,8 +3,6 @@
 // ponytail: button state machine is intentionally simple — one of
 //          {idle, downloading, downloaded, failed, meteredBlocked, noConnection}.
 //          A future cancel/retry flow can layer on top; for now the user re-taps to retry.
-// ponytail: delete UX is out of scope for GH #22 — settings page can grow a "remove offline map"
-//          action later. The button is single-purpose: tap to download.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -17,8 +15,8 @@ import {
   readManifest,
   canDownloadOnCurrentNetwork,
   ensureFreeSpace,
-  computeBundleSize,
 } from '@/lib/tile-cache';
+import { File } from 'expo-file-system';
 import { osmStyle } from '@/lib/map-style';
 
 type Status =
@@ -65,20 +63,30 @@ export function OfflineDownloadButton({ cityAreaId }: { cityAreaId: string }) {
         onProgress: (p) => {
           if (p.totalBytes > 0) setPercent(Math.round((p.bytesDownloaded / p.totalBytes) * 100));
         },
-        fetchTiles: async (_dir, bounds, onProgress) => {
+        fetchTiles: async (bundleDir, bounds, onProgress) => {
           // ponytail: MapLibre v11 expects `bounds` as a flat [west, south, east, north] tuple
           //          (see `LngLatBounds`) and BOTH listener args are required even if you only
           //          use one. The percentage field is already 0-100, so we forward it as bytes/100
           //          to keep the existing progress wiring.
+          // ponytail: native OfflineManager owns the tile DB outside `bundleDir`, so the on-disk
+          //          bundle dir is empty. We persist `status.completedResourceSize` to
+          //          `bundleDir/manifest.json` as a transient estimate so the storage badge has
+          //          a real byte count even before `downloadCityArea` writes the final manifest.
+          let lastSizeBytes = 0;
+          const transientManifest = new File(bundleDir, 'manifest.json');
           await OfflineManager.createPack(
             {
               mapStyle: osmStyle,
               bounds: [bounds.west, bounds.south, bounds.east, bounds.north],
               minZoom: 10,
               maxZoom: 18,
-              metadata: { cityAreaId },
             },
-            (_pack, status) => onProgress({ bytesDownloaded: status.percentage, totalBytes: 100 }),
+            (_pack, status) => {
+              onProgress({ bytesDownloaded: status.percentage, totalBytes: 100 });
+              lastSizeBytes = status.completedResourceSize;
+              transientManifest.create({ intermediates: true, overwrite: true });
+              transientManifest.write(JSON.stringify({ sizeBytes: lastSizeBytes }));
+            },
             (_pack, error) => {
               // ponytail: error listener fires after createPack has resolved; a throw here
               //          becomes an unhandled rejection. Surface to the logger so Sentry picks
@@ -86,9 +94,7 @@ export function OfflineDownloadButton({ cityAreaId }: { cityAreaId: string }) {
               console.error('[OfflineDownloadButton] pack error', error);
             },
           );
-          // ponytail: OfflinePack has no `getSize()` in v11 — sum the on-disk bundle dir.
-          //          Native tile db lives outside our filesystem; size is a soft estimate.
-          return { sizeBytes: computeBundleSize(cityAreaId) };
+          return { sizeBytes: lastSizeBytes };
         },
       });
       setStatus('downloaded');

@@ -112,14 +112,15 @@ describe('OfflineDownloadButton', () => {
     });
   });
 
-  it('passes a flat [west, south, east, north] tuple and metadata to createPack', async () => {
+  it('passes a flat [west, south, east, north] tuple, min/max zoom, and style to createPack', async () => {
     const { getByLabelText } = render(<OfflineDownloadButton cityAreaId="bologna" />);
     fireEvent.press(getByLabelText('Download map for offline'));
 
     await waitFor(() => expect(mOffline.createPack).toHaveBeenCalled());
     const [options] = mOffline.createPack.mock.calls[0]!;
     expect(options.bounds).toEqual([12.4, 41.8, 12.6, 42.0]);
-    expect(options.metadata).toEqual({ cityAreaId: 'bologna' });
+    expect(options.minZoom).toBe(10);
+    expect(options.maxZoom).toBe(18);
     expect(typeof options.mapStyle).toBe('string');
   });
 
