@@ -1,53 +1,32 @@
 // src/api/__tests__/notifications.test.ts
 jest.mock('@/api/client', () => ({
   apiClient: {
-    post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+    patch: jest.fn().mockResolvedValue({ status: 200, data: {} }),
     get: jest.fn().mockResolvedValue({ status: 200, data: { notifications: [] } }),
+    post: jest.fn(),
+    put: jest.fn(),
+    del: jest.fn(),
   },
 }));
 
-const mockQc = {
-  cancelQueries: jest.fn().mockResolvedValue(undefined),
-  getQueryData: jest.fn().mockReturnValue([
-    { id: 'n1', read_at: null, type: 'x', title: 't', body: 'b', target_url: null, created_at: '2026-09-17T00:00:00Z' },
-  ]),
-  setQueryData: jest.fn(),
-  invalidateQueries: jest.fn().mockResolvedValue(undefined),
-};
-
-jest.mock('@tanstack/react-query', () => ({
-  ...jest.requireActual('@tanstack/react-query'),
-  useQuery: () => ({ data: [], isPending: false }),
-  useMutation: (cfg: any) => cfg,
-  useQueryClient: () => mockQc,
-}));
-
 import { apiClient } from '@/api/client';
-import { useMarkNotificationRead, useNotifications } from '@/api/hooks/useNotifications';
+import { markNotificationRead } from '@/api/notifications';
 
-describe('useMarkNotificationRead', () => {
-  it('optimistic update marks read_at then reverts on error', async () => {
-    (apiClient.post as jest.Mock).mockClear();
-    mockQc.setQueryData.mockClear();
-    const mut = useMarkNotificationRead() as any;
-    const ctx = await mut.onMutate('n1');
-    expect(mockQc.cancelQueries).toHaveBeenCalled();
-    expect(mockQc.setQueryData).toHaveBeenCalled();
-    await mut.onError(new Error('boom'), 'n1', ctx);
-    expect(mockQc.setQueryData).toHaveBeenCalledTimes(2);
-    await mut.onSettled();
-    expect(mockQc.invalidateQueries).toHaveBeenCalled();
-  });
+const mPatch = apiClient.patch as jest.Mock;
 
-  it('posts to /me/notifications/:id/read', async () => {
-    const mut = useMarkNotificationRead() as any;
-    await mut.mutationFn('n1');
-    expect(apiClient.post).toHaveBeenCalledWith('/me/notifications/n1/read');
-  });
+beforeEach(() => {
+  mPatch.mockClear();
 });
 
-describe('useNotifications', () => {
-  it('exposes query hook without throwing', () => {
-    expect(() => useNotifications()).not.toThrow();
+describe('markNotificationRead', () => {
+  it('calls apiClient.patch with /notifications/:id/read exactly once', async () => {
+    await markNotificationRead('n1');
+    expect(mPatch).toHaveBeenCalledTimes(1);
+    expect(mPatch).toHaveBeenCalledWith('/notifications/n1/read');
+  });
+
+  it('propagates errors from apiClient.patch', async () => {
+    mPatch.mockRejectedValueOnce(new Error('boom'));
+    await expect(markNotificationRead('n2')).rejects.toThrow('boom');
   });
 });

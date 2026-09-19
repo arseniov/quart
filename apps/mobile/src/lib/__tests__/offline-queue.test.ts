@@ -116,11 +116,12 @@ describe('flushQueue', () => {
 
   it('calls /notifications/:id/read for mark_notification_read', async () => {
     enqueue({ kind: 'mark_notification_read', notificationId: 'n-1' });
-    mApi.post.mockResolvedValueOnce({} as never);
+    mApi.patch.mockResolvedValueOnce({} as never);
 
     await flushQueue();
 
-    expect(mApi.post).toHaveBeenCalledWith('/me/notifications/n-1/read');
+    expect(mApi.patch).toHaveBeenCalledWith('/notifications/n-1/read');
+    expect(mApi.post).not.toHaveBeenCalledWith('/me/notifications/n-1/read');
     expect(loadQueue()).toHaveLength(0);
   });
 

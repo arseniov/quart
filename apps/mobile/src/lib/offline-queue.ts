@@ -1,6 +1,7 @@
 // src/lib/offline-queue.ts
 import { randomUUID } from 'expo-crypto';
 import { apiClient } from '@/api/client';
+import { markNotificationRead } from '@/api/notifications';
 import { mmkv } from './storage';
 
 // ponytail: storage keys hoisted to module-level constants so renames don't drift between read/write sites.
@@ -86,7 +87,7 @@ async function flushOne(action: QueuedAction): Promise<boolean> {
     if (action.kind === 'create_issue') {
       await apiClient.post('/issues', action.payload);
     } else if (action.kind === 'mark_notification_read') {
-      await apiClient.post(`/me/notifications/${action.notificationId}/read`);
+      await markNotificationRead(action.notificationId);
     }
     return true;
   } catch {

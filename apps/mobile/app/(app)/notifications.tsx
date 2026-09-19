@@ -10,7 +10,7 @@ export default function NotificationsScreen() {
 
   return (
     <View className="flex-1 bg-bg">
-      <Stack.Screen options={{ title: t('notifications.title') }} />
+      <Stack.Screen options={{ title: t('notifications.title'), headerShown: true }} />
       {isError ? (
         <View className="flex-1 p-4 items-center justify-center">
           <Text className="text-text-secondary text-center mb-3">{t('errors.network')}</Text>

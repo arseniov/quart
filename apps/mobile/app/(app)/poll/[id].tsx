@@ -12,7 +12,7 @@ export default function PollDetailScreen() {
 
   return (
     <View className="flex-1 bg-bg p-4">
-      <Stack.Screen options={{ title: t('nav.polls') }} />
+      <Stack.Screen options={{ title: t('nav.polls'), headerShown: true }} />
       {isError ? (
         <View className="flex-1 items-center justify-center">
           <Text className="text-text-secondary text-center mb-3">{t('errors.network')}</Text>

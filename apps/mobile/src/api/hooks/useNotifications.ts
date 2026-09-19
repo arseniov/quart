@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { apiClient } from '@/api/client';
+import { markNotificationRead } from '@/api/notifications';
 import { queryKeys } from '@/api/query-client';
 
 export const NotificationSchema = z.object({
@@ -30,7 +31,7 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/me/notifications/${id}/read`);
+      await markNotificationRead(id);
     },
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: queryKeys.notifications() });

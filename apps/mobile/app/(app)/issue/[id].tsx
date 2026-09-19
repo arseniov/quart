@@ -23,7 +23,7 @@ export default function IssueDetailScreen() {
 
   return (
     <View className="flex-1 bg-bg">
-      <Stack.Screen options={{ title: t('issue.detail.title') }} />
+      <Stack.Screen options={{ title: t('issue.detail.title'), headerShown: true }} />
       {isError ? (
         <View className="flex-1 p-4 items-center justify-center">
           <Text className="text-text-secondary text-center mb-3">{t('errors.network')}</Text>
