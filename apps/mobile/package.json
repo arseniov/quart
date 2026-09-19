@@ -10,7 +10,13 @@
     "lint": "eslint src app --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
-    "test:e2e": "maestro test .maestro"
+    "test:e2e": "maestro test .maestro",
+    "eas:build:dev": "eas build --profile development --platform ios",
+    "eas:build:preview": "eas build --profile preview --platform ios",
+    "eas:build:prod": "eas build --profile production --platform ios",
+    "eas:update:staging": "eas update --branch preview --message",
+    "eas:update:prod": "eas update --branch production --message",
+    "eas:submit:prod": "eas submit --latest"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",
