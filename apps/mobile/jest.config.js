@@ -1,6 +1,8 @@
 // apps/mobile/jest.config.js
 // Load jest-expo's full preset then extend transformIgnorePatterns with the
 // unified/remark/rehype ecosystem so Babel transforms these ESM packages.
+// ponytail: no shared setupFiles — mocks stay inline per test (matches
+// existing pattern across src/{api,lib,components}/__tests__).
 const expo = require('jest-expo/jest-preset');
 
 const EXTRA_TRANSFORMABLE = [
