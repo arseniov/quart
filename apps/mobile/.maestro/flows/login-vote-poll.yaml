@@ -1,0 +1,15 @@
+# apps/mobile/.maestro/flows/login-vote-poll.yaml
+# ponytail: selectors target default-locale (it) startup; add a localeSet
+# flow once Maestro supports per-flow language switching.
+appId: app.quart.mobile
+name: login-vote-poll
+---
+- launchApp
+- assertVisible: "Accedi"
+- inputText: "user@example.com"
+- inputText: "hunter2"
+- tapOn: "Accedi"
+- assertVisible: "Nella tua zona"
+- tapOn: "Sondaggi"
+- tapOn: "Vota"
+- assertVisible: "Hai votato"

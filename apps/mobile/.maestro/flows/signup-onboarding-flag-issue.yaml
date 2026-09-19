@@ -1,0 +1,23 @@
+# apps/mobile/.maestro/flows/signup-onboarding-flag-issue.yaml
+# ponytail: selectors target default-locale (it) startup; add a localeSet
+# flow once Maestro supports per-flow language switching.
+appId: app.quart.mobile
+name: signup-onboarding-flag-issue
+---
+- launchApp
+- assertVisible: "Crea account"
+- tapOn: "Registrati"
+- inputText: "testuser"
+- inputText: "Test User"
+- tapOn: "Registrati"
+- assertVisible: "In quale città vivi?"
+- tapOn: "Roma"
+- assertVisible: "In quale quartiere?"
+- tapOn: "Centro Storico"
+- assertVisible: "Cosa ti interessa?"
+- tapOn: "Salta"
+- assertVisible: "Vuoi ricevere notifiche?"
+- tapOn: "Più tardi"
+- assertVisible: "Nella tua zona"
+- tapOn: "+" # FAB to report issue
+- assertVisible: "Segnala un problema"
