@@ -116,6 +116,15 @@
     "noCity": {
       "title": "Scegli prima la tua città",
       "action": "Continua la registrazione"
+    },
+    "offline": {
+      "download": "Scarica la mappa per offline",
+      "downloading": "Download in corso… {{percent}}%",
+      "downloaded": "Disponibile offline",
+      "delete": "Rimuovi mappa offline",
+      "failed": "Download non riuscito. Tocca per riprovare.",
+      "storageUsed": "Scaricata · {{size}}",
+      "meteredBlocked": "Disabilita \"solo Wi-Fi\" nelle impostazioni per scaricare in rete mobile."
     }
   },
   "settings": {
@@ -127,7 +136,8 @@
     "about": "Informazioni",
     "logout": "Esci",
     "exportData": "Esporta i miei dati",
-    "deleteAccount": "Elimina account"
+    "deleteAccount": "Elimina account",
+    "offlineMaps": "Mappe offline"
   },
   "notifications": {
     "title": "Notifiche",

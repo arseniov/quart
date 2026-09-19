@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { osmStyle } from '@/lib/map-style';
 import { tokens } from '@/theme/tokens';
 import type { MapMarker } from '@/api/hooks/useMapMarkers';
+import { OfflineDownloadButton } from './OfflineDownloadButton';
 
 // ponytail: hardcoded fallback until Phase 12+ hooks this to the user's selected city (useMe.city_id → geocode)
 export const DEFAULT_CITY_CENTER: [number, number] = [12.4964, 41.9028]; // Rome
@@ -20,9 +21,11 @@ function markerColor(kind: MapMarker['kind']): string {
 export function IssueMap({
   markers,
   initialCenter,
+  cityAreaId,
 }: {
   markers: MapMarker[];
   initialCenter?: [number, number];
+  cityAreaId?: string;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -64,6 +67,9 @@ export function IssueMap({
           </Marker>
         ))}
       </Map>
+      {cityAreaId && (
+        <OfflineDownloadButton cityAreaId={cityAreaId} />
+      )}
       {selected && (
         <Pressable
           accessibilityRole="button"

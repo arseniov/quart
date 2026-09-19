@@ -1,10 +1,12 @@
 // app/(app)/settings/index.tsx
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMe } from '@/api/hooks/useMe';
 import { clearTokens } from '@/lib/auth';
+import { getStorageStats, formatBytes, type StorageStats } from '@/lib/tile-cache';
 
 const ITEMS = [
   { key: 'account', href: '/settings/account' as const },
@@ -19,6 +21,25 @@ export default function SettingsIndex() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: me } = useMe();
+  const [stats, setStats] = useState<StorageStats>({ bundleCount: 0, totalBytes: 0, bundles: [] });
+
+  // ponytail: kick off the first load in an effect so the badge reflects any seeded bundles
+  //          on first paint. useFocusEffect below refreshes on every screen focus without a
+  //          global event bus. Becomes a subscription if more screens care.
+  useEffect(() => {
+    void getStorageStats().then(setStats);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void getStorageStats().then(setStats);
+    }, []),
+  );
+
+  const offlineLabel =
+    stats.bundleCount === 0
+      ? t('map.offline.download')
+      : t('map.offline.storageUsed', { size: formatBytes(stats.totalBytes) });
 
   const onLogout = async () => {
     await clearTokens();
@@ -50,14 +71,22 @@ export default function SettingsIndex() {
           </Pressable>
         )}
         ListFooterComponent={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.logout')}
-            onPress={onLogout}
-            className="mx-4 my-6 bg-surface border border-error rounded-md p-3 items-center"
-          >
-            <Text className="text-error font-semibold">{t('settings.logout')}</Text>
-          </Pressable>
+          <View>
+            <View className="px-4 py-3 border-b border-border" accessibilityRole="summary">
+              <Text className="text-text-secondary text-xs uppercase mb-1">
+                {t('settings.offlineMaps')}
+              </Text>
+              <Text className="text-text-primary">{offlineLabel}</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.logout')}
+              onPress={onLogout}
+              className="mx-4 my-6 bg-surface border border-error rounded-md p-3 items-center"
+            >
+              <Text className="text-error font-semibold">{t('settings.logout')}</Text>
+            </Pressable>
+          </View>
         }
       />
     </View>

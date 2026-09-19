@@ -116,6 +116,15 @@
     "noCity": {
       "title": "Pick your city first",
       "action": "Continue onboarding"
+    },
+    "offline": {
+      "download": "Download map for offline",
+      "downloading": "Downloading… {{percent}}%",
+      "downloaded": "Available offline",
+      "delete": "Remove offline map",
+      "failed": "Download failed. Tap to retry.",
+      "storageUsed": "Downloaded · {{size}}",
+      "meteredBlocked": "Disable Wi-Fi only in settings to download on cellular."
     }
   },
   "settings": {
@@ -127,7 +136,8 @@
     "about": "About",
     "logout": "Log out",
     "exportData": "Export my data",
-    "deleteAccount": "Delete account"
+    "deleteAccount": "Delete account",
+    "offlineMaps": "Offline maps"
   },
   "notifications": {
     "title": "Notifications",

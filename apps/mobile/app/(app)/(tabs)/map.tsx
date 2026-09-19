@@ -44,7 +44,7 @@ export default function MapScreen() {
       ) : (data ?? []).length === 0 ? (
         <MapEmptyState />
       ) : (
-        <IssueMap markers={data ?? []} />
+        <IssueMap markers={data ?? []} cityAreaId={me.city_id} />
       )}
     </View>
   );
