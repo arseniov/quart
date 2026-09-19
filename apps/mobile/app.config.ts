@@ -1,6 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 
-const BRAND_COLOR = '#FF6B35'; // GH #13: plan still shows #FF6B35; theme primary.light is now #D44E15
+const BRAND_COLOR = '#D44E15'; // GH #13: brand color finalized during Phase 2 (was #FF6B35 in plan); tokens + Android adaptive icon + notification accent now aligned.
 
 const config: ExpoConfig = {
   name: 'Quart',
@@ -25,6 +25,8 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'app.quart.mobile',
+    // ponytail: Universal Links for quart.app per spec §11.
+    associatedDomains: ['applinks:quart.app'],
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'Used to mark issues on the map.',
       NSCameraUsageDescription: 'Used to take photos of issues you report.',
@@ -39,6 +41,16 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'app.quart.mobile',
+    // ponytail: spec §14 — Min API 24 (Android 7.0) covers >97% of devices.
+    minSdkVersion: 24,
+    // ponytail: intentFilters for https://quart.app deep links per spec §11.
+    intentFilters: [
+      {
+        action: 'VIEW',
+        autoVerify: true,
+        data: [{ scheme: 'https', host: 'quart.app' }],
+      },
+    ],
     permissions: [
       'ACCESS_FINE_LOCATION',
       'ACCESS_COARSE_LOCATION',
