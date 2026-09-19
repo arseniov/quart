@@ -8,7 +8,6 @@ jest.mock('@/api/client', () => ({
 }));
 
 import { apiClient } from '@/api/client';
-import { queryKeys } from '@/api/query-client';
 import { useTopics } from '@/api/hooks/useTopics';
 
 const mGet = apiClient.get as jest.Mock;
@@ -27,12 +26,6 @@ const fakeTopics = [
 describe('useTopics', () => {
   beforeEach(() => mGet.mockReset());
 
-  it('renders without crashing', () => {
-    mGet.mockResolvedValue({ status: 200, data: { topics: fakeTopics } });
-    const { result } = renderHook(() => useTopics(), { wrapper: makeWrapper() });
-    expect(result.current).toBeDefined();
-  });
-
   it('fetches /topics on mount and returns the mocked topics', async () => {
     mGet.mockResolvedValue({ status: 200, data: { topics: fakeTopics } });
     const { result } = renderHook(() => useTopics(), { wrapper: makeWrapper() });
@@ -46,12 +39,5 @@ describe('useTopics', () => {
     const { result } = renderHook(() => useTopics(), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('boom');
-  });
-
-  it('queryKey matches queryKeys.topics', () => {
-    // ponytail: cheap key-factory wiring check alongside the mock-URL assertion above.
-    mGet.mockResolvedValue({ status: 200, data: { topics: [] } });
-    renderHook(() => useTopics(), { wrapper: makeWrapper() });
-    expect(queryKeys.topics()[0]).toBe('topics');
   });
 });

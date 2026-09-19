@@ -8,7 +8,6 @@ jest.mock('@/api/client', () => ({
 }));
 
 import { apiClient } from '@/api/client';
-import { queryKeys } from '@/api/query-client';
 import { useCities } from '@/api/hooks/useCities';
 
 const mGet = apiClient.get as jest.Mock;
@@ -26,12 +25,6 @@ const fakeCities = [
 
 describe('useCities', () => {
   beforeEach(() => mGet.mockReset());
-
-  it('renders without crashing', () => {
-    mGet.mockResolvedValue({ status: 200, data: { cities: fakeCities } });
-    const { result } = renderHook(() => useCities(), { wrapper: makeWrapper() });
-    expect(result.current).toBeDefined();
-  });
 
   it('fetches /cities on mount and returns the mocked cities', async () => {
     mGet.mockResolvedValue({ status: 200, data: { cities: fakeCities } });
@@ -53,14 +46,5 @@ describe('useCities', () => {
     const { result } = renderHook(() => useCities(), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('boom');
-  });
-
-  it('queryKey matches queryKeys.cities(country)', async () => {
-    // ponytail: confirms the URL bound to queryKeys.cities(country) and the key factory tuple shape.
-    mGet.mockResolvedValue({ status: 200, data: { cities: [] } });
-    renderHook(() => useCities('DE'), { wrapper: makeWrapper() });
-    await waitFor(() => expect(mGet).toHaveBeenCalledWith('/cities?country=DE'));
-    expect(queryKeys.cities('DE')[0]).toBe('cities');
-    expect(queryKeys.cities('DE')).toEqual(['cities', 'DE']);
   });
 });

@@ -18,7 +18,7 @@ import { queryKeys } from '@/api/query-client';
 
 describe('useCompleteOnboarding', () => {
   beforeEach(() => {
-    mockPost.mockReset();
+    mockPost.mockClear();
     mockInvalidate.mockClear();
   });
 

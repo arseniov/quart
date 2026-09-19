@@ -4,8 +4,7 @@ import { render } from '@testing-library/react-native';
 import i18n from '@/i18n';
 
 const mockReplace = jest.fn();
-const mockPush = jest.fn();
-const mockRouter = { push: mockPush, replace: mockReplace };
+const mockRouter = { replace: mockReplace };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   // ponytail: Redirect is referenced by expo-router's typedef but unused at test render time.
@@ -36,7 +35,6 @@ describe('OnboardingNotificationsPrompt', () => {
     await i18n.changeLanguage('it');
   });
   beforeEach(() => {
-    mockPush.mockClear();
     mockReplace.mockClear();
     useOnboardingStore.getState().reset();
     useOnboardingStore.getState().setCity('c1');
