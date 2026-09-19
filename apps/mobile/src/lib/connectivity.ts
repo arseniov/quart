@@ -1,5 +1,5 @@
 // src/lib/connectivity.ts
-import NetInfo, { type NetInfoState, type NetInfoSubscription } from '@react-native-community/netinfo';
+import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { flushQueue } from './offline-queue';
 
 // ponytail: "online when in doubt" — `isInternetReachable === null` is treated as online because

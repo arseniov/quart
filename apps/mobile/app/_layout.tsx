@@ -31,7 +31,10 @@ export default function RootLayout() {
 
   // ponytail: subscribe once at root so an offline→online transition anywhere in the app triggers
   //          a flush. Cleanup runs on unmount (in practice never, but it satisfies strict-mode).
-  useEffect(() => startAutoFlush(), []);
+  useEffect(() => {
+    const stop = startAutoFlush();
+    return () => stop();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
