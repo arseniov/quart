@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import * as Sentry from '@/observability/sentry';
+import { captureException } from '@/observability/sentry';
 
 interface State { error: Error | null }
 
@@ -14,8 +14,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 
   override componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // @ts-expect-error — sentry stub at src/observability/sentry.ts exports only initSentry(); Sentry.Sentry?. namespace arrives with @sentry/react-native migration (GH #12), Phase 5d.
-    Sentry.Sentry?.captureException?.(error, { extra: info as unknown as Record<string, unknown> });
+    captureException(error, { extra: info as unknown as Record<string, unknown> });
   }
 
   reset = () => this.setState({ error: null });
