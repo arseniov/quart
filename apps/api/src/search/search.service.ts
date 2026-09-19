@@ -54,9 +54,9 @@ export class SearchService {
     const kind: SearchKind = q.kind ?? 'issue';
     return this.db.runInTenantTx(tenant, async (trx) => {
       if (kind === 'poll') {
-        return this.ilikeSearch(trx, q.q, q.cityId, q.limit, offset);
+        return this.ilikeSearch(trx, q.q, q.cityId, q.neighborhoodId, q.limit, offset);
       }
-      return this.tsvectorSearch(trx, kind, q.q, q.cityId, q.limit, offset);
+      return this.tsvectorSearch(trx, kind, q.q, q.cityId, q.neighborhoodId, q.limit, offset);
     });
   }
 
@@ -65,6 +65,7 @@ export class SearchService {
     kind: SearchKind,
     q: string,
     cityId: string | undefined,
+    neighborhoodId: string | undefined,
     limit: number,
     offset: number,
   ): Promise<SearchHit[]> {
@@ -88,6 +89,11 @@ export class SearchService {
       .$if(cityId !== undefined, (qb: { where: (col: string, op: string, val: string) => unknown }) =>
         qb.where('city_id', '=', cityId as string),
       )
+      .$if(
+        neighborhoodId !== undefined,
+        (qb: { where: (col: string, op: string, val: string) => unknown }) =>
+          qb.where('neighborhood_id', '=', neighborhoodId as string),
+      )
       .orderBy('rank', 'desc')
       .limit(limit)
       .offset(offset)
@@ -106,6 +112,7 @@ export class SearchService {
     trx: { selectFrom: (t: string) => unknown },
     q: string,
     cityId: string | undefined,
+    neighborhoodId: string | undefined,
     limit: number,
     offset: number,
   ): Promise<SearchHit[]> {
@@ -118,6 +125,11 @@ export class SearchService {
       .where('title', 'ILIKE', like)
       .$if(cityId !== undefined, (qb: { where: (col: string, op: string, val: string) => unknown }) =>
         qb.where('city_id', '=', cityId as string),
+      )
+      .$if(
+        neighborhoodId !== undefined,
+        (qb: { where: (col: string, op: string, val: string) => unknown }) =>
+          qb.where('neighborhood_id', '=', neighborhoodId as string),
       )
       .orderBy('created_at', 'desc')
       .limit(limit)

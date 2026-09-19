@@ -11,6 +11,7 @@ export const SearchQuery = z.object({
   q: z.string().min(1).max(200),
   kind: SearchKind.optional(),
   cityId: z.string().uuid().optional(),
+  neighborhoodId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
