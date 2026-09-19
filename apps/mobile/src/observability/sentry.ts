@@ -6,6 +6,8 @@
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
 
+import { SENTRY_DSN } from '@/lib/env';
+
 const PII_KEYS = [
   'email', 'phone', 'phone_e164', 'password', 'token', 'access_token',
   'refresh_token', 'address', 'lat', 'lng', 'location',
@@ -27,21 +29,19 @@ export function scrubPII(input: unknown): unknown {
 }
 
 export function initSentry(): void {
-  const dsn = (Constants.expoConfig?.extra as { EXPO_PUBLIC_SENTRY_DSN?: string } | undefined)?.EXPO_PUBLIC_SENTRY_DSN;
-  if (!dsn) return; // silent no-op when DSN not configured (POC builds)
+  if (!SENTRY_DSN) return; // silent no-op when DSN not configured (POC builds)
 
   Sentry.init({
-    dsn,
+    dsn: SENTRY_DSN,
     release: Constants.expoConfig?.version,
     environment: __DEV__ ? 'development' : 'production',
     beforeSend(event) {
       if (event.user) {
-        const u = event.user as { id?: string };
-        event.user = u.id ? { id: u.id } : {};
+        event.user = event.user.id ? { id: event.user.id } : {};
       }
       if (event.request) {
-        delete (event.request as { cookies?: unknown }).cookies;
-        delete (event.request as { data?: unknown }).data;
+        delete event.request.cookies;
+        delete event.request.data;
       }
       event.breadcrumbs = (event.breadcrumbs ?? []).map((b) => {
         const scrubbed = scrubPII(b.data) as Record<string, unknown> | undefined;
@@ -52,6 +52,4 @@ export function initSentry(): void {
   });
 }
 
-// Re-export the bits ErrorBoundary uses directly without a separate import path.
 export const captureException = Sentry.captureException;
-export { Sentry };

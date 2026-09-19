@@ -4,8 +4,7 @@ import type { Event } from '@sentry/react-native';
 const mockInit = jest.fn();
 const mockCaptureException = jest.fn();
 
-// ponytail: define mock state with `var` so babel-jest hoists the jest.mock
-//          factories above this declaration without hitting a TDZ on first read.
+// ponytail: jest@29 has no jest.hoisted — var is the smallest workable TDZ-free pattern.
 // eslint-disable-next-line no-var
 var mockExpoConfig: { version: string; extra: Record<string, unknown> } = {
   version: '0.0.1',
@@ -22,7 +21,13 @@ jest.mock('expo-constants', () => ({
   get default() { return { expoConfig: mockExpoConfig }; },
 }));
 
-import { initSentry, scrubPII, Sentry } from '@/observability/sentry';
+jest.mock('@/lib/env', () => ({
+  get SENTRY_DSN() {
+    return (mockExpoConfig.extra as { EXPO_PUBLIC_SENTRY_DSN?: string }).EXPO_PUBLIC_SENTRY_DSN;
+  },
+}));
+
+import { initSentry, scrubPII } from '@/observability/sentry';
 
 describe('scrubPII', () => {
   it('redacts top-level PII keys', () => {
@@ -75,6 +80,14 @@ describe('initSentry', () => {
     expect(mockInit.mock.calls[0][0].release).toBe('1.2.3');
   });
 
+  it('passes release as undefined when expoConfig.version is undefined', () => {
+    mockExpoConfig.extra = { EXPO_PUBLIC_SENTRY_DSN: 'https://key@sentry.io/1' };
+    mockExpoConfig.version = undefined as unknown as string;
+    initSentry();
+    expect(mockInit).toHaveBeenCalledTimes(1);
+    expect(mockInit.mock.calls[0][0].release).toBeUndefined();
+  });
+
   describe('beforeSend', () => {
     let beforeSend: (event: Event) => Event | null;
 
@@ -91,6 +104,13 @@ describe('initSentry', () => {
       expect(out?.user).toEqual({ id: 'u1' });
     });
 
+    it('sets user to {} when id is undefined', () => {
+      const out = beforeSend({
+        user: { email: 'a@b.c' },
+      } as unknown as Event);
+      expect(out?.user).toEqual({});
+    });
+
     it('drops request cookies and data', () => {
       const out = beforeSend({
         request: { cookies: 'sid=abc', data: { password: 'x' } },
@@ -98,6 +118,11 @@ describe('initSentry', () => {
       const req = out?.request as { cookies?: unknown; data?: unknown };
       expect(req.cookies).toBeUndefined();
       expect(req.data).toBeUndefined();
+    });
+
+    it('treats missing breadcrumbs as empty', () => {
+      const out = beforeSend({} as unknown as Event);
+      expect(out?.breadcrumbs).toEqual([]);
     });
 
     it('scrubs PII from breadcrumb data', () => {
@@ -114,13 +139,5 @@ describe('initSentry', () => {
       expect(firstData.label).toBe('safe');
       expect(bcs[1]?.data).toBeUndefined();
     });
-  });
-});
-
-describe('Sentry re-export', () => {
-  it('exposes the @sentry/react-native namespace', () => {
-    expect(Sentry).toBeDefined();
-    expect(typeof Sentry.init).toBe('function');
-    expect(typeof Sentry.captureException).toBe('function');
   });
 });

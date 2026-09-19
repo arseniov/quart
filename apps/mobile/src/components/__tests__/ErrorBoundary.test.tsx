@@ -18,18 +18,6 @@ function Bomb({ throwOn }: { throwOn?: boolean }): React.ReactElement {
 }
 
 describe('ErrorBoundary', () => {
-  beforeAll(async () => {
-    if (!i18n.isInitialized) {
-      await new Promise<void>((resolve) => {
-        i18n.init(
-          { resources: { en: { translation: {} }, it: { translation: {} } }, lng: 'en' },
-          () => resolve(),
-        );
-      });
-    }
-    await i18n.changeLanguage('en');
-  });
-
   afterAll(async () => {
     await i18n.changeLanguage('it');
   });
@@ -38,7 +26,8 @@ describe('ErrorBoundary', () => {
     mockCaptureException.mockReset();
   });
 
-  it('renders fallback when a child throws', () => {
+  it('renders fallback when a child throws', async () => {
+    await i18n.changeLanguage('en');
     // Suppress the deliberate React error noise from `throw new Error()`.
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { getByText } = render(
@@ -51,7 +40,8 @@ describe('ErrorBoundary', () => {
     errSpy.mockRestore();
   });
 
-  it('calls captureException on componentDidCatch', () => {
+  it('calls captureException on componentDidCatch', async () => {
+    await i18n.changeLanguage('en');
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     render(
       <ErrorBoundary>
@@ -65,10 +55,12 @@ describe('ErrorBoundary', () => {
     errSpy.mockRestore();
   });
 
-  it('retries and re-renders children after pressing the button', () => {
+  it('retries and re-renders children after pressing the button', async () => {
+    await i18n.changeLanguage('en');
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     // Class component (not function) — strict mode does not double-invoke render
     // on class components, so a thrown render reliably reaches the boundary.
+    let throwOn = true;
     class Thrower extends React.Component<{ throwOn: boolean }, { n: number }> {
       override state = { n: 0 };
       override render(): React.ReactNode {
@@ -76,30 +68,26 @@ describe('ErrorBoundary', () => {
         return <Text>recovered</Text>;
       }
     }
-    let throwOn = true;
-    function Harness(): React.ReactElement {
-      const [, force] = React.useReducer((x: number) => x + 1, 0);
-      // ponytail: expose a side-channel so the test can flip throwOn after mount.
-      (Harness as unknown as { _setThrowOn: (v: boolean) => void })._setThrowOn = (v: boolean) => {
-        throwOn = v;
-        force();
-      };
-      return <Thrower throwOn={throwOn} />;
-    }
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText, rerender } = render(
       <ErrorBoundary>
-        <Harness />
+        <Thrower throwOn={throwOn} />
       </ErrorBoundary>,
     );
     expect(getByText('Retry')).toBeTruthy();
-    (Harness as unknown as { _setThrowOn: (v: boolean) => void })._setThrowOn(false);
+    throwOn = false;
+    rerender(
+      <ErrorBoundary>
+        <Thrower throwOn={throwOn} />
+      </ErrorBoundary>,
+    );
     fireEvent.press(getByText('Retry'));
     expect(queryByText('Something went wrong.')).toBeNull();
     expect(queryByText('recovered')).toBeTruthy();
     errSpy.mockRestore();
   });
 
-  it('renders children normally when nothing throws', () => {
+  it('renders children normally when nothing throws', async () => {
+    await i18n.changeLanguage('en');
     const { getByText } = render(
       <ErrorBoundary>
         <Bomb />
