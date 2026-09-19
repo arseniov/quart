@@ -4,13 +4,15 @@
 // so the caller can choose silent-vs-Alert behavior per provider
 // (e.g. ERR_CANCELED from AppleAuthentication is silent).
 import { useMutation } from '@tanstack/react-query';
+
 import { apiClient } from '@/api/client';
-import { saveTokens } from '@/lib/auth';
-import { mmkvStorage } from '@/lib/storage';
 import {
   useRegisterDevice,
   NotificationsPermissionError,
 } from '@/api/hooks/useRegisterDevice';
+import { APPLE_USER_KEY } from '@/auth/apple-silent-reauth';
+import { saveTokens } from '@/lib/auth';
+import { mmkvStorage } from '@/lib/storage';
 
 export type SocialProvider = 'apple' | 'google';
 
@@ -32,7 +34,7 @@ export function useSocialLogin() {
       );
       await saveTokens({ accessToken: r.data.access_token, refreshToken: r.data.refresh_token });
       if (input.provider === 'apple' && input.userId) {
-        mmkvStorage.setItem('quart.apple.user.v1', input.userId);
+        mmkvStorage.setItem(APPLE_USER_KEY, input.userId);
       }
       // ponytail: same swallow-NotificationsPermissionError pattern as useLogin — register-device
       //        is best-effort post-auth; user denying notifications must not fail social login.

@@ -7,17 +7,19 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/theme/nativewind';
-import { PersistProvider } from '@/api/PersistProvider';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
+
 import { Announcer } from '@/a11y/Announcer';
-import { initSentry } from '@/observability/sentry';
+import { PersistProvider } from '@/api/PersistProvider';
+import { trySilentAppleReauth } from '@/auth/apple-silent-reauth';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { startAutoFlush } from '@/lib/connectivity';
 import {
   configureNotificationHandler,
   configureAndroidChannels,
 } from '@/lib/notifications';
-import { startAutoFlush } from '@/lib/connectivity';
 import { ensureFreeSpace } from '@/lib/tile-cache';
+import { initSentry } from '@/observability/sentry';
+import { useColorScheme } from '@/theme/nativewind';
 
 initSentry();
 
@@ -46,6 +48,13 @@ export default function RootLayout() {
       if (state === 'active') ensureFreeSpace().catch(console.error);
     });
     return () => sub.remove();
+  }, []);
+
+  // ponytail: GH #24 — silent Apple re-auth on cold launch. Fire-and-forget; the helper
+  //          updates the MMKV entry on success and clears it on failure so the login screen
+  //          surfaces naturally if the credential is revoked.
+  useEffect(() => {
+    trySilentAppleReauth().catch(console.error);
   }, []);
 
   return (
