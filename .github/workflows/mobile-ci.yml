@@ -1,0 +1,38 @@
+name: mobile-ci
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - '.github/workflows/mobile-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - '.github/workflows/mobile-ci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  mobile-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXPO_PUBLIC_API_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.15.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: 'pnpm' }
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @quart/mobile typecheck
+      - name: Test + coverage
+        run: pnpm --filter @quart/mobile test -- --coverage --coverageConfig=apps/mobile/.jest-coverage.json
+      - name: Lint
+        run: pnpm --filter @quart/mobile lint
