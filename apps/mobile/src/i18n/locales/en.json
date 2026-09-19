@@ -149,6 +149,18 @@
     "version": "Version",
     "copyright": "Copyright"
   },
+  "user": {
+    "profile": {
+      "title": "Profile",
+      "handle": "@{{handle}}",
+      "joinedAt": "Joined {{date}}",
+      "statsTitle": "Activity",
+      "ideasCount": "Ideas",
+      "issuesCount": "Issues",
+      "pollsCount": "Polls",
+      "notFound": "User not found."
+    }
+  },
   "errors": {
     "network": "You appear to be offline.",
     "generic": "Something went wrong.",

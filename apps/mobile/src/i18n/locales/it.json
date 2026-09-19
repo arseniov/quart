@@ -149,6 +149,18 @@
     "version": "Versione",
     "copyright": "Copyright"
   },
+  "user": {
+    "profile": {
+      "title": "Profilo",
+      "handle": "@{{handle}}",
+      "joinedAt": "Iscritto il {{date}}",
+      "statsTitle": "Attività",
+      "ideasCount": "Idee",
+      "issuesCount": "Segnalazioni",
+      "pollsCount": "Sondaggi",
+      "notFound": "Utente non trovato."
+    }
+  },
   "errors": {
     "network": "Connessione assente. Riprova.",
     "generic": "Qualcosa è andato storto.",
