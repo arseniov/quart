@@ -67,11 +67,21 @@ jest.mock('@react-native-community/netinfo', () => ({
   },
 }));
 
+jest.mock('@maplibre/maplibre-react-native', () => ({
+  // ponytail: keep surface area minimal — the button only calls createPack and never inspects the pack.
+  OfflineManager: {
+    createPack: jest.fn(() => Promise.resolve({ id: 'pack-1' })),
+  },
+}));
+
 import NetInfo from '@react-native-community/netinfo';
+import { OfflineManager } from '@maplibre/maplibre-react-native';
+import * as tileCache from '@/lib/tile-cache';
 import { OfflineDownloadButton } from '../OfflineDownloadButton';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fsMock = require('expo-file-system') as { __resetFileState: () => void };
 const mNI = NetInfo as jest.Mocked<typeof NetInfo>;
+const mOffline = OfflineManager as jest.Mocked<typeof OfflineManager>;
 
 beforeEach(() => {
   fsMock.__resetFileState();
@@ -97,27 +107,46 @@ describe('OfflineDownloadButton', () => {
     fireEvent.press(getByLabelText('Download map for offline'));
 
     await waitFor(() => {
+      expect(mOffline.createPack).toHaveBeenCalledTimes(1);
       expect(getByLabelText('Available offline')).toBeTruthy();
     });
   });
 
-  it('removes the bundle on a second tap (toggle)', async () => {
-    const { getByLabelText, queryByLabelText } = render(<OfflineDownloadButton cityAreaId="napoli" />);
+  it('passes a flat [west, south, east, north] tuple and metadata to createPack', async () => {
+    const { getByLabelText } = render(<OfflineDownloadButton cityAreaId="bologna" />);
     fireEvent.press(getByLabelText('Download map for offline'));
-    await waitFor(() => getByLabelText('Available offline'));
-    fireEvent.press(getByLabelText('Available offline'));
-    await waitFor(() => {
-      expect(queryByLabelText('Available offline')).toBeNull();
-      expect(getByLabelText('Download map for offline')).toBeTruthy();
-    });
+
+    await waitFor(() => expect(mOffline.createPack).toHaveBeenCalled());
+    const [options] = mOffline.createPack.mock.calls[0]!;
+    expect(options.bounds).toEqual([12.4, 41.8, 12.6, 42.0]);
+    expect(options.metadata).toEqual({ cityAreaId: 'bologna' });
+    expect(typeof options.mapStyle).toBe('string');
   });
 
-  it('shows a metered-blocked message when offline', async () => {
+  it('shows noConnection label when offline', async () => {
     mNI.fetch.mockResolvedValueOnce({ isConnected: false, isInternetReachable: false } as never);
     const { getByLabelText } = render(<OfflineDownloadButton cityAreaId="torino" />);
     fireEvent.press(getByLabelText('Download map for offline'));
     await waitFor(() => {
-      expect(getByLabelText('Disable Wi-Fi only in settings to download on cellular.')).toBeTruthy();
+      expect(getByLabelText('You appear to be offline.')).toBeTruthy();
+      expect(mOffline.createPack).not.toHaveBeenCalled();
     });
+  });
+
+  it('shows meteredBlocked label when canDownloadOnCurrentNetwork rejects', async () => {
+    // ponytail: spy on the gate so the button hits the metered branch deterministically.
+    //          NetInfo is mocked as connected, so we route through canDownloadOnCurrentNetwork
+    //          returning false — which is the Wi-Fi-only / cellular signal.
+    const spy = jest.spyOn(tileCache, 'canDownloadOnCurrentNetwork').mockResolvedValue(false);
+    try {
+      const { getByLabelText } = render(<OfflineDownloadButton cityAreaId="palermo" />);
+      fireEvent.press(getByLabelText('Download map for offline'));
+      await waitFor(() => {
+        expect(getByLabelText('Disable Wi-Fi only in settings to download on cellular.')).toBeTruthy();
+        expect(mOffline.createPack).not.toHaveBeenCalled();
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

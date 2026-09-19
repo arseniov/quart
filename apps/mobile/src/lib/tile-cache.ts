@@ -4,6 +4,8 @@
 // can substitute in-memory fakes. Pure functions (size math, slug, manifest shape)
 // live outside `deps`.
 //
+// ponytail: MapLibre v11 uses `OfflineManager.createPack`; the `tileCachePath` property
+//          mentioned in GH #22 belongs to `@rnmapbox/maps` and is not applicable here.
 // ponytail: storage math uses 1 MB = 1_000_000 bytes (SI), not 1_048_576 (binary).
 //          Settings badge mirrors the system Settings → Storage convention; flip to
 //          binary if a future "show exact bytes" toggle lands.
@@ -213,4 +215,10 @@ export async function getStorageStats(deps: Deps = defaultDeps()): Promise<Stora
     totalBytes: bundles.reduce((sum, b) => sum + b.sizeBytes, 0),
     bundles,
   };
+}
+
+// ponytail: MapLibre v11 `OfflinePack` exposes no `getSize()` — sum the on-disk bundle
+//          dir via expo-file-system instead. Underestimates the native tile DB, fine for a badge.
+export function computeBundleSize(cityAreaId: string, deps: Deps = defaultDeps()): number {
+  return deps.computeSize(getBundleDir(cityAreaId, deps));
 }

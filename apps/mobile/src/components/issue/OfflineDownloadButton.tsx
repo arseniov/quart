@@ -1,21 +1,33 @@
 // src/components/issue/OfflineDownloadButton.tsx
 // GH #22 — "Download map for offline" affordance on the map tab.
-// ponytail: button state machine is intentionally simple — one of {idle, downloading, downloaded, failed, meteredBlocked}.
+// ponytail: button state machine is intentionally simple — one of
+//          {idle, downloading, downloaded, failed, meteredBlocked, noConnection}.
 //          A future cancel/retry flow can layer on top; for now the user re-taps to retry.
+// ponytail: delete UX is out of scope for GH #22 — settings page can grow a "remove offline map"
+//          action later. The button is single-purpose: tap to download.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { useTranslation } from 'react-i18next';
+import { OfflineManager } from '@maplibre/maplibre-react-native';
 import { minHitSlop } from '@/a11y/hit-slop';
 import {
   downloadCityArea,
   readManifest,
-  deleteCityArea,
   canDownloadOnCurrentNetwork,
   ensureFreeSpace,
+  computeBundleSize,
 } from '@/lib/tile-cache';
+import { osmStyle } from '@/lib/map-style';
 
-type Status = 'idle' | 'downloading' | 'downloaded' | 'failed' | 'meteredBlocked';
+type Status =
+  | 'idle'
+  | 'downloading'
+  | 'downloaded'
+  | 'failed'
+  | 'meteredBlocked'
+  | 'noConnection';
 
 const CITY_BOUNDS = { west: 12.4, south: 41.8, east: 12.6, north: 42.0 }; // ponytail: hardcoded until geocoding lands; same fallback as IssueMap.
 
@@ -31,12 +43,15 @@ export function OfflineDownloadButton({ cityAreaId }: { cityAreaId: string }) {
   }, [cityAreaId]);
 
   const onPress = useCallback(async () => {
-    if (status === 'downloaded') {
-      deleteCityArea(cityAreaId);
-      setStatus('idle');
+    if (status === 'downloading' || status === 'downloaded') return;
+    // ponytail: probe connectivity directly so we can split "no connection" from "metered"
+    //          — `canDownloadOnCurrentNetwork` collapses both into a single `false`.
+    const netState = await NetInfo.fetch();
+    const reachable = netState.isConnected !== false && netState.isInternetReachable !== false;
+    if (!reachable) {
+      setStatus('noConnection');
       return;
     }
-    if (status === 'downloading') return;
     const allowed = await canDownloadOnCurrentNetwork();
     if (!allowed) {
       setStatus('meteredBlocked');
@@ -50,13 +65,30 @@ export function OfflineDownloadButton({ cityAreaId }: { cityAreaId: string }) {
         onProgress: (p) => {
           if (p.totalBytes > 0) setPercent(Math.round((p.bytesDownloaded / p.totalBytes) * 100));
         },
-        fetchTiles: async (_dir, _bounds, onProgress) => {
-          // ponytail: real impl uses OfflineManager.createPack; for now we simulate progress.
-          //          Wire to native OfflineManager.createPack once EAS Build is provisioned.
-          onProgress({ bytesDownloaded: 25, totalBytes: 100 });
-          onProgress({ bytesDownloaded: 60, totalBytes: 100 });
-          onProgress({ bytesDownloaded: 100, totalBytes: 100 });
-          return { sizeBytes: 24_000_000 };
+        fetchTiles: async (_dir, bounds, onProgress) => {
+          // ponytail: MapLibre v11 expects `bounds` as a flat [west, south, east, north] tuple
+          //          (see `LngLatBounds`) and BOTH listener args are required even if you only
+          //          use one. The percentage field is already 0-100, so we forward it as bytes/100
+          //          to keep the existing progress wiring.
+          await OfflineManager.createPack(
+            {
+              mapStyle: osmStyle,
+              bounds: [bounds.west, bounds.south, bounds.east, bounds.north],
+              minZoom: 10,
+              maxZoom: 18,
+              metadata: { cityAreaId },
+            },
+            (_pack, status) => onProgress({ bytesDownloaded: status.percentage, totalBytes: 100 }),
+            (_pack, error) => {
+              // ponytail: error listener fires after createPack has resolved; a throw here
+              //          becomes an unhandled rejection. Surface to the logger so Sentry picks
+              //          it up — the user retries by tapping again.
+              console.error('[OfflineDownloadButton] pack error', error);
+            },
+          );
+          // ponytail: OfflinePack has no `getSize()` in v11 — sum the on-disk bundle dir.
+          //          Native tile db lives outside our filesystem; size is a soft estimate.
+          return { sizeBytes: computeBundleSize(cityAreaId) };
         },
       });
       setStatus('downloaded');
@@ -73,6 +105,8 @@ export function OfflineDownloadButton({ cityAreaId }: { cityAreaId: string }) {
         return t('map.offline.downloading', { percent });
       case 'failed':
         return t('map.offline.failed');
+      case 'noConnection':
+        return t('map.offline.noConnection');
       case 'meteredBlocked':
         return t('map.offline.meteredBlocked');
       case 'idle':

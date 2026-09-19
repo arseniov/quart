@@ -121,9 +121,9 @@
       "download": "Download map for offline",
       "downloading": "Downloading… {{percent}}%",
       "downloaded": "Available offline",
-      "delete": "Remove offline map",
       "failed": "Download failed. Tap to retry.",
       "storageUsed": "Downloaded · {{size}}",
+      "noConnection": "You appear to be offline.",
       "meteredBlocked": "Disable Wi-Fi only in settings to download on cellular."
     }
   },

@@ -121,9 +121,9 @@
       "download": "Scarica la mappa per offline",
       "downloading": "Download in corso… {{percent}}%",
       "downloaded": "Disponibile offline",
-      "delete": "Rimuovi mappa offline",
       "failed": "Download non riuscito. Tocca per riprovare.",
       "storageUsed": "Scaricata · {{size}}",
+      "noConnection": "Sembra che tu sia offline.",
       "meteredBlocked": "Disabilita \"solo Wi-Fi\" nelle impostazioni per scaricare in rete mobile."
     }
   },
