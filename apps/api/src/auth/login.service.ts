@@ -76,9 +76,10 @@ export class LoginService {
     }
 
     // Translate BA's user record into a Quart SessionUserRow. BA's `user.id`
-    // is a text UUID and the Quart `users` row may have a different id
-    // (the linkage runs through `user_identities` / `users.email`), so we
-    // look up by email — same approach password-reset uses.
+    // is a text UUID; the Quart `users` row may have a different id, so we
+    // look up by email — same approach password-reset uses. (Future sign-up
+    // may add a `user_identities` linkage table; for now email is the
+    // canonical join key between BA and Quart.)
     const user = await this.db.kysely
       .selectFrom('users')
       .select([

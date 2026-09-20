@@ -13,7 +13,9 @@ export const LoginRequestSchema = z.object({
   // password-reset's newPassword policy (which is the same as BA's
   // signUpEmail validator, kept consistent across flows).
   password: z.string().min(12).max(200),
-  deviceFingerprint: z.string().min(1).max(200).optional(),
+  // deviceFingerprint is NOT a body field — it travels via the
+  // `X-Device-Fingerprint` HTTP header, consistent with every other
+  // auth controller. See `extractLoginContext` in login.service.ts.
 });
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;

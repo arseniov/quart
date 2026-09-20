@@ -315,6 +315,7 @@ describe('LoginService.signInAndIssueSession', () => {
     expect(state.authSessions).toHaveLength(0);
     expect(audit.calls.map((c) => c.action)).toEqual(['auth.email_login_failed']);
     expect(audit.calls[0]!.payload).toMatchObject({ email: EMAIL });
+    expect(audit.calls[0]!.targetId).toMatch(/^email:[a-f0-9]{40}$/);
   });
 
   it('401 unknown email (BA rejects): treated the same as wrong password', async () => {
@@ -327,6 +328,7 @@ describe('LoginService.signInAndIssueSession', () => {
     });
     expect(state.authSessions).toHaveLength(0);
     expect(audit.calls.map((c) => c.action)).toEqual(['auth.email_login_failed']);
+    expect(audit.calls[0]!.targetId).toMatch(/^email:[a-f0-9]{40}$/);
   });
 
   it('401 soft-deleted Quart user (BA accepted but users.status=deleted): also fails', async () => {
@@ -339,6 +341,7 @@ describe('LoginService.signInAndIssueSession', () => {
     });
     expect(state.authSessions).toHaveLength(0);
     expect(audit.calls.map((c) => c.action)).toEqual(['auth.email_login_failed']);
+    expect(audit.calls[0]!.targetId).toMatch(/^email:[a-f0-9]{40}$/);
   });
 
   it('401 BA accepts but no Quart user row (orphan account): treated as failure', async () => {
@@ -351,6 +354,7 @@ describe('LoginService.signInAndIssueSession', () => {
     });
     expect(state.authSessions).toHaveLength(0);
     expect(audit.calls.map((c) => c.action)).toEqual(['auth.email_login_failed']);
+    expect(audit.calls[0]!.targetId).toMatch(/^email:[a-f0-9]{40}$/);
   });
 
   it('falls back to writeSystem for session_created when the user has no default_city_id', async () => {
@@ -459,7 +463,7 @@ describe('LoginController', () => {
     const { controller, doubles, req } = makeController('ok', activeUser());
 
     const out = await controller.login(
-      { email: EMAIL, password: PASSWORD, deviceFingerprint: 'fp-123' } as never,
+      { email: EMAIL, password: PASSWORD } as never,
       req as never,
     );
 
