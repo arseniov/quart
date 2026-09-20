@@ -33,12 +33,18 @@ import { Reflector } from '@nestjs/core';
 import type { TenantContext } from '@quart/shared-types';
 import type { FastifyRequest } from 'fastify';
 
-// Value (not `import type`) — `new BaAuthGuard(...)` in tests needs the
-// runtime class, and DI needs `design:paramtypes` to resolve AuthService.
+// Value (not `import type`) — DbService + AuthService + MfaService are
+// constructor-injected; tests need the runtime class for `new
+// BaAuthGuard(...)` and DI needs `design:paramtypes` to resolve them.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { DbService } from '../db/db.service.js';
+
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service.js';
 import type { AuthUser } from './decorators/current-user.decorator.js';
-// Value (not `import type`) for the same DI/test reasons as AuthService.
+// Value (not `import type`) — MfaService is constructor-injected; tests
+// need the runtime class for `new BaAuthGuard(...)` and DI needs
+// `design:paramtypes` to resolve the type token.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { MfaService } from './mfa.service.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
@@ -87,6 +93,11 @@ export class BaAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly auth: AuthService,
+    // GH #47: DbService resolves `users.default_city_id` by BA user email
+    // (the canonical BA↔Quart join key, shared with ba-audit.hook.ts:189)
+    // so `req.tenant.cityId` is populated for RLS. DbModule is @Global so
+    // no AuthModule wiring change is needed.
+    private readonly db: DbService,
     private readonly mfa: MfaService,
   ) {}
 
@@ -135,24 +146,62 @@ export class BaAuthGuard implements CanActivate {
 
   // GH #45 follow-up: pull MFA state from `mfa_credentials` so MfaGuard
   // can gate officer endpoints without a bearer claim. `getMfaState`
-  // reads `enrolled_at` + `verified_at` in a tenant tx — with BA
-  // sessions we have no city_id, so RLS scopes the read to zero rows
-  // until BA users get a city-resolution path. The lookup is best-effort:
-  // any failure (RLS, missing row, DB hiccup) leaves `mfaEnrolledAt`
-  // and `mfaVerifiedAt` undefined, which MfaGuard treats as "not
-  // enrolled" — a fail-closed default that protects officer endpoints
-  // even when this guard can't reach the DB.
+  // reads `enrolled_at` + `verified_at` in a tenant tx — the cityId
+  // argument is what unblocks RLS (FK + WITH CHECK both scope by city).
+  // ponytail: city resolution is inlined here (single caller) — if a
+  // second caller ever needs it, extract a resolver. The MFA lookup is
+  // best-effort: any failure (RLS, missing row, DB hiccup) leaves
+  // `mfaEnrolledAt` and `mfaVerifiedAt` undefined, which MfaGuard
+  // treats as "not enrolled" — a fail-closed default that protects
+  // officer endpoints even when this guard can't reach the DB.
   private async attachUserAndTenant(req: RequestWithAuth, session: BaSessionResponse): Promise<void> {
-    // BA's `user.id` is now the canonical principal identifier. The
-    // cityId slot stays empty-string — matches JwtAuthGuard's behaviour
-    // for users with no default_city_id (see session.service.ts:108
-    // `city_id: cityId ?? ''`). Downstream code that needs a real city
-    // reads it from the user's `default_city_id` row, same as before.
+    // GH #47: resolve Quart `users.default_city_id` by BA user email —
+    // the canonical BA↔Quart join key (shared with ba-audit.hook.ts:189).
+    // Populates `req.tenant.cityId` + `req.user.cityId` so MfaService +
+    // /auth/mfa/enroll + any controller calling `runInTenantTx` on a BA
+    // session see the real city_id under RLS. BA is the source of truth
+    // for the principal (GH #44); no signup-time Quart-row provisioning
+    // exists — we look up by email, not by id. Switching to O(1) by-id
+    // is a follow-up to a provisioning step (out of scope for GH #47).
     const requestId = req.raw?.id ?? req.id ?? '';
     const userId = session.user.id;
+    const userEmail = session.user.email;
+
+    // Default to empty-string (matches JwtAuthGuard for users with no
+    // default_city_id — see session.service.ts:108) and let each branch
+    // upgrade it to a real UUID or warn on orphan.
+    let cityId = '';
+    try {
+      const quartUser = await this.db.kysely
+        .selectFrom('users')
+        .select(['default_city_id'])
+        .where('email', '=', userEmail)
+        .executeTakeFirst();
+      if (!quartUser) {
+        // BA-orphan — BA owns the user, no Quart projection. Ops can
+        // backfill via the GH #47 warn signal.
+        this.logger.warn(
+          { baUserId: userId, email: userEmail },
+          'ba auth guard: Quart users row missing for BA user; defaulting to empty cityId',
+        );
+      } else if (quartUser.default_city_id === null) {
+        this.logger.warn(
+          { baUserId: userId, email: userEmail },
+          'ba auth guard: Quart user has no default_city_id; defaulting to empty cityId',
+        );
+      } else {
+        cityId = quartUser.default_city_id;
+      }
+    } catch (err) {
+      this.logger.warn(
+        { err: String(err), baUserId: userId, email: userEmail },
+        'ba auth guard: city lookup failed; defaulting to empty cityId',
+      );
+    }
+
     const user: AuthUser = {
       id: userId,
-      cityId: '',
+      cityId,
       isSuperAdmin: false,
       roleSnapshot: [],
       requestId,
@@ -166,7 +215,7 @@ export class BaAuthGuard implements CanActivate {
     };
 
     try {
-      const state = await this.mfa.getMfaState(userId, '');
+      const state = await this.mfa.getMfaState(userId, cityId);
       if (state.enrolledAt) user.mfaEnrolledAt = state.enrolledAt.getTime();
       if (state.verifiedAt) user.mfaVerifiedAt = state.verifiedAt.getTime();
     } catch (err) {
@@ -179,7 +228,7 @@ export class BaAuthGuard implements CanActivate {
     }
 
     const tenant: TenantContext = {
-      cityId: '',
+      cityId,
       userId,
       isSuperAdmin: false,
       requestId,
