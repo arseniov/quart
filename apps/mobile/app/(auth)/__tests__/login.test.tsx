@@ -6,6 +6,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { Alert } from 'react-native';
 
 import LoginScreen from '../login';
 
@@ -72,11 +73,16 @@ describe('LoginScreen', () => {
   afterAll(async () => {
     await i18n.changeLanguage('it');
   });
+  let alertSpy: jest.SpyInstance;
   beforeEach(() => {
     mockReplace.mockClear();
     mockPost.mockReset();
     mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    alertSpy.mockRestore();
   });
 
   it('happy path: posts to /auth/sign-in/email, persists the BA session cookie, and routes to /', async () => {
@@ -105,14 +111,14 @@ describe('LoginScreen', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
   });
 
-  it('401 unauthorized: error is surfaced via the generic error copy and tokens are NOT persisted', async () => {
+  it('401 unauthorized: error is surfaced via Alert and tokens are NOT persisted', async () => {
     const { ApiError } = jest.requireMock('@/api/client');
-    mockPost.mockRejectedValue(new ApiError(401, 'unauthorized', 'bad creds'));
-    const { getByLabelText, getByText } = render(<LoginScreen />, { wrapper: makeWrapper() });
+    mockPost.mockRejectedValue(new ApiError(401, 'unauthorized', 'Invalid credentials'));
+    const { getByLabelText } = render(<LoginScreen />, { wrapper: makeWrapper() });
     fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
     fireEvent.changeText(getByLabelText('Password'), 'wrongpass1');
     fireEvent.press(getByLabelText('Sign in'));
-    await waitFor(() => expect(getByText('Something went wrong.')).toBeTruthy());
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Invalid credentials'));
     expect(mockSaveTokens).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalledWith('/');
   });

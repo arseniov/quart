@@ -45,8 +45,13 @@ export default function LoginScreen() {
     try {
       await login.mutateAsync(data);
       router.replace('/');
-    } catch {
-      // error surfaced via login.error below
+    } catch (e: unknown) {
+      // ponytail: 401/422 from the API carry a `code`+`message`; surface the
+      //        message via Alert so the user sees something actionable. Real
+      //        field-level zod errors are already shown inline.
+      const apiMessage = (e as { data?: { message?: string }, message?: string })?.data?.message
+        ?? (e as { message?: string })?.message;
+      Alert.alert(apiMessage ?? t('errors.generic'));
     }
   });
 
@@ -140,12 +145,6 @@ export default function LoginScreen() {
       {errors.password && (
         <Text accessibilityLiveRegion="polite" className="text-error mb-3">
           {errors.password.message}
-        </Text>
-      )}
-
-      {login.isError && (
-        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
-          {t('errors.generic')}
         </Text>
       )}
 

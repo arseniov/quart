@@ -4,7 +4,7 @@
 // so the caller can choose silent-vs-Alert behavior per provider
 // (e.g. ERR_CANCELED from AppleAuthentication is silent).
 //
-// GH #46 follow-up: BA's /auth/sign-in/social endpoint expects
+// TODO(GH #48): BA's /auth/sign-in/social endpoint expects
 // `{ provider, idToken: { token, ... } }` (nested idToken object), not
 // the flat `{ provider, idToken: <string> }` the mobile sends today —
 // once that body shape lands, this hook should extract the BA session
@@ -38,7 +38,7 @@ export function useSocialLogin() {
         { provider: input.provider, idToken: input.idToken },
         { skipAuth: true },
       );
-      // ponytail: BA session cookie not yet persisted from this flow —
+      // ponytail: BA session cookie not yet persisted from this flow (GH #48) —
       //        see file header. Apple userId for silent re-auth stays.
       if (input.provider === 'apple' && input.userId) {
         mmkvStorage.setItem(APPLE_USER_KEY, input.userId);

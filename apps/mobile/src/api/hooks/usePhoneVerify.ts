@@ -5,7 +5,7 @@
 // `useMe` cache; the BA session itself is currently NOT persisted from
 // this flow (mobile re-signs in via /login or /signup if needed).
 //
-// GH #46 follow-up: thread BA's session cookie through /auth/phone/verify
+// TODO(GH #48): thread BA's session cookie through /auth/phone/verify
 // (the server-side handler can mirror BA's Set-Cookie on the response).
 // Until that lands, this hook is a no-op for token storage.
 import { useMutation } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ export function usePhoneVerify() {
         { ...input, device_fingerprint: fp },
         { skipAuth: true },
       );
-      // ponytail: GH #46 — BA session token storage is not wired here yet.
+      // ponytail: GH #48 — BA session token storage is not wired here yet.
       //        The BA cookie (if any) is ignored; the user is treated as
       //        "no session" until a follow-up lands.
       // ponytail: silently swallow NotificationsPermissionError — user denied notifications but
