@@ -15,6 +15,7 @@ import {
   PhoneOtpService,
   extractVerifyContext,
 } from '../phone-otp.service.js';
+import { SessionService } from '../session.service.js';
 import { TwilioService } from '../twilio.service.js';
 
 const PHONE = '+15551234567';
@@ -179,13 +180,22 @@ function makeDoubles(overrides: {
   const audit = makeAudit();
   const twilio = makeTwilio(overrides.verify ?? true);
   const jwt = makeJwt();
-  const service = new PhoneOtpService(
+  // Real SessionService with the test stubs — the extracted helper is
+  // the only thing that touches auth_sessions + signs JWTs, so wiring it
+  // with the same stubs guarantees the test invariants (audit chain
+  // order, session row shape, response DTO) preserve across the refactor.
+  const sessions = new SessionService(
     db as unknown as DbService,
     jwt,
     audit as unknown as AuditService,
+  );
+  const service = new PhoneOtpService(
+    db as unknown as DbService,
+    sessions,
+    audit as unknown as AuditService,
     twilio,
   );
-  return { state, db, audit, twilio, jwt, service };
+  return { state, db, audit, twilio, jwt, sessions, service };
 }
 
 function activeUser(overrides: Partial<DbState['users'][number]> = {}): DbState['users'][number] {
@@ -487,10 +497,12 @@ describe('PhoneOtpController (Nest DI graph)', () => {
         { provide: JwtService, useValue: doubles.jwt },
         { provide: AuditService, useValue: doubles.audit },
         { provide: TwilioService, useValue: doubles.twilio },
+        SessionService,
         PhoneOtpService,
       ],
     }).compile();
     expect(moduleRef.get(PhoneOtpController)).toBeInstanceOf(PhoneOtpController);
     expect(moduleRef.get(PhoneOtpService)).toBeInstanceOf(PhoneOtpService);
+    expect(moduleRef.get(SessionService)).toBeInstanceOf(SessionService);
   });
 });

@@ -10,45 +10,26 @@
 // image SUPERUSER, which BYPASSRLSes — see 0011_rls.up.sql / 0040_*.up.sql).
 // Everything that needs RLS-gated writes (session_created audit) then opens
 // a `runInTenantTx` against the user's `default_city_id`.
-import { createHash, randomUUID } from 'node:crypto';
+//
+// Session issuance itself is delegated to `SessionService.createSession`
+// (apps/api/src/auth/session.service.ts) so the forthcoming email-login
+// controller can reuse the exact same code path without forking the chain.
 
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-  UnprocessableEntityException,
-} from '@nestjs/common';
-import type { TenantContext } from '@quart/shared-types';
+import { createHash } from 'node:crypto';
+
+import { Injectable, UnauthorizedException, UnprocessableEntityException } from '@nestjs/common';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
-// `design:paramtypes` for the constructor parameters below. Matches the
-// pattern in magic-link.service.ts / mfa.service.ts.
+// `design:paramtypes` for the constructor parameters below.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuditService } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-
+import type { VerifyOtpSessionResponse } from './phone-otp.dto.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { JwtService } from './jwt.service.js';
-import type { JwtClaims } from './jwt.service.js';
-import type {
-  VerifyOtpSessionResponse,
-  VerifyOtpSessionUser,
-} from './phone-otp.dto.js';
+import { SessionService } from './session.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TwilioService } from './twilio.service.js';
-
-// Access token TTL (1h) matches the lifetime used elsewhere in the stack
-// for short-lived JWTs; refresh TTL (30d) is the same window Quart's
-// `auth_sessions.absolute_expires_at` accepts. The refresh token is a
-// SEPARATE sign (different jti) so revocation can target either.
-const ACCESS_TTL_SECONDS = 60 * 60;
-const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
-
-// Reused across other auth services — same loose UUID regex used by
-// RequestIdMiddleware, etc. Keeps `request_id` uuid-typed in audit_log
-// without 22P02.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface VerifyInput {
   phoneNumber: string;
@@ -60,36 +41,24 @@ interface VerifyInput {
 }
 
 /**
- * Phone-OTP verification + session issuance. Two-phase write:
+ * Phone-OTP verification + session issuance.
  *
- *  1. `phone_verified` audit row (sentinel city, pre-tenant) — captures
- *     the OTP-success event before any user lookup. Same pattern as
- *     magic-link.consume (gh #4) and password-reset.issue.
- *
- *  2. Inside `runInTenantTx` against the user's city: INSERT into
- *     `auth_sessions`, then write the `session_created` audit row in the
- *     SAME transaction so the session and its chain entry are atomic
- *     (a future revoker needs the row to exist for the audit to be true).
- *
- * The session id is the JWT `jti`; JwtAuthGuard reads auth_sessions by id
- * to authorise every subsequent request. If the city is null (the user
- * hasn't onboarded), session_created falls back to writeSystem — the
- * audit chain still needs the row, even if no city context exists yet.
+ * Two-phase audit chain:
+ *  1. `phone_verified` — pre-tenant, lands under the sentinel city so the
+ *     chain sees the OTP match even before any user lookup.
+ *  2. `session_created` — written by `SessionService.createSession`,
+ *     in-tenant when the user has a city, writeSystem otherwise.
  */
 @Injectable()
 export class PhoneOtpService {
-  private readonly logger = new Logger(PhoneOtpService.name);
-
   constructor(
     private readonly db: DbService,
-    private readonly jwt: JwtService,
+    private readonly sessions: SessionService,
     private readonly audit: AuditService,
     private readonly twilio: TwilioService,
   ) {}
 
-  async verifyAndIssueSession(
-    input: VerifyInput,
-  ): Promise<VerifyOtpSessionResponse> {
+  async verifyAndIssueSession(input: VerifyInput): Promise<VerifyOtpSessionResponse> {
     // Twilio Verify holds the actual OTP comparison. A `false` here is
     // either a bad code or a code from a different phone — surface 422
     // without leaking which.
@@ -168,131 +137,29 @@ export class PhoneOtpService {
       .where('user_roles.user_id', '=', user.id)
       .execute();
     const roles = roleRows.map((r) => r.code);
-    const cityId = user.default_city_id;
 
-    // Mint a fresh session id + absolute expiry. The auth_sessions row
-    // is the source of truth for "is this session alive"; JwtAuthGuard
-    // reads it on every request. `last_seen_at` is stamped by the guard
-    // on each authenticated hit, so we leave it at the default (== created_at)
-    // here.
-    const sessionId = randomUUID();
-    const expiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
-
-    if (cityId) {
-      // Happy path — user has a city. runInTenantTx keeps RLS GUCs set
-      // for the INSERT + audit, both of which happen in the same tx.
-      await this.db.runInTenantTx(this.tenantCtx(cityId, user.id, input.requestId), async (trx) => {
-        await trx
-          .insertInto('auth_sessions')
-          .values({
-            id: sessionId,
-            user_id: user.id,
-            device_fingerprint: input.deviceFingerprint,
-            ip: input.ip,
-            user_agent: input.userAgent ?? '',
-            absolute_expires_at: expiresAt,
-          } as never)
-          .execute();
-
-        await this.audit.write(trx, {
-          tenant: this.tenantCtx(cityId, user.id, input.requestId),
-          action: 'session_created',
-          targetType: 'session',
-          targetId: sessionId,
-          payload: {
-            via: 'phone_otp',
-            device_fingerprint: input.deviceFingerprint,
-          },
-          ip: input.ip,
-          userAgent: input.userAgent,
-        });
-      });
-    } else {
-      // No city yet — fall back to writeSystem for the session row
-      // audit. auth_sessions has no RLS so the INSERT itself is fine
-      // outside the tenant tx, but the chain needs to land somewhere.
-      await this.db.kysely
-        .insertInto('auth_sessions')
-        .values({
-          id: sessionId,
-          user_id: user.id,
-          device_fingerprint: input.deviceFingerprint,
-          ip: input.ip,
-          user_agent: input.userAgent ?? '',
-          absolute_expires_at: expiresAt,
-        } as never)
-        .execute();
-
-      await this.audit.writeSystem(this.db.kysely, {
-        action: 'session_created',
-        targetType: 'session',
-        targetId: sessionId,
-        payload: {
-          via: 'phone_otp',
-          device_fingerprint: input.deviceFingerprint,
-        },
-        requestId: input.requestId,
-        ip: input.ip,
-        userAgent: input.userAgent,
-      });
-    }
-
-    // Sign two distinct JWTs. They share the same `jti` (== sessionId)
-    // so JwtAuthGuard sees one session regardless of which the caller
-    // presents — but they differ in TTL so a stolen access token can't
-    // outlive its short window. Refresh reuse is enforced at the
-    // `auth_sessions.absolute_expires_at` level (30d), not in the JWT
-    // itself.
-    const baseClaims: Omit<JwtClaims, never> = {
-      sub: user.id,
-      city_id: cityId ?? '',
-      scope_type: 'city',
-      scope_id: cityId,
-      role_snapshot: roles,
-      device_fingerprint: input.deviceFingerprint,
-    };
-    const accessToken = await this.jwt.sign(baseClaims, {
-      jti: sessionId,
-      ttlSeconds: ACCESS_TTL_SECONDS,
-    });
-    const refreshToken = await this.jwt.sign(baseClaims, {
-      jti: sessionId,
-      ttlSeconds: REFRESH_TTL_SECONDS,
-    });
-
-    const dto: VerifyOtpSessionUser = {
-      id: user.id,
-      handle: user.handle,
-      display_name: user.display_name,
-      email: user.email,
-      phone_e164: user.phone_e164,
-      avatar_url: user.avatar_url,
-      preferred_locale: user.locale,
-      city_id: cityId,
-      // Mirrors the mobile's onboarding-gate logic: no city → user must
-      // pick one before the map / tabs are usable. See app/(app)/_layout.tsx.
-      needs_onboarding: !cityId,
+    // Hand off to the shared session helper. The HMAC chain entry lands
+    // in the same order it did when this logic was inlined — every
+    // existing test for `phone_verified` → `session_created` order still
+    // holds because SessionService preserves the original write sequence.
+    return this.sessions.createSession({
+      user: {
+        id: user.id,
+        handle: user.handle,
+        display_name: user.display_name,
+        email: user.email,
+        phone_e164: user.phone_e164,
+        avatar_url: user.avatar_url,
+        locale: user.locale,
+        default_city_id: user.default_city_id,
+      },
       roles,
-    };
-
-    return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      refresh_expires_at: expiresAt.toISOString(),
-      user: dto,
-    };
-  }
-
-  private tenantCtx(cityId: string, userId: string, requestId: string | null): TenantContext {
-    return {
-      cityId,
-      userId,
-      isSuperAdmin: false,
-      // audit_log.request_id is uuid-typed; non-UUIDs from middleware
-      // (e.g. `req-abc12345`) coerce to NULL so the insert doesn't
-      // 22P02. Same regex as audit.service.ts:tryParseUuid.
-      requestId: requestId && UUID_RE.test(requestId) ? requestId : '',
-    };
+      ip: input.ip,
+      userAgent: input.userAgent,
+      deviceFingerprint: input.deviceFingerprint,
+      requestId: input.requestId,
+      auditPayload: { via: 'phone_otp' },
+    });
   }
 }
 

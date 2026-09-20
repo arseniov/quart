@@ -3,14 +3,14 @@ import { ApiOkResponse, ApiTags, ApiUnprocessableEntityResponse } from '@nestjs/
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 
+import type { VerifyOtpSessionResponse } from './phone-otp.dto.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameters.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PhoneOtpService, extractVerifyContext } from './phone-otp.service.js';
+import { Public } from './public.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TwilioService } from './twilio.service.js';
-import { Public } from './public.decorator.js';
-import type { VerifyOtpSessionResponse } from './phone-otp.dto.js';
 
 const phoneSchema = z.object({
   phoneNumber: z.string().regex(/^\+\d{10,15}$/, 'E.164 phone format required'),

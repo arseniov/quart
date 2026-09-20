@@ -16,6 +16,7 @@ import { PasswordResetController } from './password-reset.controller.js';
 import { logMailer as logMailerPwd, PASSWORD_RESET_MAILER, PasswordResetService } from './password-reset.service.js';
 import { PhoneOtpController } from './phone-otp.controller.js';
 import { PhoneOtpService } from './phone-otp.service.js';
+import { SessionService } from './session.service.js';
 import { SignOutController } from './sign-out.controller.js';
 import { SignOutService } from './sign-out.service.js';
 import { TwilioService } from './twilio.service.js';
@@ -35,12 +36,13 @@ import { ValkeyService } from './valkey.service.js';
     MagicLinkService,
     PasswordResetService,
     PhoneOtpService,
+    SessionService,
     SignOutService,
     // Default mailer is the Pino-logged stub; AuthModule overrides can
     // rebind MAILER to a real SMTP/SES client.
     { provide: MAILER, useValue: logMailer },
     { provide: PASSWORD_RESET_MAILER, useValue: logMailerPwd },
   ],
-  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, SignOutService, MAILER],
+  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, SessionService, SignOutService, MAILER],
 })
 export class AuthModule {}
