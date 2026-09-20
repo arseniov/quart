@@ -1,8 +1,9 @@
 // app/(auth)/__tests__/signup.test.tsx
-// GH #35: happy path + 401/422 surface. Mirrors the phone-otp test stub
+// GH #35 + GH #46: happy path + 422 surface. Mirrors the phone-otp test stub
 // pattern: real react-query drives mutation state, only apiClient +
 // saveTokens + register are mocked. i18n is loaded so the screen sees
-// the en keys.
+// the en keys. The hook now POSTs to BA's /auth/sign-up/email and persists
+// the BA session cookie via saveTokens.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
@@ -61,6 +62,12 @@ function makeWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
+function okSignUpHeaders() {
+  const h = new Headers();
+  h.append('set-cookie', 'better-auth.session_token=ba-session-tok.abc; HttpOnly; Path=/');
+  return h;
+}
+
 describe('SignupScreen', () => {
   beforeAll(async () => {
     await i18n.changeLanguage('en');
@@ -72,7 +79,7 @@ describe('SignupScreen', () => {
   beforeEach(() => {
     mockReplace.mockClear();
     mockPost.mockReset();
-    mockSaveTokens.mockReset().mockResolvedValue(undefined);
+    mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
@@ -81,7 +88,11 @@ describe('SignupScreen', () => {
   });
 
   it('renders the title and the email/password/displayName inputs', () => {
-    mockPost.mockResolvedValue({ status: 200, data: { access_token: 'a', refresh_token: 'r' } });
+    mockPost.mockResolvedValue({
+      status: 200,
+      data: { id: 'u', email: 'x', name: 'x', emailVerified: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      headers: okSignUpHeaders(),
+    });
     const { getByText, getByLabelText } = render(<SignupScreen />, { wrapper: makeWrapper() });
     expect(getByText('Create account')).toBeTruthy();
     expect(getByLabelText('Email')).toBeTruthy();
@@ -89,8 +100,12 @@ describe('SignupScreen', () => {
     expect(getByLabelText('Display name')).toBeTruthy();
   });
 
-  it('happy path: posts the signup body, persists tokens, and routes to /', async () => {
-    mockPost.mockResolvedValue({ status: 200, data: { access_token: 'a', refresh_token: 'r' } });
+  it('happy path: posts the signup body to /auth/sign-up/email, persists the BA session cookie, and routes to /', async () => {
+    mockPost.mockResolvedValue({
+      status: 200,
+      data: { id: 'u', email: 'new@example.com', name: 'New', emailVerified: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      headers: okSignUpHeaders(),
+    });
     const { getByLabelText, getByText } = render(<SignupScreen />, { wrapper: makeWrapper() });
     fireEvent.changeText(getByLabelText('Email'), 'new@example.com');
     fireEvent.changeText(getByLabelText('Password'), 'p4ssword!');
@@ -98,13 +113,13 @@ describe('SignupScreen', () => {
     fireEvent.press(getByText('Sign up'));
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith(
-        '/auth/sign-up',
-        { email: 'new@example.com', password: 'p4ssword!', display_name: 'New', device_fingerprint: 'fp' },
+        '/auth/sign-up/email',
+        { email: 'new@example.com', password: 'p4ssword!', name: 'New' },
         { skipAuth: true },
       ),
     );
     await waitFor(() =>
-      expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' }),
+      expect(mockSaveTokens).toHaveBeenCalledWith({ baSessionToken: 'ba-session-tok.abc' }),
     );
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
   });
@@ -114,7 +129,11 @@ describe('SignupScreen', () => {
     mockRegisterMutateAsync.mockReset().mockRejectedValueOnce(
       new NotificationsPermissionError('denied'),
     );
-    mockPost.mockResolvedValue({ status: 200, data: { access_token: 'a', refresh_token: 'r' } });
+    mockPost.mockResolvedValue({
+      status: 200,
+      data: { id: 'u', email: 'x', name: 'x', emailVerified: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      headers: okSignUpHeaders(),
+    });
     const { getByLabelText, getByText } = render(<SignupScreen />, { wrapper: makeWrapper() });
     fireEvent.changeText(getByLabelText('Email'), 'new@example.com');
     fireEvent.changeText(getByLabelText('Password'), 'p4ssword!');
@@ -157,5 +176,21 @@ describe('SignupScreen', () => {
     await waitFor(() => expect(getByText(/at least 8|min/i)).toBeTruthy());
     expect(mockPost).not.toHaveBeenCalled();
     expect(mockSaveTokens).not.toHaveBeenCalled();
+  });
+
+  it('missing session cookie: error is surfaced and tokens are NOT persisted', async () => {
+    mockPost.mockResolvedValue({
+      status: 200,
+      data: { id: 'u', email: 'x', name: 'x', emailVerified: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      headers: new Headers(),
+    });
+    const { getByLabelText, getByText } = render(<SignupScreen />, { wrapper: makeWrapper() });
+    fireEvent.changeText(getByLabelText('Email'), 'new@example.com');
+    fireEvent.changeText(getByLabelText('Password'), 'p4ssword!');
+    fireEvent.changeText(getByLabelText('Display name'), 'New');
+    fireEvent.press(getByText('Sign up'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    expect(mockSaveTokens).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 });

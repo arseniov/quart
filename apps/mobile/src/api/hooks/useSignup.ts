@@ -1,38 +1,53 @@
 // src/api/hooks/useSignup.ts
-// GH #35: email + password sign-up. Mirrors useLogin's shape so the screen
-// can route to /(app) after a successful mutation. BA's sign-up response
-// carries a session token; the API's internal LoginController-style wrapper
-// re-issues the standard { access_token, refresh_token, refresh_expires_at, user }
-// pair so saveTokens / react-query clients stay one-shape.
+// GH #46: POST /auth/sign-up/email → BA's standard email+password sign-up.
+// Body uses BA's `name` field (not the legacy `display_name`). BA returns
+// the user row at the top level (flat — no nested `user` envelope) and
+// sets the session cookie via Set-Cookie; we extract the cookie value,
+// persist via saveTokens, and the screen routes to /(app).
 import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { apiClient } from '@/api/client';
+import { apiClient, ApiError } from '@/api/client';
+import { extractBaSessionToken } from '@/api/ba-cookie';
 import {
   useRegisterDevice,
   NotificationsPermissionError,
 } from '@/api/hooks/useRegisterDevice';
 import { saveTokens } from '@/lib/auth';
-import { deviceFingerprint } from '@/lib/device-fingerprint';
 
 export const SignupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  display_name: z.string().min(1).max(40),
+  name: z.string().min(1).max(40),
 });
 export type SignupInput = z.infer<typeof SignupSchema>;
+
+export interface BaSignUpUser {
+  id: string;
+  email: string;
+  name: string;
+  image?: string | null;
+  emailVerified: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export type BaSignUpResponse = BaSignUpUser;
 
 export function useSignup() {
   const register = useRegisterDevice();
   return useMutation({
-    mutationFn: async (input: SignupInput) => {
-      const fp = await deviceFingerprint();
-      const r = await apiClient.post<{ access_token: string; refresh_token: string }>(
-        '/auth/sign-up',
-        { ...input, device_fingerprint: fp },
+    mutationFn: async (input: SignupInput): Promise<BaSignUpResponse> => {
+      const r = await apiClient.post<BaSignUpResponse>(
+        '/auth/sign-up/email',
+        { email: input.email, password: input.password, name: input.name },
         { skipAuth: true },
       );
-      await saveTokens({ accessToken: r.data.access_token, refreshToken: r.data.refresh_token });
+      const baSessionToken = extractBaSessionToken(r.headers);
+      if (!baSessionToken) {
+        throw new ApiError(500, 'auth.no_session', 'no session cookie in sign-up response');
+      }
+      saveTokens({ baSessionToken });
       // ponytail: silently swallow NotificationsPermissionError — user denied
       // notifications but sign-up must succeed; surface only real failures.
       try {

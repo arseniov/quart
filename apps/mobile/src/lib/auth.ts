@@ -1,30 +1,38 @@
 // src/lib/auth.ts
-import { secureGet, secureSet, secureDelete, SECURE_KEYS } from './secure-store';
+// GH #46: BA session token storage. BA's /auth/sign-in/* + /auth/sign-up/email
+// issue a session via Set-Cookie (`better-auth.session_token=<token>.<sig>`).
+// The mobile persists the cookie value in MMKV (sync, no Keychain round-trip)
+// and apiClient re-sends it as `Authorization: Bearer <token>`. BA's BaAuthGuard
+// on the server resolves the session through BA's own getSession helper, so
+// no client-side refresh dance — BA handles session lifetime server-side.
+//
+// Async signatures are kept for source compatibility with the pre-BA
+// implementation; the MMKV reads/writes under the hood are sync.
+import { MMKV } from 'react-native-mmkv';
+
+const authMmkv = new MMKV({ id: 'quart.auth' });
+export const BA_SESSION_TOKEN_KEY = 'baSessionToken';
 
 export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
+  baSessionToken: string;
 }
 
-export async function loadTokens(): Promise<AuthTokens | null> {
-  const [access, refresh] = await Promise.all([
-    secureGet(SECURE_KEYS.accessToken),
-    secureGet(SECURE_KEYS.refreshToken),
-  ]);
-  if (!access || !refresh) return null;
-  return { accessToken: access, refreshToken: refresh };
+export function loadTokens(): AuthTokens | null {
+  const token = authMmkv.getString(BA_SESSION_TOKEN_KEY);
+  return token ? { baSessionToken: token } : null;
 }
 
-export async function saveTokens(tokens: AuthTokens): Promise<void> {
-  await Promise.all([
-    secureSet(SECURE_KEYS.accessToken, tokens.accessToken),
-    secureSet(SECURE_KEYS.refreshToken, tokens.refreshToken),
-  ]);
+export function saveTokens(tokens: AuthTokens): void {
+  authMmkv.set(BA_SESSION_TOKEN_KEY, tokens.baSessionToken);
 }
 
-export async function clearTokens(): Promise<void> {
-  await Promise.all([
-    secureDelete(SECURE_KEYS.accessToken),
-    secureDelete(SECURE_KEYS.refreshToken),
-  ]);
+export function clearTokens(): void {
+  authMmkv.delete(BA_SESSION_TOKEN_KEY);
 }
+
+// ponytail: keep the legacy Promise-returning wrappers — the call sites
+//        already `await` these, and a sync-only rewrite would ripple
+//        through every hook + screen.
+export const loadTokensAsync = (): Promise<AuthTokens | null> => Promise.resolve(loadTokens());
+export const saveTokensAsync = (tokens: AuthTokens): Promise<void> => Promise.resolve(saveTokens(tokens));
+export const clearTokensAsync = (): Promise<void> => Promise.resolve(clearTokens());

@@ -105,7 +105,9 @@ export default function LoginScreen() {
         name="email"
         render={({ field }) => (
           <TextInput
-            {...field}
+            value={field.value}
+            onChangeText={field.onChange}
+            onBlur={field.onBlur}
             accessibilityLabel={t('auth.login.email')}
             placeholder={t('auth.login.email')}
             autoCapitalize="none"
@@ -125,7 +127,9 @@ export default function LoginScreen() {
         name="password"
         render={({ field }) => (
           <TextInput
-            {...field}
+            value={field.value}
+            onChangeText={field.onChange}
+            onBlur={field.onBlur}
             accessibilityLabel={t('auth.login.password')}
             placeholder={t('auth.login.password')}
             secureTextEntry
@@ -147,6 +151,7 @@ export default function LoginScreen() {
 
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={t('auth.login.submit')}
         onPress={onSubmit}
         disabled={pending}
         className="bg-primary rounded-md p-3 items-center"

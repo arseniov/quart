@@ -1,8 +1,9 @@
 // app/(auth)/signup.tsx
-// GH #35: email + password sign-up form. Mirrors login.tsx — RHF + zod +
-// Controller, with the email/password form rendered BELOW the Apple + Google
-// social buttons (which already existed for the OAuth-only flow). On submit
-// the new useSignup hook POSTs to /auth/sign-up and routes to / on success.
+// GH #35 + GH #46: email + password sign-up form. Mirrors login.tsx —
+// RHF + zod + Controller, with the email/password form rendered BELOW the
+// Apple + Google social buttons. The hook now POSTs to BA's standard
+// /auth/sign-up/email (BA's `name` field, not the legacy `display_name`)
+// and routes to / on success.
 import { zodResolver } from '@hookform/resolvers/zod';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -41,7 +42,7 @@ export default function SignupScreen() {
   const socialLogin = useSocialLogin();
   const { control, handleSubmit, formState: { errors } } = useForm<SignupInput>({
     resolver: zodResolver(SignupSchema),
-    defaultValues: { email: '', password: '', display_name: '' },
+    defaultValues: { email: '', password: '', name: '' },
   });
 
   const onSubmit = handleSubmit(async (data) => {
@@ -149,7 +150,7 @@ export default function SignupScreen() {
 
       <Controller
         control={control}
-        name="display_name"
+        name="name"
         render={({ field }) => (
           <TextInput
             value={field.value}
@@ -161,9 +162,9 @@ export default function SignupScreen() {
           />
         )}
       />
-      {errors.display_name && (
+      {errors.name && (
         <Text accessibilityLiveRegion="polite" className="text-error mb-3">
-          {errors.display_name.message}
+          {errors.name.message}
         </Text>
       )}
 

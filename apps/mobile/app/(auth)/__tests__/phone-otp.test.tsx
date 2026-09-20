@@ -1,7 +1,8 @@
 // app/(auth)/__tests__/phone-otp.test.tsx
-// GH #29 + GH #30: happy path (verify issues session → routes to '/') +
-// 422 invalid code + 401 session-expired + offline UX + missing-phone
-// redirect + array-phone redirect.
+// GH #29 + GH #30 + GH #46: happy path (verify returns user projection →
+// routes to '/') + 422 invalid code + 401 unknown-user + offline UX +
+// missing-phone redirect + array-phone redirect. GH #45 deleted the JWT
+// mint path so saveTokens is no longer called from this flow.
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -11,8 +12,8 @@ const mockReplace = jest.fn();
 const mockRouter = { replace: mockReplace, push: jest.fn() };
 
 // ponytail: real react-query drives the mutation state; only apiClient +
-//        saveTokens + register are stubbed. Mirrors the login screen wiring
-//        so the verify hook's side effects don't leak into the screen test.
+//        register are stubbed. saveTokens is unused here but stubbed so the
+//        hook doesn't crash if it ever re-acquires the JWT path.
 const mockPost = jest.fn();
 const mockSaveTokens = jest.fn();
 const mockRegisterMutateAsync = jest.fn();
@@ -66,7 +67,7 @@ describe('PhoneOtpScreen', () => {
   beforeEach(() => {
     mockReplace.mockClear();
     mockPost.mockReset();
-    mockSaveTokens.mockReset().mockResolvedValue(undefined);
+    mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
     mockUseLocalSearchParams.mockReset();
     mockUseLocalSearchParams.mockReturnValue({ phone: '+15551234567' });
@@ -85,16 +86,13 @@ describe('PhoneOtpScreen', () => {
     );
   });
 
-  it('happy path: types a 6-digit code, submits, persists tokens, routes to /', async () => {
+  it('happy path: types a 6-digit code, submits, routes to /', async () => {
     mockPost.mockImplementation(async (path: string) => {
       if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
       if (path === '/auth/phone/verify') {
         return {
           status: 200,
           data: {
-            access_token: 'a',
-            refresh_token: 'r',
-            refresh_expires_at: '2030-01-01T00:00:00.000Z',
             user: { id: 'u', handle: 'h', display_name: 'd' },
           },
         };
@@ -113,7 +111,6 @@ describe('PhoneOtpScreen', () => {
         { skipAuth: true },
       ),
     );
-    await waitFor(() => expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' }));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
   });
 
@@ -125,15 +122,7 @@ describe('PhoneOtpScreen', () => {
     mockPost.mockImplementation(async (path: string) => {
       if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
       if (path === '/auth/phone/verify') {
-        return {
-          status: 200,
-          data: {
-            access_token: 'a',
-            refresh_token: 'r',
-            refresh_expires_at: '2030-01-01T00:00:00.000Z',
-            user: { id: 'u', handle: 'h', display_name: 'd' },
-          },
-        };
+        return { status: 200, data: { user: { id: 'u', handle: 'h', display_name: 'd' } } };
       }
       throw new Error(`unexpected path ${path}`);
     });
@@ -142,7 +131,6 @@ describe('PhoneOtpScreen', () => {
       typeCell(getByLabelText, `Verification code digit ${i}`, String(i));
     }
     fireEvent.press(getByText('Verify'));
-    await waitFor(() => expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' }));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
   });
 
@@ -157,7 +145,6 @@ describe('PhoneOtpScreen', () => {
     }
     fireEvent.press(getByText('Verify'));
     await waitFor(() => expect(getByText("That code didn't work. Try again.")).toBeTruthy());
-    expect(mockSaveTokens).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 
@@ -172,7 +159,6 @@ describe('PhoneOtpScreen', () => {
     }
     fireEvent.press(getByText('Verify'));
     await waitFor(() => expect(getByText('Session expired. Restart and try again.')).toBeTruthy());
-    expect(mockSaveTokens).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 

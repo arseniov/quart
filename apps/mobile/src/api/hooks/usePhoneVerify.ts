@@ -1,11 +1,15 @@
 // src/api/hooks/usePhoneVerify.ts
-// POST /auth/phone/verify → returns the full session shape mirroring the
-// email-login contract: short-lived access JWT + 30-day refresh JWT +
-// the Quart user projection. Mirrors useLogin — saves tokens, then fires
-// off the device-register hook (swallowing NotificationsPermissionError).
+// POST /auth/phone/verify → returns the Quart user projection only. The
+// GH #30 JWT-mint path was deleted by GH #45 (BA owns the bearer), so
+// this endpoint no longer issues tokens. The user projection drives the
+// `useMe` cache; the BA session itself is currently NOT persisted from
+// this flow (mobile re-signs in via /login or /signup if needed).
+//
+// GH #46 follow-up: thread BA's session cookie through /auth/phone/verify
+// (the server-side handler can mirror BA's Set-Cookie on the response).
+// Until that lands, this hook is a no-op for token storage.
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
-import { saveTokens } from '@/lib/auth';
 import { deviceFingerprint } from '@/lib/device-fingerprint';
 import {
   useRegisterDevice,
@@ -19,9 +23,6 @@ export interface PhoneVerifyInput {
 }
 
 export interface PhoneVerifyResponse {
-  access_token: string;
-  refresh_token: string;
-  refresh_expires_at: string;
   user: Me;
 }
 
@@ -35,7 +36,9 @@ export function usePhoneVerify() {
         { ...input, device_fingerprint: fp },
         { skipAuth: true },
       );
-      await saveTokens({ accessToken: r.data.access_token, refreshToken: r.data.refresh_token });
+      // ponytail: GH #46 — BA session token storage is not wired here yet.
+      //        The BA cookie (if any) is ignored; the user is treated as
+      //        "no session" until a follow-up lands.
       // ponytail: silently swallow NotificationsPermissionError — user denied notifications but
       //          sign-in must succeed; surface only real failures via throw.
       try {

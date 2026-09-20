@@ -13,7 +13,8 @@ export async function secureDelete(key: string): Promise<void> {
 }
 
 export const SECURE_KEYS = {
-  accessToken: 'quart.access_token',
-  refreshToken: 'quart.refresh_token',
+  // GH #46: BA session token lives in MMKV (see `@/lib/auth`); installSalt
+  // stays here for the device-fingerprint salt, which uses SecureStore
+  // directly to keep cryptographic material off the JS heap.
   installSalt: 'quart_install_salt',
 } as const;

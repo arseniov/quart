@@ -1,6 +1,11 @@
 // src/api/client.ts
+// GH #46: apiClient sends the BA session token as `Authorization: Bearer <token>`
+// on every authenticated request. BA owns session lifetime + refresh server-side
+// (BaAuthGuard resolves via `auth.api.getSession({ headers })`), so the mobile
+// no longer needs a refresh dance. On 401 the request surfaces ApiError(401)
+// and the caller routes the user back to /login.
 import { deviceFingerprint } from '@/lib/device-fingerprint';
-import { loadTokens, saveTokens, clearTokens } from '@/lib/auth';
+import { loadTokens } from '@/lib/auth';
 import { BASE_URL } from '@/lib/env';
 
 export class ApiError extends Error {
@@ -15,38 +20,11 @@ export interface ApiResponse<T> {
   headers: Headers;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
-  const tokens = await loadTokens();
-  if (!tokens) return null;
-  const r = await fetch(`${BASE_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Device-Fingerprint': await deviceFingerprint(),
-    },
-    body: JSON.stringify({ refresh_token: tokens.refreshToken }),
-  });
-  if (!r.ok) {
-    await clearTokens();
-    return null;
-  }
-  let json: { access_token: string; refresh_token: string };
-  try {
-    json = (await r.json()) as typeof json;
-  } catch {
-    await clearTokens();
-    return null;
-  }
-  await saveTokens({ accessToken: json.access_token, refreshToken: json.refresh_token });
-  return json.access_token;
-}
-
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
   skipAuth?: boolean;
-  retryOn401?: boolean;
 }
 
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<ApiResponse<T>> {
@@ -57,30 +35,16 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     'X-Client-Platform': 'mobile',
   };
   if (!opts.skipAuth) {
-    const tokens = await loadTokens();
-    if (tokens) headers.Authorization = `Bearer ${tokens.accessToken}`;
+    const tokens = loadTokens();
+    if (tokens) headers.Authorization = `Bearer ${tokens.baSessionToken}`;
   }
 
-  const doFetch = () =>
-    fetch(url, {
-      method: opts.method ?? 'GET',
-      headers,
-      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-      ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
-    });
-
-  // ponytail: two concurrent 401s trigger parallel /auth/refresh calls; if collision rate matters,
-  //        wrap `refreshAccessToken()` in a module-level `Promise<string|null> in-flight` cache.
-  let r = await doFetch();
-  if (r.status === 401 && !opts.skipAuth && opts.retryOn401 !== false) {
-    const fresh = await refreshAccessToken();
-    if (fresh) {
-      headers.Authorization = `Bearer ${fresh}`;
-      r = await doFetch();
-    } else {
-      throw new ApiError(401, 'unauthenticated', 'Session expired');
-    }
-  }
+  const r = await fetch(url, {
+    method: opts.method ?? 'GET',
+    headers,
+    ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+  });
 
   const text = await r.text();
   const data = text ? (JSON.parse(text) as T) : (undefined as T);
