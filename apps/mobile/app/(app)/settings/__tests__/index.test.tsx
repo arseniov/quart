@@ -1,8 +1,9 @@
 // app/(app)/settings/__tests__/index.test.tsx
 // GH #22 — verifies the Offline maps badge in settings → storage.
+// GH #32 — verifies logout POSTs /auth/sign-out and survives a server failure.
 
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
 import i18n from '@/i18n';
 
 jest.mock('expo-file-system', () => {
@@ -98,13 +99,18 @@ jest.mock('expo-file-system', () => {
   };
 });
 
-jest.mock('expo-router', () => ({
-  Stack: { Screen: () => null },
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  // ponytail: don't run the focus callback during render — the component seeds stats from
-  //          its initial useState, which already calls getStorageStats() with seeded data.
-  useFocusEffect: () => undefined,
-}));
+jest.mock('expo-router', () => {
+  // ponytail: shared router singleton so logout tests can assert router.replace was called;
+  //          a factory-per-call mock would hide the captured router instance per render.
+  const router = { push: jest.fn(), replace: jest.fn() };
+  return {
+    __esModule: true,
+    Stack: { Screen: () => null },
+    useRouter: () => router,
+    useFocusEffect: () => undefined,
+    __router: router,
+  };
+});
 
 jest.mock('@/api/hooks/useMe', () => ({
   useMe: jest.fn(() => ({
@@ -113,9 +119,15 @@ jest.mock('@/api/hooks/useMe', () => ({
   })),
 }));
 
-jest.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ clear: jest.fn() }),
-}));
+jest.mock('@/api/client', () => {
+  const post = jest.fn(() => Promise.resolve({ status: 204, data: undefined, headers: new Headers() }));
+  return { apiClient: { post }, __postMock: post };
+});
+
+jest.mock('@tanstack/react-query', () => {
+  const qc = { clear: jest.fn() };
+  return { useQueryClient: () => qc, __qc: qc };
+});
 
 jest.mock('@/lib/auth', () => ({
   clearTokens: jest.fn(),
@@ -123,6 +135,8 @@ jest.mock('@/lib/auth', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fsMock = require('expo-file-system') as { __seed: (id: string, bytes: number) => void; __resetFileState: () => void };
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const apiMock = require('@/api/client') as { apiClient: { post: jest.Mock }; __postMock: jest.Mock };
 import SettingsIndex from '../index';
 
 beforeAll(async () => {
@@ -134,6 +148,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   fsMock.__resetFileState();
+  apiMock.__postMock.mockClear();
+  apiMock.__postMock.mockResolvedValue({ status: 204, data: undefined, headers: new Headers() });
 });
 
 describe('SettingsIndex — offline maps badge', () => {
@@ -160,5 +176,46 @@ describe('SettingsIndex — offline maps badge', () => {
     await waitFor(async () => {
       expect(await findByText('Downloaded · 24 MB')).toBeTruthy();
     });
+  });
+});
+
+// GH #32 — logout must POST /auth/sign-out (audit chain §3.8) AND survive a server failure.
+describe('SettingsIndex — logout', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const authMock = require('@/lib/auth') as { clearTokens: jest.Mock };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const routerNs = require('expo-router') as { __router: { replace: jest.Mock; push: jest.Mock } };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const qcNs = require('@tanstack/react-query') as { __qc: { clear: jest.Mock } };
+
+  beforeEach(() => {
+    authMock.clearTokens.mockClear();
+    authMock.clearTokens.mockResolvedValue(undefined);
+    routerNs.__router.replace.mockClear();
+    qcNs.__qc.clear.mockClear();
+  });
+
+  it('POSTs /auth/sign-out, clears tokens, and redirects to /login', async () => {
+    const { findByLabelText } = render(<SettingsIndex />);
+    const logout = await findByLabelText('Log out');
+    fireEvent.press(logout);
+    await waitFor(() => {
+      expect(apiMock.__postMock).toHaveBeenCalledWith('/auth/sign-out', null, { skipAuth: true });
+    });
+    expect(authMock.clearTokens).toHaveBeenCalledTimes(1);
+    expect(qcNs.__qc.clear).toHaveBeenCalledTimes(1);
+    expect(routerNs.__router.replace).toHaveBeenCalledWith('/login');
+  });
+
+  it('still clears tokens and redirects when /auth/sign-out throws', async () => {
+    apiMock.__postMock.mockRejectedValueOnce(new Error('network down'));
+    const { findByLabelText } = render(<SettingsIndex />);
+    const logout = await findByLabelText('Log out');
+    fireEvent.press(logout);
+    await waitFor(() => {
+      expect(authMock.clearTokens).toHaveBeenCalledTimes(1);
+    });
+    expect(qcNs.__qc.clear).toHaveBeenCalledTimes(1);
+    expect(routerNs.__router.replace).toHaveBeenCalledWith('/login');
   });
 });

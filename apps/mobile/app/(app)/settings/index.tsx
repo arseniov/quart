@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
 import { useMe } from '@/api/hooks/useMe';
 import { clearTokens } from '@/lib/auth';
 import { getStorageStats, formatBytes, type StorageStats } from '@/lib/tile-cache';
@@ -42,6 +43,14 @@ export default function SettingsIndex() {
       : t('map.offline.storageUsed', { size: formatBytes(stats.totalBytes) });
 
   const onLogout = async () => {
+    // GH #32 / §3.8 — POST /auth/sign-out so the server writes the auth.sign_out audit
+    // row and the HMAC chain records the session lifetime ending. Local logout must still
+    // complete if the API is unreachable (offline / revocation).
+    try {
+      await apiClient.post('/auth/sign-out', null, { skipAuth: true });
+    } catch (err) {
+      console.warn('[settings] sign-out request failed', err);
+    }
     await clearTokens();
     qc.clear();
     router.replace('/login');
