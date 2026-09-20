@@ -38,6 +38,9 @@ import type { FastifyRequest } from 'fastify';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service.js';
 import type { AuthUser } from './decorators/current-user.decorator.js';
+// Value (not `import type`) for the same DI/test reasons as AuthService.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { MfaService } from './mfa.service.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 
 interface RequestWithAuth {
@@ -84,6 +87,7 @@ export class BaAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly auth: AuthService,
+    private readonly mfa: MfaService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -125,11 +129,20 @@ export class BaAuthGuard implements CanActivate {
       });
     }
 
-    this.attachUserAndTenant(req, session);
+    await this.attachUserAndTenant(req, session);
     return true;
   }
 
-  private attachUserAndTenant(req: RequestWithAuth, session: BaSessionResponse): void {
+  // GH #45 follow-up: pull MFA state from `mfa_credentials` so MfaGuard
+  // can gate officer endpoints without a bearer claim. `getMfaState`
+  // reads `enrolled_at` + `verified_at` in a tenant tx — with BA
+  // sessions we have no city_id, so RLS scopes the read to zero rows
+  // until BA users get a city-resolution path. The lookup is best-effort:
+  // any failure (RLS, missing row, DB hiccup) leaves `mfaEnrolledAt`
+  // and `mfaVerifiedAt` undefined, which MfaGuard treats as "not
+  // enrolled" — a fail-closed default that protects officer endpoints
+  // even when this guard can't reach the DB.
+  private async attachUserAndTenant(req: RequestWithAuth, session: BaSessionResponse): Promise<void> {
     // BA's `user.id` is now the canonical principal identifier. The
     // cityId slot stays empty-string — matches JwtAuthGuard's behaviour
     // for users with no default_city_id (see session.service.ts:108
@@ -151,6 +164,20 @@ export class BaAuthGuard implements CanActivate {
       // the session row exists and the revoke should fire.
       sessionId: session.session.id,
     };
+
+    try {
+      const state = await this.mfa.getMfaState(userId, '');
+      if (state.enrolledAt) user.mfaEnrolledAt = state.enrolledAt.getTime();
+      if (state.verifiedAt) user.mfaVerifiedAt = state.verifiedAt.getTime();
+    } catch (err) {
+      // Best-effort lookup — swallow the error so the request continues.
+      // MfaGuard's `!user.mfaEnrolledAt` branch is the fail-closed gate.
+      this.logger.warn(
+        { err: String(err), userId },
+        'ba auth guard: mfa state lookup failed; defaulting to not enrolled',
+      );
+    }
+
     const tenant: TenantContext = {
       cityId: '',
       userId,

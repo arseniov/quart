@@ -37,10 +37,12 @@ function sha256(s: string): string {
   return createHash('sha256').update(s).digest('hex');
 }
 
-// ponytail: T17 keeps the TOTP secret in the verified JWT (stateless — per
-// T17 plan). `mfa_credentials` persists backup-code hashes + the
-// replay-prevention timestamp; RLS is city+owner scoped (migration 0026),
-// so every DB call must run inside a tenant tx to satisfy the WITH CHECK.
+// GH #45 follow-up: the TOTP secret no longer rides the bearer (post-GH
+// #45 there is no bearer to ride). The mobile keeps it locally from
+// /enroll's response and sends it on every /verify; the server stamps
+// `verified_at` on success and reads `enrolled_at` + `verified_at` back
+// on every authenticated request (see `getMfaState` below). `totp_secret`
+// is deliberately NOT persisted — secret stays on the user device.
 @Injectable()
 export class MfaService {
   constructor(private readonly db: DbService) {
@@ -100,6 +102,10 @@ export class MfaService {
    * `mfa_credentials.last_used_step`: a code whose step matches the
    * recorded last_used_step is a replay → reject.
    *
+   * On success, stamps both `last_used_step` (replay marker) and
+   * `verified_at` (freshness window for MfaGuard) in the same UPDATE so
+   * the two timestamps can never disagree.
+   *
    * Read + update run inside one tenant tx so the SELECT and the UPDATE
    * see the same RLS-scoped view. If the update fails (RLS rejection, FK
    * violation, lost connection) we return `false` — the caller can retry,
@@ -117,6 +123,7 @@ export class MfaService {
 
     const step = Math.floor(Date.now() / 30000);
     const stepDate = new Date(step * 30000);
+    const now = new Date();
 
     try {
       return await this.db.runInTenantTx(
@@ -141,7 +148,7 @@ export class MfaService {
 
           await trx
             .updateTable('mfa_credentials')
-            .set({ last_used_step: stepDate })
+            .set({ last_used_step: stepDate, verified_at: now })
             .where('user_id', '=', userId)
             .where('type', '=', 'totp')
             .execute();
@@ -153,6 +160,35 @@ export class MfaService {
       // success when we couldn't durably mark the step — caller retries.
       return false;
     }
+  }
+
+  /**
+   * Read the per-user MFA state needed by BaAuthGuard to populate
+   * `req.user.mfaEnrolledAt` / `req.user.mfaVerifiedAt`. Returns null
+   * timestamps when no row exists (user never enrolled). Runs inside a
+   * tenant tx so RLS scopes the read to the caller's (city, user).
+   *
+   * ponytail: separate method from `verifyTotp` to keep concerns split —
+   * the guard only reads, never writes, and the SELECT columns are
+   * independent of the verify path's replay-marker read.
+   */
+  async getMfaState(
+    userId: string,
+    cityId: string,
+  ): Promise<{ enrolledAt: Date | null; verifiedAt: Date | null }> {
+    return this.db.runInTenantTx(this.tenantCtx(cityId, userId), async (trx) => {
+      const row = await trx
+        .selectFrom('mfa_credentials')
+        .select(['enrolled_at', 'verified_at'])
+        .where('user_id', '=', userId)
+        .where('type', '=', 'totp')
+        .executeTakeFirst();
+      if (!row) return { enrolledAt: null, verifiedAt: null };
+      return {
+        enrolledAt: row.enrolled_at ?? null,
+        verifiedAt: row.verified_at ?? null,
+      };
+    });
   }
 
   /**

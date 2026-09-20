@@ -17,12 +17,12 @@ export interface AuthUser {
   // endpoint can target the row without re-reading the JWT. Optional
   // for callers that don't yet attach session id.
   sessionId?: string;
-  // T17: TOTP secret + enroll timestamp carried in the JWT after enrollment.
-  // T18: `mfaVerifiedAt` is stamped by /verify and gates officer endpoints
-  // (MfaGuard's 5-min freshness window).
-  // `undefined` pre-enrollment, populated post-enrollment once MfaService
-  // re-mints the bearer.
-  mfaSecret?: string;
+  // GH #45 follow-up: BA sessions don't carry the TOTP secret on the
+  // bearer (no bearer, no claims). The secret lives on the user device;
+  // /verify receives it per-request; `mfaEnrolledAt` + `mfaVerifiedAt`
+  // are populated by BaAuthGuard from `mfa_credentials` so MfaGuard's
+  // 5-min freshness window still works. `undefined` until the user
+  // enrolls (or until the guard's RLS-scoped lookup succeeds).
   mfaEnrolledAt?: number;
   mfaVerifiedAt?: number;
 }

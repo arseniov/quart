@@ -38,20 +38,14 @@ describe('MfaGuard', () => {
     expect(g.canActivate(ctxWith(citizenBase))).toBe(true);
   });
 
-  it('rejects an officer with no mfaSecret/mfaEnrolledAt as mfa.enrollment_required', () => {
+  it('rejects an officer with no mfaEnrolledAt as mfa.enrollment_required (GH #45 follow-up)', () => {
+    // Post-GH #45 the guard no longer reads mfaSecret — the BA session
+    // doesn't carry the secret. BaAuthGuard populates mfaEnrolledAt +
+    // mfaVerifiedAt from mfa_credentials; when the lookup fails the
+    // claims are undefined, which is what this test exercises.
     const g = new MfaGuard();
     let caught: unknown;
     try { g.canActivate(ctxWith({ ...officerBase })); } catch (e) { caught = e; }
-    expect(caught).toBeInstanceOf(UnauthorizedException);
-    expect(((caught as UnauthorizedException).getResponse() as { error: { code: string } }).error.code).toBe('mfa.enrollment_required');
-  });
-
-  it('rejects an officer with mfaSecret but no mfaEnrolledAt', () => {
-    const g = new MfaGuard();
-    let caught: unknown;
-    try {
-      g.canActivate(ctxWith({ ...officerBase, mfaSecret: 'JBSWY3DPEHPK3PXP' }));
-    } catch (e) { caught = e; }
     expect(caught).toBeInstanceOf(UnauthorizedException);
     expect(((caught as UnauthorizedException).getResponse() as { error: { code: string } }).error.code).toBe('mfa.enrollment_required');
   });
@@ -62,7 +56,6 @@ describe('MfaGuard', () => {
     try {
       g.canActivate(ctxWith({
         ...officerBase,
-        mfaSecret: 'JBSWY3DPEHPK3PXP',
         mfaEnrolledAt: Date.now() - 60_000,
       }));
     } catch (e) { caught = e; }
@@ -76,7 +69,6 @@ describe('MfaGuard', () => {
     try {
       g.canActivate(ctxWith({
         ...officerBase,
-        mfaSecret: 'JBSWY3DPEHPK3PXP',
         mfaEnrolledAt: Date.now() - 10 * 60_000,
         mfaVerifiedAt: Date.now() - 6 * 60_000,
       }));
@@ -89,7 +81,6 @@ describe('MfaGuard', () => {
     const g = new MfaGuard();
     const ok = g.canActivate(ctxWith({
       ...officerBase,
-      mfaSecret: 'JBSWY3DPEHPK3PXP',
       mfaEnrolledAt: Date.now() - 10 * 60_000,
       mfaVerifiedAt: Date.now() - 60_000,
     }));

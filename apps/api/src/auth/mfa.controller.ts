@@ -1,5 +1,5 @@
 import {
-  Body, Controller, HttpCode, HttpStatus, Post, Req, UnauthorizedException, UseGuards, UsePipes,
+  Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards, UsePipes,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -15,7 +15,13 @@ import type { AuthUser } from './decorators/current-user.decorator.js';
 import { MfaService } from './mfa.service.js';
 
 const EnrollSchema = z.object({}).strict(); // body shape only — verify happens after QR scan
-const VerifySchema = z.object({ totp_code: z.string().regex(/^\d{6}$/) });
+// GH #45 follow-up: secret comes from the mobile (which stored it from
+// /enroll's response) on every /verify. Bound to 16..64 chars to match
+// otplib's base32 floor (RFC 6238 §5.1) and reject obvious garbage.
+const VerifySchema = z.object({
+  totp_code: z.string().regex(/^\d{6}$/),
+  secret: z.string().min(16).max(64),
+});
 const BackupSchema = z.object({ code: z.string().regex(/^[0-9a-f]{32}$/) });
 
 interface ReqWithAuth extends FastifyRequest {
@@ -23,9 +29,9 @@ interface ReqWithAuth extends FastifyRequest {
 }
 
 // GH #45: dropped the JWT re-mint on /enroll + /verify. BA owns the bearer
-// now (BaAuthGuard). The `mfaSecret` claim check on /verify stays as a
-// precondition — the actual claim source will move to BA session metadata
-// in a follow-up (the controller boundary doesn't care where it came from).
+// now (BaAuthGuard). The TOTP secret moved from the bearer claim to the
+// /verify request body — mobile sends the secret it stored at /enroll
+// time, server stamps `verified_at` on success.
 @Controller('auth/mfa')
 @ApiGlobalResponses()
 @ApiTags('auth/mfa')
@@ -58,15 +64,10 @@ export class MfaController {
     @Req() req: ReqWithAuth,
   ): Promise<{ verified: boolean }> {
     const user = req.user;
-    if (!user.mfaSecret) {
-      throw new UnauthorizedException({
-        error: { code: 'mfa.not_enrolled', message: 'no mfaSecret claim on bearer' },
-      });
-    }
     const ok = await this.mfa.verifyTotp(
       user.id,
       user.cityId,
-      user.mfaSecret,
+      body.secret,
       body.totp_code,
     );
     return { verified: ok };

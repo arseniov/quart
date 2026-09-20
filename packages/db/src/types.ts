@@ -123,6 +123,10 @@ export interface MfaCredentialsTable {
   created_at: ColumnType<Date, Date | string | undefined, never>;
   enrolled_at: ColumnType<Date, Date | string | undefined, never>;
   last_used_step: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  // 0041_mfa_verified_at: stamped by /verify on success; nullable until
+  // the user verifies. Read by BaAuthGuard on every authenticated
+  // request to populate user.mfaVerifiedAt for MfaGuard's 5-min window.
+  verified_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 // ============================================================================

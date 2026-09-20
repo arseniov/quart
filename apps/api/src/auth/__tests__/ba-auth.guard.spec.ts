@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AuthService } from '../auth.service.js';
 import { BaAuthGuard } from '../ba-auth.guard.js';
+import type { MfaService } from '../mfa.service.js';
 import { IS_PUBLIC_KEY } from '../public.decorator.js';
 
 class StubReflector {
@@ -52,8 +53,23 @@ function makeAuth(getSession: (...args: unknown[]) => Promise<unknown>): AuthSer
   } as unknown as AuthService;
 }
 
-function build(auth: AuthService, isPublic = false): BaAuthGuard {
-  return new BaAuthGuard(new StubReflector(isPublic) as unknown as Reflector, auth);
+// GH #45 follow-up: BaAuthGuard now reads mfa_credentials via
+// MfaService.getMfaState to populate req.user.mfaEnrolledAt +
+// req.user.mfaVerifiedAt. Tests inject a vi.fn() for it; the default
+// returns "not enrolled" so existing tests don't break.
+function makeMfa(overrides: Partial<MfaService> = {}): MfaService {
+  return {
+    getMfaState: vi.fn(async () => ({ enrolledAt: null, verifiedAt: null })),
+    ...overrides,
+  } as unknown as MfaService;
+}
+
+function build(auth: AuthService, isPublic = false, mfa: MfaService = makeMfa()): BaAuthGuard {
+  return new BaAuthGuard(
+    new StubReflector(isPublic) as unknown as Reflector,
+    auth,
+    mfa,
+  );
 }
 
 const BA_USER_ID = 'ba-user-1';
@@ -119,6 +135,9 @@ describe('BaAuthGuard', () => {
       headers: { authorization: 'Bearer t' },
     };
     await expect(g.canActivate(makeCtx(requestObj))).resolves.toBe(true);
+    // GH #45 follow-up: when MfaService.getMfaState returns null
+    // timestamps (the default), mfaEnrolledAt + mfaVerifiedAt stay
+    // undefined on req.user — MfaGuard then fails closed.
     expect(requestObj.user).toEqual({
       id: BA_USER_ID,
       cityId: '',
@@ -133,6 +152,72 @@ describe('BaAuthGuard', () => {
       isSuperAdmin: false,
       requestId: 'r-abc',
     });
+  });
+
+  it('populates user.mfaEnrolledAt + user.mfaVerifiedAt from mfa_credentials (GH #45 follow-up)', async () => {
+    // The guard's lookup is the post-GH #45 source of MFA claims —
+    // BaAuthGuard runs first, reads the row, hands timestamps to
+    // MfaGuard via req.user.
+    const enrolledAt = new Date('2026-01-01T00:00:00Z');
+    const verifiedAt = new Date('2026-01-01T00:05:00Z');
+    const getSession = vi.fn(async () => sessionResponse);
+    const getMfaState = vi.fn(async () => ({ enrolledAt, verifiedAt }));
+    const mfa = { getMfaState } as unknown as MfaService;
+    const g = build(makeAuth(getSession), false, mfa);
+    const requestObj: { headers: Record<string, string>; id: string; user?: { mfaEnrolledAt?: number; mfaVerifiedAt?: number } } = {
+      id: 'r-1',
+      headers: { authorization: 'Bearer t' },
+    };
+    await g.canActivate(makeCtx(requestObj));
+    expect(getMfaState).toHaveBeenCalledWith(BA_USER_ID, '');
+    expect(requestObj.user?.mfaEnrolledAt).toBe(enrolledAt.getTime());
+    expect(requestObj.user?.mfaVerifiedAt).toBe(verifiedAt.getTime());
+  });
+
+  it('populates mfaEnrolledAt only when verifiedAt is null (fresh enrollment)', async () => {
+    // Fresh-enrollment state: enrolledAt is set, verifiedAt is null.
+    // MfaGuard's `!user.mfaVerifiedAt` branch handles the rest.
+    const enrolledAt = new Date('2026-01-01T00:00:00Z');
+    const getSession = vi.fn(async () => sessionResponse);
+    const mfa = { getMfaState: vi.fn(async () => ({ enrolledAt, verifiedAt: null })) } as unknown as MfaService;
+    const g = build(makeAuth(getSession), false, mfa);
+    const requestObj: { headers: Record<string, string>; id: string; user?: { mfaEnrolledAt?: number; mfaVerifiedAt?: number } } = {
+      id: 'r-1',
+      headers: { authorization: 'Bearer t' },
+    };
+    await g.canActivate(makeCtx(requestObj));
+    expect(requestObj.user?.mfaEnrolledAt).toBe(enrolledAt.getTime());
+    expect(requestObj.user?.mfaVerifiedAt).toBeUndefined();
+  });
+
+  it('defaults to not enrolled (both claims undefined) when getMfaState throws', async () => {
+    // Fail-closed: a DB hiccup MUST NOT let an officer endpoint through.
+    // The error is logged (best-effort) and the request continues with
+    // no MFA claims — MfaGuard rejects with enrollment_required.
+    const getSession = vi.fn(async () => sessionResponse);
+    const mfa = { getMfaState: vi.fn(async () => { throw new Error('db down'); }) } as unknown as MfaService;
+    const g = build(makeAuth(getSession), false, mfa);
+    const requestObj: { headers: Record<string, string>; id: string; user?: { mfaEnrolledAt?: number; mfaVerifiedAt?: number } } = {
+      id: 'r-1',
+      headers: { authorization: 'Bearer t' },
+    };
+    await expect(g.canActivate(makeCtx(requestObj))).resolves.toBe(true);
+    expect(requestObj.user?.mfaEnrolledAt).toBeUndefined();
+    expect(requestObj.user?.mfaVerifiedAt).toBeUndefined();
+  });
+
+  it('defaults to not enrolled when getMfaState returns null timestamps', async () => {
+    // The default `makeMfa()` returns null timestamps — assert that the
+    // happy path's req.user has neither claim set.
+    const getSession = vi.fn(async () => sessionResponse);
+    const g = build(makeAuth(getSession));
+    const requestObj: { headers: Record<string, string>; id: string; user?: { mfaEnrolledAt?: number; mfaVerifiedAt?: number } } = {
+      id: 'r-1',
+      headers: { authorization: 'Bearer t' },
+    };
+    await g.canActivate(makeCtx(requestObj));
+    expect(requestObj.user?.mfaEnrolledAt).toBeUndefined();
+    expect(requestObj.user?.mfaVerifiedAt).toBeUndefined();
   });
 
   it('reads the request id from raw.id when req.id is the fastify default', async () => {

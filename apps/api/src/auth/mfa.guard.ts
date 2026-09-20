@@ -8,15 +8,21 @@ import { MFA_ENFORCED_ROLES } from './roles.js';
 const MFA_VERIFICATION_WINDOW_MS = 5 * 60 * 1000;
 
 /**
- * Composite guard for officer/admin endpoints. Runs AFTER JwtAuthGuard so
+ * Composite guard for officer/admin endpoints. Runs AFTER BaAuthGuard so
  * `req.user` is populated. Three failure codes:
- *   - auth.missing             — guard wired without JwtAuthGuard upstream
- *   - mfa.enrollment_required  — officer role but no TOTP secret/enroll time
+ *   - auth.missing             — guard wired without BaAuthGuard upstream
+ *   - mfa.enrollment_required  — officer role but no enrolled_at on file
  *   - mfa.verification_required — officer enrolled but no verify within 5min
  *
  * Plan §T18 uses two separate guards (Enrolled + Verified). The task
  * consolidates them into one to keep the controller decorator list short
  * and ensure enrollment is always checked before the freshness check.
+ *
+ * GH #45 follow-up: `mfaSecret` no longer lives on the AuthUser (BA
+ * sessions don't carry claims). `mfaEnrolledAt` + `mfaVerifiedAt` are
+ * populated by BaAuthGuard from `mfa_credentials`; when the guard's
+ * lookup fails (RLS rejection, missing row, DB hiccup), both stay
+ * undefined and the gate correctly fails closed.
  */
 @Injectable()
 export class MfaGuard implements CanActivate {
@@ -30,7 +36,7 @@ export class MfaGuard implements CanActivate {
     const requiresMfa = MFA_ENFORCED_ROLES.some((role) => user.roleSnapshot?.includes(role));
     if (!requiresMfa) return true;
 
-    if (!user.mfaSecret || !user.mfaEnrolledAt) {
+    if (!user.mfaEnrolledAt) {
       throw new UnauthorizedException({
         error: { code: 'mfa.enrollment_required', message: 'admin/officer role requires MFA enrollment' },
       });

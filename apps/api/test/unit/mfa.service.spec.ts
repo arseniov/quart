@@ -15,9 +15,12 @@ interface CredRow {
 }
 
 interface StubState {
-  find?: { last_used_step: Date | null };
+  find?: { last_used_step: Date | null; enrolled_at?: Date | null; verified_at?: Date | null };
   consumeRow?: CredRow | null;
   upserts: unknown[];
+  // Captured `set()` payloads from updateTable — used to assert that
+  // verifyTotp stamps `verified_at` alongside `last_used_step`.
+  updates?: unknown[];
   // When set, the updateTable branch throws — exercises the verifyTotp
   // "couldn't durably mark the step" failure mode.
   throwOnUpdate?: boolean;
@@ -62,11 +65,13 @@ function makeDb(
       }),
     }),
     updateTable: () => ({
-      set: () => {
+      set: (v: unknown) => {
+        // Capture the SET payload at the call site so tests can assert
+        // `verified_at` is stamped alongside `last_used_step`.
+        state.updates?.push(v);
         const fail = async () => {
           throw new Error('update failed (stub)');
         };
-        const ok = { execute: async () => undefined };
         const exec = state.throwOnUpdate ? fail : async () => undefined;
         // The service uses either `.set().where().execute()` (single
         // where) or `.set().where().where().execute()` (chained). Accept
@@ -81,7 +86,7 @@ function makeDb(
             }
           : {
               where: () => ({
-                ...ok,
+                execute: exec,
                 where: () => ({ execute: exec }),
               }),
             };
@@ -158,6 +163,36 @@ describe('MfaService', () => {
     const { secret } = await svc.enroll('user-1', 'city-1');
     const code = svc.currentTotp(secret);
     expect(await svc.verifyTotp('user-1', 'city-1', secret, code)).toBe(true);
+  });
+
+  it('verifyTotp stamps verified_at alongside last_used_step on success (GH #45 follow-up)', async () => {
+    // GH #45 removed JWT claims — /verify must now persist verified_at
+    // so BaAuthGuard can read it back on the next request to populate
+    // `user.mfaVerifiedAt` for MfaGuard's 5-min freshness window.
+    const state: StubState = { upserts: [], find: { last_used_step: null }, updates: [] };
+    const svc = new MfaService(makeDb(state));
+    const { secret } = await svc.enroll('user-1', 'city-1');
+    const before = Date.now();
+    expect(await svc.verifyTotp('user-1', 'city-1', secret, svc.currentTotp(secret))).toBe(true);
+    expect(state.updates).toHaveLength(1);
+    const set = state.updates![0] as { last_used_step: Date; verified_at: Date };
+    expect(set.last_used_step).toBeInstanceOf(Date);
+    expect(set.verified_at).toBeInstanceOf(Date);
+    // verified_at is "now" — within a generous 5s window to absorb the
+    // otplib-step rounding + setTimeout jitter in CI.
+    expect(set.verified_at.getTime()).toBeGreaterThanOrEqual(before - 5_000);
+    expect(set.verified_at.getTime()).toBeLessThanOrEqual(Date.now() + 5_000);
+  });
+
+  it('verifyTotp does NOT stamp verified_at when the code is wrong', async () => {
+    // A wrong code must not write verified_at — otherwise an attacker
+    // could refresh the freshness window by sending bad codes until one
+    // happened to land on the next step.
+    const state: StubState = { upserts: [], find: { last_used_step: null }, updates: [] };
+    const svc = new MfaService(makeDb(state));
+    const { secret } = await svc.enroll('user-1', 'city-1');
+    expect(await svc.verifyTotp('user-1', 'city-1', secret, '000000')).toBe(false);
+    expect(state.updates).toHaveLength(0);
   });
 
   it('verifyTotp rejects an obviously wrong code', async () => {
@@ -299,6 +334,51 @@ describe('MfaService', () => {
       userId: 'user-1',
       isSuperAdmin: false,
       requestId: '',
+    });
+  });
+
+  // GH #45 follow-up: getMfaState is read by BaAuthGuard to populate
+  // req.user.mfaEnrolledAt / mfaVerifiedAt for MfaGuard's 5-min window.
+  describe('getMfaState (GH #45 follow-up)', () => {
+    it('returns null timestamps when no credential row exists', async () => {
+      const svc = new MfaService(makeDb({ upserts: [], find: null }));
+      const state = await svc.getMfaState('user-1', 'city-1');
+      expect(state).toEqual({ enrolledAt: null, verifiedAt: null });
+    });
+
+    it('returns the persisted enrolled_at + verified_at timestamps', async () => {
+      const enrolledAt = new Date('2026-01-01T00:00:00Z');
+      const verifiedAt = new Date('2026-01-01T00:05:00Z');
+      const svc = new MfaService(makeDb({
+        upserts: [],
+        find: { last_used_step: null, enrolled_at: enrolledAt, verified_at: verifiedAt },
+      }));
+      const state = await svc.getMfaState('user-1', 'city-1');
+      expect(state).toEqual({ enrolledAt, verifiedAt });
+    });
+
+    it('returns null verified_at when the user has enrolled but never verified', async () => {
+      // Fresh-enrollment state: row exists, verified_at is NULL until
+      // /verify stamps it.
+      const enrolledAt = new Date('2026-01-01T00:00:00Z');
+      const svc = new MfaService(makeDb({
+        upserts: [],
+        find: { last_used_step: null, enrolled_at: enrolledAt, verified_at: null },
+      }));
+      const state = await svc.getMfaState('user-1', 'city-1');
+      expect(state).toEqual({ enrolledAt, verifiedAt: null });
+    });
+
+    it('passes cityId+userId through to the tenant ctx', async () => {
+      let captured: TenantContext | undefined;
+      const svc = new MfaService(makeDb({ upserts: [], find: null }, (c) => { captured = c; }));
+      await svc.getMfaState('user-1', 'city-1');
+      expect(captured).toEqual({
+        cityId: 'city-1',
+        userId: 'user-1',
+        isSuperAdmin: false,
+        requestId: '',
+      });
     });
   });
 });
