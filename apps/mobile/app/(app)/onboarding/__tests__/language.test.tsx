@@ -1,6 +1,7 @@
 // app/(app)/onboarding/__tests__/language.test.tsx
 // GH #36 — happy path: tapping a locale row fires i18n.changeLanguage immediately,
-// persists to MMKV + useUpdateMe, and advances to the next onboarding step.
+// persists to MMKV, and advances to the next onboarding step.
+// (Server persistence of preferred_locale is sent later by notifications-prompt via useCompleteOnboarding.)
 
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -13,10 +14,6 @@ jest.mock('expo-router', () => ({
   Redirect: () => null,
 }));
 
-jest.mock('@/api/hooks/useUpdatePrefs', () => ({
-  useUpdateMe: jest.fn(),
-}));
-
 jest.mock('@/lib/storage', () => ({
   mmkvStorage: {
     getItem: jest.fn(() => null),
@@ -27,11 +24,9 @@ jest.mock('@/lib/storage', () => ({
 
 jest.mock('@/stores/onboarding', () => jest.requireActual('@/stores/onboarding'));
 
-import { useUpdateMe } from '@/api/hooks/useUpdatePrefs';
 import { mmkvStorage } from '@/lib/storage';
 import OnboardingLanguage from '../language';
 
-const mUseUpdateMe = useUpdateMe as jest.Mock;
 const mMmkvStorage = mmkvStorage as unknown as {
   setItem: jest.Mock;
   getItem: jest.Mock;
@@ -48,9 +43,6 @@ describe('OnboardingLanguage', () => {
   beforeEach(async () => {
     mockPush.mockClear();
     mMmkvStorage.setItem.mockClear();
-    mUseUpdateMe.mockReset().mockReturnValue({
-      mutate: jest.fn(),
-    });
     // ponytail: reset locale per-test — the "tap a row" test mutates i18n to 'en',
     //          which would otherwise make the no-op test see Italiano as foreign.
     await i18n.changeLanguage('it');
@@ -79,9 +71,7 @@ describe('OnboardingLanguage', () => {
     );
   });
 
-  it('tapping a row fires i18n.changeLanguage + persists to MMKV + useUpdateMe + advances', async () => {
-    const mutate = jest.fn();
-    mUseUpdateMe.mockReturnValue({ mutate });
+  it('tapping a row fires i18n.changeLanguage + persists to MMKV + advances', async () => {
     const { getByLabelText } = render(<OnboardingLanguage />);
 
     fireEvent.press(getByLabelText('English'));
@@ -90,18 +80,14 @@ describe('OnboardingLanguage', () => {
       expect(i18n.language).toBe('en');
     });
     expect(mMmkvStorage.setItem).toHaveBeenCalledWith('i18n.lng', 'en');
-    expect(mutate).toHaveBeenCalledWith({ preferred_locale: 'en' });
     expect(mockPush).toHaveBeenCalledWith('/onboarding/notifications-prompt');
   });
 
   it('is a no-op when tapping the already-current language', () => {
-    const mutate = jest.fn();
-    mUseUpdateMe.mockReturnValue({ mutate });
     const { getByLabelText } = render(<OnboardingLanguage />);
 
     fireEvent.press(getByLabelText('Italiano'));
 
-    expect(mutate).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mMmkvStorage.setItem).not.toHaveBeenCalled();
   });

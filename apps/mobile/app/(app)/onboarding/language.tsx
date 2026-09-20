@@ -1,9 +1,12 @@
 // app/(app)/onboarding/language.tsx
+// Step 4 of 5 (between topics and notifications-prompt).
+// Deviations from a "canonical" onboarding step:
+//   1. stores/onboarding.ts is NOT touched — wizard state lives in the Stack.Screen registration, no separate store needed (YAGNI).
+//   2. No useUpdateMe PATCH here — notifications-prompt sends preferred_locale atomically via useCompleteOnboarding at wizard completion, so a per-tap PATCH would be redundant + a race risk. MMKV write below is crash safety only (a half-completed wizard still picks up the locale on next launch).
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import i18n, { supportedLngs, type SupportedLng } from '@/i18n';
-import { useUpdateMe } from '@/api/hooks/useUpdatePrefs';
 import { mmkvStorage } from '@/lib/storage';
 import { ProgressBar } from '@/components/ProgressBar';
 
@@ -15,14 +18,12 @@ const LABELS: Record<SupportedLng, string> = {
 export default function OnboardingLanguage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const updateMe = useUpdateMe();
   const current = i18n.language as SupportedLng;
 
   const onSelect = (lng: SupportedLng) => {
     if (lng === current) return;
     void i18n.changeLanguage(lng);             // immediate UI refresh
     mmkvStorage.setItem('i18n.lng', lng);      // GH #36: persist locally so the choice survives a crash mid-wizard
-    updateMe.mutate({ preferred_locale: lng }); // persist server-side (mirrors settings/language.tsx)
     router.push('/onboarding/notifications-prompt');
   };
 
