@@ -16,12 +16,12 @@ import { usePasswordResetRequest } from '@/api/hooks/usePasswordResetRequest';
 describe('usePasswordResetRequest', () => {
   beforeEach(() => mockPost.mockReset());
 
-  it('POSTs /auth/password/reset-request with the email, skipAuth', async () => {
-    mockPost.mockResolvedValueOnce({ status: 200, data: {} });
+  it('POSTs /auth/password/forgot with the email, skipAuth', async () => {
+    mockPost.mockResolvedValueOnce({ status: 200, data: { sent: true } });
     const mut: any = usePasswordResetRequest();
     await mut.mutate({ email: 'a@b.com' });
     expect(mockPost).toHaveBeenCalledWith(
-      '/auth/password/reset-request',
+      '/auth/password/forgot',
       { email: 'a@b.com' },
       { skipAuth: true },
     );

@@ -106,7 +106,12 @@ export default function ForgotPasswordScreen() {
         {pending ? (
           <ActivityIndicator color="#fff" />
         ) : throttled ? (
-          <Text className="text-text-onPrimary font-semibold">
+          // ponytail: live region so SR users hear the cooldown ticking down
+          //        each second instead of having to re-focus the button.
+          <Text
+            accessibilityLiveRegion="polite"
+            className="text-text-onPrimary font-semibold"
+          >
             {t('auth.forgotPassword.throttled', { seconds: remaining })}
           </Text>
         ) : (

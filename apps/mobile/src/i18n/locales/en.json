@@ -33,6 +33,7 @@
     "phoneOtp.submit": "Verify",
     "phoneOtp.invalidCode": "That code didn't work. Try again.",
     "phoneOtp.sessionExpired": "Session expired. Restart and try again.",
+    "phoneOtp.verified": "Phone verified — please sign in.",
     "forgotPassword.title": "Reset password",
     "forgotPassword.submit": "Send link",
     "forgotPassword.email": "Email",

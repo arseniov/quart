@@ -1,8 +1,8 @@
 // app/(auth)/__tests__/forgot-password.test.tsx
-// GH #29 — happy path + 422 invalid email + network error.
+// GH #29 — happy path + 422 invalid email + network error + throttle.
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import i18n from '@/i18n';
 
 const mockReplace = jest.fn();
@@ -43,19 +43,19 @@ describe('ForgotPasswordScreen', () => {
   });
 
   it('renders the title and the email input', () => {
-    mockPost.mockResolvedValue({ status: 200, data: {} });
+    mockPost.mockResolvedValue({ status: 200, data: { sent: true } });
     const { getByText, getByLabelText } = render(<ForgotPasswordScreen />, { wrapper: makeWrapper() });
     expect(getByText('Reset password')).toBeTruthy();
     expect(getByLabelText('Email')).toBeTruthy();
   });
 
   it('happy path: submits a valid email and shows the no-enumeration success copy', async () => {
-    mockPost.mockResolvedValue({ status: 200, data: {} });
+    mockPost.mockResolvedValue({ status: 200, data: { sent: true } });
     const { getByLabelText, getByText } = render(<ForgotPasswordScreen />, { wrapper: makeWrapper() });
     fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
     fireEvent.press(getByText('Send link'));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith(
-      '/auth/password/reset-request',
+      '/auth/password/forgot',
       { email: 'a@b.com' },
       { skipAuth: true },
     ));
@@ -76,5 +76,29 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
     fireEvent.press(getByText('Send link'));
     await waitFor(() => expect(getByText("Couldn't reach the server. Try again.")).toBeTruthy());
+  });
+
+  it('throttles a second submit within the 30s window and never calls POST again', async () => {
+    jest.useFakeTimers();
+    try {
+      mockPost.mockResolvedValue({ status: 200, data: { sent: true } });
+      const { getByLabelText, getByText } = render(<ForgotPasswordScreen />, { wrapper: makeWrapper() });
+      fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
+      // First submit: POST fires, server returns 200, success copy + countdown.
+      await act(async () => {
+        fireEvent.press(getByText('Send link'));
+      });
+      await waitFor(() =>
+        expect(mockPost).toHaveBeenCalledTimes(1),
+      );
+      // The button now shows the "Wait Ns…" copy; a second press must be a no-op.
+      await waitFor(() =>
+        expect(getByText(/Wait \d+s before sending another link\./)).toBeTruthy(),
+      );
+      fireEvent.press(getByText(/Wait \d+s before sending another link\./));
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
