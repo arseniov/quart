@@ -5,7 +5,13 @@ interface Props { current: number; total: number }
 
 export function ProgressBar({ current, total }: Props) {
   return (
-    <View accessible accessibilityLabel={`Step ${current} of ${total}`} className="flex-row gap-1 px-4 py-3">
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={`Step ${current} of ${total}`}
+      accessibilityValue={{ now: current, min: 0, max: total }}
+      className="flex-row gap-1 px-4 py-3"
+    >
       {Array.from({ length: total }, (_, i) => {
         const stepNum = i + 1;
         const active = stepNum <= current;

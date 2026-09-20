@@ -44,7 +44,11 @@ describe('useLogin — happy path', () => {
   it('posts and persists tokens via mutate', async () => {
     const mut = useLogin();
     await (mut as any).mutate({ email: 'a@b.com', password: 'pw' });
-    expect(mockPost).toHaveBeenCalledWith('/auth/login', expect.any(Object), { skipAuth: true });
+    expect(mockPost).toHaveBeenCalledWith(
+      '/auth/login',
+      expect.objectContaining({ email: 'a@b.com', password: 'pw', device_fingerprint: 'fp' }),
+      { skipAuth: true },
+    );
     expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' });
   });
 
