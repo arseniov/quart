@@ -29,9 +29,17 @@
     "googleFailed": "Google sign-in failed. Please try again.",
     "phoneOtp.title": "Verify phone",
     "phoneOtp.sent": "Code sent to {{number}}",
+    "phoneOtp.inputLabel": "Verification code digit {{n}}",
     "phoneOtp.submit": "Verify",
+    "phoneOtp.invalidCode": "That code didn't work. Try again.",
+    "phoneOtp.sessionExpired": "Session expired. Restart and try again.",
     "forgotPassword.title": "Reset password",
-    "forgotPassword.submit": "Send link"
+    "forgotPassword.submit": "Send link",
+    "forgotPassword.email": "Email",
+    "forgotPassword.success": "If that email is registered, you'll get a reset link.",
+    "forgotPassword.throttled": "Wait {{seconds}}s before sending another link.",
+    "forgotPassword.invalidEmail": "Enter a valid email address.",
+    "forgotPassword.network": "Couldn't reach the server. Try again."
   },
   "onboarding": {
     "city.title": "Which city do you live in?",

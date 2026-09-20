@@ -29,9 +29,17 @@
     "googleFailed": "Accesso con Google non riuscito. Riprova.",
     "phoneOtp.title": "Verifica telefono",
     "phoneOtp.sent": "Codice inviato a {{number}}",
+    "phoneOtp.inputLabel": "Cifra {{n}} del codice di verifica",
     "phoneOtp.submit": "Verifica",
+    "phoneOtp.invalidCode": "Codice non valido. Riprova.",
+    "phoneOtp.sessionExpired": "Sessione scaduta. Ricomincia e riprova.",
     "forgotPassword.title": "Recupera password",
-    "forgotPassword.submit": "Invia link"
+    "forgotPassword.submit": "Invia link",
+    "forgotPassword.email": "Email",
+    "forgotPassword.success": "Se l'email è registrata, riceverai un link per reimpostarla.",
+    "forgotPassword.throttled": "Attendi {{seconds}}s prima di inviare un altro link.",
+    "forgotPassword.invalidEmail": "Inserisci un indirizzo email valido.",
+    "forgotPassword.network": "Impossibile contattare il server. Riprova."
   },
   "onboarding": {
     "city.title": "In quale città vivi?",
