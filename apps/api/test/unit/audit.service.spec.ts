@@ -1,7 +1,7 @@
 import { computeRowHash, GENESIS_PREV_HASH } from '@quart/db';
 import { describe, it, expect, vi } from 'vitest';
 
-import { AuditService, SYSTEM_AUDIT_ACTOR, SYSTEM_AUDIT_CITY_ID } from '../../src/audit/audit.service.js';
+import { AuditService, SYSTEM_AUDIT_ACTOR, SYSTEM_AUDIT_CITY_ID, tryParseUuid } from '../../src/audit/audit.service.js';
 
 // ponytail: Kysely query-builder shape can't be expressed statically without
 // the real types; the stubs only need to return the rows buildRow reads.
@@ -178,3 +178,36 @@ describe('AuditService.buildSystemRow', () => {
 // `buildSystemRow` tests above pin the invariants that DO differ from
 // the existing `buildRow` — sentinel city, NULL actor, system actor
 // stamped into the payload.
+
+// GH #31 — promote `tryParseUuid` to an exported helper used by
+// SessionService.tenantCtx, TenantContextInterceptor, and AuditService.
+// Tests pin the contract: canonical UUID passes through; everything else
+// coerces to null. Behavior is the same as the prior inline regex + truthy
+// check, just consolidated.
+const CANONICAL_UUID = '550e8400-e29b-41d4-a716-446655440000';
+const UPPER_UUID = '550E8400-E29B-41D4-A716-446655440000';
+
+describe('tryParseUuid (GH #31)', () => {
+  it.each([
+    ['canonical lowercase', CANONICAL_UUID, CANONICAL_UUID],
+    ['uppercase hex', UPPER_UUID, UPPER_UUID],
+    ['mixed case', '550e8400-E29B-41d4-a716-446655440000', '550e8400-E29B-41d4-a716-446655440000'],
+  ])('returns the input unchanged for %s', (_label, input, expected) => {
+    expect(tryParseUuid(input)).toBe(expected);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['empty string', ''],
+    ['non-UUID header form', 'req-abc12345'],
+    ['too short', '550e8400-e29b-41d4-a716-44665544000'],
+    ['too long', '550e8400-e29b-41d4-a716-4466554400000'],
+    ['wrong variant digits', '550e8400-e29b-41d4-a716-44665544000g'],
+    ['missing hyphens', '550e8400e29b41d4a716446655440000'],
+    ['SQL injection attempt', "'; DROP TABLE audit_log; --"],
+    ['junk', 'not-a-uuid-at-all'],
+  ])('returns null for %s', (_label, input) => {
+    expect(tryParseUuid(input as string | null | undefined)).toBeNull();
+  });
+});

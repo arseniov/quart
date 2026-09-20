@@ -26,7 +26,7 @@ import type { TenantContext } from '@quart/shared-types';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the constructor parameters below.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { AuditService } from '../audit/audit.service.js';
+import { AuditService, tryParseUuid } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -42,12 +42,6 @@ import type { SessionResponse, SessionUser } from './session.dto.js';
 // reuse is enforced at the auth_sessions row level (30d), not the JWT.
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
-
-// Loose UUID regex — mirrors the one in audit.service.ts:tryParseUuid and
-// RequestIdMiddleware. `audit_log.request_id` is uuid-typed; the request-id
-// middleware accepts any /^[A-Za-z0-9_-]{8,128}$/ form (e.g. `req-abc12345`),
-// so non-UUIDs must coerce to NULL here to avoid a 22P02.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface SessionUserRow {
   id: string;
@@ -204,9 +198,10 @@ export class SessionService {
       userId,
       isSuperAdmin: false,
       // audit_log.request_id is uuid-typed; non-UUIDs from middleware
-      // (e.g. `req-abc12345`) coerce to NULL so the insert doesn't
-      // 22P02. Same regex as audit.service.ts:tryParseUuid.
-      requestId: requestId && UUID_RE.test(requestId) ? requestId : '',
+      // (e.g. `req-abc12345`) coerce to NULL so the insert doesn't 22P02.
+      // tryParseUuid returns `null` for non-UUID inputs — the TenantContext
+      // contract still requires a string field, so fall back to ''.
+      requestId: tryParseUuid(requestId) ?? '',
     };
   }
 }

@@ -101,8 +101,20 @@ export interface AuditRow {
 // `audit_log.request_id` is uuid-typed, but the request-id middleware
 // accepts any /^[A-Za-z0-9_-]{8,128}$/ header (e.g. `req-abc12345`).
 // Coerce non-UUIDs to NULL so the audit insert doesn't crash with 22P02.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function tryParseUuid(value: string | null | undefined): string | null {
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Coerce `value` to a UUID string or `null`. Returns the input unchanged
+ * when it matches the loose RFC 4122 hex form; returns `null` for any
+ * non-UUID input (`undefined`, `null`, `''`, `req-abc12345`, malformed
+ * strings). Used wherever a non-UUID `request_id` would otherwise crash
+ * the `audit_log.request_id` insert with Postgres 22P02.
+ *
+ * Ponytail: exported so call-sites (e.g. `SessionService.tenantCtx`,
+ * `TenantContextInterceptor`) share the same regex + null-coalesce
+ * behavior instead of each keeping a private copy.
+ */
+export function tryParseUuid(value: string | null | undefined): string | null {
   if (!value) return null;
   return UUID_RE.test(value) ? value : null;
 }

@@ -12,6 +12,7 @@ import { Reflector } from '@nestjs/core';
 import type { TenantContext } from '@quart/shared-types';
 import type { Observable } from 'rxjs';
 
+import { tryParseUuid } from '../audit/audit.service.js';
 import { SKIP_TENANT } from './decorators/skip-tenant.decorator.js';
 
 interface RequestWithTenant {
@@ -25,10 +26,6 @@ interface RequestWithTenant {
   tenant?: TenantContext;
   user?: { requestId?: string };
 }
-
-// Loose UUID regex (matches any 8-4-4-4-12 hex layout). Sufficient for the
-// header-based stub — the real auth path will validate via JWT/session.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function headerString(
   headers: Record<string, string | string[] | undefined>,
@@ -82,8 +79,8 @@ export class TenantContextInterceptor implements NestInterceptor {
     // partial headers (e.g. only X-Is-Super-Admin: true) must not be
     // enough to escalate, because RLS grants catalog write purely on
     // `app.is_super_admin` with no city predicate.
-    if (!cityId || !UUID_RE.test(cityId)) return null;
-    if (userIdRaw && !UUID_RE.test(userIdRaw)) return null;
+    if (!cityId || !tryParseUuid(cityId)) return null;
+    if (userIdRaw && !tryParseUuid(userIdRaw)) return null;
 
     return {
       cityId,
