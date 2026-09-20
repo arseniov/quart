@@ -22,6 +22,10 @@ export default function LanguageSettings() {
 
   const onSelect = async (lng: SupportedLng) => {
     if (lng === current) return;
+    // Rapid-tap guard for mutate-pending state — prevents MMKV/server drift when the user
+    // taps two languages in quick succession (A in-flight + B captured prev=A, then MMKV writes A
+    // while UI shows B on B's failure).
+    if (updateMe.isPending) return;
     // GH #37: capture previous locale BEFORE the optimistic swap so the catch can roll back
     // without awaiting i18n.changeLanguage (which would re-throw inside the catch).
     const previousLocale = i18n.language as SupportedLng;

@@ -38,7 +38,7 @@ jest.mock('expo-router', () => ({
 
 import LanguageSettings from '../language';
 
-const mMmkvStorage = require('@/lib/storage').mmkvStorage as unknown as {
+const mmkvStorage = require('@/lib/storage').mmkvStorage as unknown as {
   setItem: jest.Mock;
 };
 
@@ -49,10 +49,13 @@ describe('LanguageSettings — rollback on updateMe error (GH #37)', () => {
   afterAll(async () => {
     await i18n.changeLanguage('it');
   });
-  beforeEach(() => {
+  beforeEach(async () => {
     mockMutateAsync.mockReset();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mMmkvStorage.setItem.mockClear();
+    mmkvStorage.setItem.mockClear();
+    // ponytail: reset locale per-test — the "success" test mutates i18n to 'en',
+    //          which would otherwise make the no-op test see Italiano as foreign.
+    await i18n.changeLanguage('it');
   });
   afterEach(() => {
     jest.restoreAllMocks();
@@ -60,6 +63,8 @@ describe('LanguageSettings — rollback on updateMe error (GH #37)', () => {
 
   it('on mutateAsync rejection, rolls i18n.language back to previous and surfaces an Alert', async () => {
     mockMutateAsync.mockRejectedValue(new Error('boom'));
+    const changeLangSpy = jest.spyOn(i18n, 'changeLanguage');
+    const alertSpy = jest.spyOn(Alert, 'alert');
     const { getByLabelText } = render(<LanguageSettings />);
 
     fireEvent.press(getByLabelText('English'));
@@ -68,13 +73,22 @@ describe('LanguageSettings — rollback on updateMe error (GH #37)', () => {
       expect(i18n.language).toBe('it');
     });
     expect(mockMutateAsync).toHaveBeenCalledWith({ preferred_locale: 'en' });
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    // Rollback must run BEFORE Alert.alert — a future reorder to alert-first would silently
+    // pass if we only asserted each side-effect was called. invocationCallOrder is monotonic
+    // across spies, so the rollback's order index must be < the alert's.
+    expect(changeLangSpy).toHaveBeenCalledWith('it');
+    expect(changeLangSpy.mock.invocationCallOrder[0]!).toBeLessThan(
+      alertSpy.mock.invocationCallOrder[0]!,
+    );
+    // Rollback to 'it' must be the LAST changeLanguage call — proves final state matches server.
+    expect(changeLangSpy).toHaveBeenLastCalledWith('it');
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    expect(alertSpy).toHaveBeenCalledWith(
       expect.any(String),
       'boom',
     );
     // MMKV must NOT be written when the server PATCH fails — client and server must agree.
-    expect(mMmkvStorage.setItem).not.toHaveBeenCalled();
+    expect(mmkvStorage.setItem).not.toHaveBeenCalled();
   });
 
   it('on mutateAsync success, persists the new locale to MMKV so next cold launch matches', async () => {
@@ -84,7 +98,7 @@ describe('LanguageSettings — rollback on updateMe error (GH #37)', () => {
     fireEvent.press(getByLabelText('English'));
 
     await waitFor(() => {
-      expect(mMmkvStorage.setItem).toHaveBeenCalledWith('i18n.lng', 'en');
+      expect(mmkvStorage.setItem).toHaveBeenCalledWith('i18n.lng', 'en');
     });
     expect(i18n.language).toBe('en');
     expect(Alert.alert).not.toHaveBeenCalled();
@@ -97,7 +111,7 @@ describe('LanguageSettings — rollback on updateMe error (GH #37)', () => {
     fireEvent.press(getByLabelText('Italiano'));
 
     expect(mockMutateAsync).not.toHaveBeenCalled();
-    expect(mMmkvStorage.setItem).not.toHaveBeenCalled();
+    expect(mmkvStorage.setItem).not.toHaveBeenCalled();
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 });
