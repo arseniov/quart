@@ -193,12 +193,8 @@ function makeDoubles(overrides: {
   };
   const db = makeDb(state);
   const audit = makeAudit();
-  const jwt = {
-    sign: vi.fn(async () => `jwt.${Math.random()}`),
-  } as unknown as ConstructorParameters<typeof SessionService>[1];
   const sessions = new SessionService(
     db,
-    jwt,
     audit as unknown as AuditService,
   );
   return { state, db, audit, sessions };

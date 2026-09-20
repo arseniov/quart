@@ -1,13 +1,13 @@
 // apps/api/src/auth/session.service.ts
 // GH #30 spec-review follow-up (was gap 2 — "reuse the existing createSession
-// helper"). Phone-OTP /verify is the first session-issuing controller; the
-// forthcoming email-login controller will return the same shape and call this
-// same helper. The audit chain (auth_sessions row + session_created HMAC row)
-// is unforgiving — both halves must land atomically and in the same order
-// regardless of the caller, otherwise a chain walk across two controllers
-// diverges.
+// helper"). Phone-OTP /verify + BA's `databaseHooks.session.create.after`
+// both call this helper so the audit chain (auth_sessions row + session_created
+// HMAC row) lands atomically and in the same order regardless of caller.
+// GH #45: dropped the JWT minting path — Better Auth owns the bearer, and
+// the mobile (GH #46) will call BA's /sign-in/* endpoints directly. The
+// `auth_sessions` row stays as a write-only audit artifact.
 //
-// Two-phase write (unchanged from the prior inline implementation):
+// Two-phase write:
 //
 //  1. Tenant tx (when the user has a default_city_id): INSERT into
 //     `auth_sessions` + write the `session_created` audit row in the SAME
@@ -29,19 +29,25 @@ import type { TenantContext } from '@quart/shared-types';
 import { AuditService, tryParseUuid } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { JwtService, type JwtClaims } from './jwt.service.js';
-import type { SessionResponse, SessionUser } from './session.dto.js';
 
-// Access TTL (1h) matches the lifetime used elsewhere in the stack for
-// short-lived JWTs; refresh TTL (30d) is the same window Quart's
-// `auth_sessions.absolute_expires_at` accepts. The two sign() calls share
-// the same `jti` (== sessionId) so JwtAuthGuard reads one auth_sessions
-// row regardless of which token the caller presents, but differ in TTL
-// so a stolen access token can't outlive its short window. Refresh
-// reuse is enforced at the auth_sessions row level (30d), not the JWT.
-const ACCESS_TTL_SECONDS = 60 * 60;
-const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
+// Absolute expiry window for the `auth_sessions` row. BA's own session
+// cookie drives runtime auth now (BaAuthGuard), so this row is a write-only
+// audit artifact — the row exists so chain walks can correlate a session
+// row to the BA session that produced it, but no guard reads it.
+const SESSION_ROW_TTL_SECONDS = 60 * 60 * 24 * 30;
+
+export interface SessionUser {
+  id: string;
+  handle: string;
+  display_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  avatar_url: string | null;
+  preferred_locale: string;
+  city_id: string | null;
+  needs_onboarding: boolean;
+  roles: string[];
+}
 
 export interface SessionUserRow {
   id: string;
@@ -65,29 +71,34 @@ export interface CreateSessionInput {
   auditPayload: Record<string, unknown>;
 }
 
+export interface CreateSessionResult {
+  /** The Quart user projection — same shape BA's mobile session needs. */
+  user: SessionUser;
+}
+
 @Injectable()
 export class SessionService {
   constructor(
     private readonly db: DbService,
-    private readonly jwt: JwtService,
     private readonly audit: AuditService,
   ) {}
 
   /**
-   * Mint a fresh session for `user` and return tokens + the Quart user
-   * projection. Mirrors the email-login contract (forthcoming) so the
-   * mobile client can switch flows without changing its parsing.
+   * Persist a `session_created` audit row + an `auth_sessions` row keyed
+   * to the BA session id that just produced it. Returns the Quart user
+   * projection; no tokens are minted (BA's bearer is the runtime auth
+   * surface, and GH #46's mobile callers will use BA's /sign-in/* endpoints
+   * directly).
    */
-  async createSession(input: CreateSessionInput): Promise<SessionResponse> {
+  async createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
     const { user, roles, ip, userAgent, deviceFingerprint, requestId, auditPayload } = input;
     const cityId = user.default_city_id;
 
-    // Fresh session id + absolute expiry. The session row is the source
-    // of truth for "is this session alive"; JwtAuthGuard reads it on every
-    // request. `last_seen_at` is stamped by the guard on each authenticated
-    // hit, so we leave it at the default (== created_at) here.
+    // Fresh session id + absolute expiry. The row is a write-only audit
+    // artifact — chain walks correlate it back to the BA session via
+    // `auditPayload.ba_session_id` for BA-driven sign-ins.
     const sessionId = randomUUID();
-    const expiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+    const expiresAt = new Date(Date.now() + SESSION_ROW_TTL_SECONDS * 1000);
 
     if (cityId) {
       // Happy path — user has a city. runInTenantTx keeps RLS GUCs set
@@ -148,47 +159,21 @@ export class SessionService {
       });
     }
 
-    // Sign two distinct JWTs. They share the same `jti` (== sessionId)
-    // so JwtAuthGuard sees one session regardless of which the caller
-    // presents — but they differ in TTL so a stolen access token can't
-    // outlive its short window.
-    const baseClaims: Omit<JwtClaims, never> = {
-      sub: user.id,
-      city_id: cityId ?? '',
-      scope_type: 'city',
-      scope_id: cityId,
-      role_snapshot: roles,
-      device_fingerprint: deviceFingerprint,
-    };
-    const accessToken = await this.jwt.sign(baseClaims, {
-      jti: sessionId,
-      ttlSeconds: ACCESS_TTL_SECONDS,
-    });
-    const refreshToken = await this.jwt.sign(baseClaims, {
-      jti: sessionId,
-      ttlSeconds: REFRESH_TTL_SECONDS,
-    });
-
-    const dto: SessionUser = {
-      id: user.id,
-      handle: user.handle,
-      display_name: user.display_name,
-      email: user.email,
-      phone_e164: user.phone_e164,
-      avatar_url: user.avatar_url,
-      preferred_locale: user.locale,
-      city_id: cityId,
-      // Mirrors the mobile's onboarding-gate logic: no city → user must
-      // pick one before the map / tabs are usable. See app/(app)/_layout.tsx.
-      needs_onboarding: !cityId,
-      roles,
-    };
-
     return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      refresh_expires_at: expiresAt.toISOString(),
-      user: dto,
+      user: {
+        id: user.id,
+        handle: user.handle,
+        display_name: user.display_name,
+        email: user.email,
+        phone_e164: user.phone_e164,
+        avatar_url: user.avatar_url,
+        preferred_locale: user.locale,
+        city_id: cityId,
+        // Mirrors the mobile's onboarding-gate logic: no city → user must
+        // pick one before the map / tabs are usable. See app/(app)/_layout.tsx.
+        needs_onboarding: !cityId,
+        roles,
+      },
     };
   }
 

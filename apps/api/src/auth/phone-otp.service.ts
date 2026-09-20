@@ -25,7 +25,7 @@ import { Injectable, UnauthorizedException, UnprocessableEntityException } from 
 import { AuditService } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-import type { VerifyOtpSessionResponse } from './phone-otp.dto.js';
+import type { VerifyOtpResult } from './phone-otp.dto.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SessionService } from './session.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -58,7 +58,7 @@ export class PhoneOtpService {
     private readonly twilio: TwilioService,
   ) {}
 
-  async verifyAndIssueSession(input: VerifyInput): Promise<VerifyOtpSessionResponse> {
+  async verifyAndIssueSession(input: VerifyInput): Promise<VerifyOtpResult> {
     // Twilio Verify holds the actual OTP comparison. A `false` here is
     // either a bad code or a code from a different phone — surface 422
     // without leaking which.

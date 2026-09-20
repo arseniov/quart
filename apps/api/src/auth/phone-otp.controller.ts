@@ -1,9 +1,8 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ApiOkResponse, ApiTags, ApiUnprocessableEntityResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { z } from 'zod';
 
-import type { VerifyOtpSessionResponse } from './phone-otp.dto.js';
+import { RequestOtpSchema, VerifyOtpSchema, type VerifyOtpResult } from './phone-otp.dto.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameters.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -11,13 +10,6 @@ import { PhoneOtpService, extractVerifyContext } from './phone-otp.service.js';
 import { Public } from './public.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TwilioService } from './twilio.service.js';
-
-const phoneSchema = z.object({
-  phoneNumber: z.string().regex(/^\+\d{10,15}$/, 'E.164 phone format required'),
-});
-const verifySchema = phoneSchema.extend({
-  code: z.string().regex(/^\d{6}$/, '6-digit code required'),
-});
 
 interface VerifyFastifyRequest {
   id?: string | number;
@@ -34,9 +26,11 @@ interface VerifyFastifyRequest {
  *
  * The `phoneNumber()` plugin is registered in `AuthService` so BA still
  * understands the `user.phoneNumber` / `user.phoneNumberVerified` columns
- * from migration 0025; the verify path runs our own session-issuance flow
- * (GH #30) instead of routing through BA's `signInPhoneNumber`, which
- * requires a password — single-step UX was the whole point.
+ * from migration 0025.
+ *
+ * GH #45: /verify no longer issues JWTs — the response shape is the
+ * Quart user projection only. Callers needing bearer auth use BA's own
+ * endpoints.
  */
 @Controller('auth/phone')
 @ApiTags('auth/phone')
@@ -53,19 +47,17 @@ export class PhoneOtpController {
   @Post('request')
   @Throttle({ phone: { limit: 5, ttl: 60_000 } })
   async requestOtp(@Body() body: unknown) {
-    const { phoneNumber } = phoneSchema.parse(body);
+    const { phoneNumber } = RequestOtpSchema.parse(body);
     await this.twilio.sendOtp(phoneNumber);
     return { ok: true };
   }
 
   /**
-   * Verify the OTP + issue a session in one round trip (GH #30, Option A).
-   * Response shape mirrors the (forthcoming) email-login contract:
-   *   { access_token, refresh_token, refresh_expires_at, user }
-   * See `phone-otp.dto.ts` for the full user projection.
+   * Verify the OTP + write the §3.8 audit chain row (`session_created`)
+   * in one round trip. Returns the Quart user projection.
    *
    * Status codes:
-   *   200 — OTP matched and session issued.
+   *   200 — OTP matched.
    *   422 — code is malformed, expired, or wrong (`phone_otp.invalid_code`).
    *   401 — OTP matched but no Quart user exists for that phone
    *         (`phone_otp.unknown_user`); same response shape as wrong-code
@@ -74,15 +66,11 @@ export class PhoneOtpController {
    */
   @Post('verify')
   @ApiOkResponse({
-    description:
-      'OTP verified. Returns the session tokens + user profile (mirrors the email-login contract).',
+    description: 'OTP verified. Returns the Quart user projection.',
     schema: {
       type: 'object',
-      required: ['access_token', 'refresh_token', 'refresh_expires_at', 'user'],
+      required: ['user'],
       properties: {
-        access_token: { type: 'string', description: 'Ed25519 JWT (1h TTL).' },
-        refresh_token: { type: 'string', description: 'Ed25519 JWT (30d TTL).' },
-        refresh_expires_at: { type: 'string', format: 'date-time' },
         user: {
           type: 'object',
           required: [
@@ -118,8 +106,8 @@ export class PhoneOtpController {
   async verifyOtp(
     @Body() body: unknown,
     @Req() req: VerifyFastifyRequest,
-  ): Promise<VerifyOtpSessionResponse> {
-    const { phoneNumber, code } = verifySchema.parse(body);
+  ): Promise<VerifyOtpResult> {
+    const { phoneNumber, code } = VerifyOtpSchema.parse(body);
     const ctx = { ...extractVerifyContext(req), phoneNumber, code };
     return this.service.verifyAndIssueSession(ctx);
   }

@@ -57,7 +57,6 @@ import { AdminUsersController } from '../admin/admin-users.controller.js';
 import { AdminIssuesController } from '../admin-issues/admin-issues.controller.js';
 import { VerifyController } from '../audit/verify.controller.js';
 import { AuthController } from '../auth/auth.controller.js';
-import { LoginController } from '../auth/login.controller.js';
 import { MfaController } from '../auth/mfa.controller.js';
 import { PhoneOtpController } from '../auth/phone-otp.controller.js';
 import { CitiesController } from '../cities/cities.controller.js';
@@ -124,7 +123,6 @@ const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   AdminIssuesController,
   VerifyController,
   AuthController,
-  LoginController,
   MfaController,
   PhoneOtpController,
   CitiesController,
@@ -239,7 +237,7 @@ function buildDocument(input: SwaggerBuilderInput): Record<string, unknown> {
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'EdDSA',
-      description: 'Ed25519-signed JWT issued by /auth/login.',
+      description: 'Better Auth session token issued by /auth/sign-in/* endpoints.',
     },
     [SWAGGER_API_COOKIE_NAME]: {
       type: 'apiKey',

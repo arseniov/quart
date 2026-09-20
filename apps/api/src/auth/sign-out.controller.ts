@@ -13,7 +13,7 @@ import { CurrentUser } from './decorators/current-user.decorator.js';
 import { SignOutService } from './sign-out.service.js';
 
 /**
- * POST /auth/sign-out — revoke the caller's session and clear the
+ * POST /auth/sign-out — revoke the caller's BA session and clear the
  * mobile session cookie. The `__Host-quart-api-session` Set-Cookie
  * carries Secure + Path=/ + SameSite=Lax + maxAge=0 so the browser
  * drops it on response.
@@ -25,14 +25,15 @@ import { SignOutService } from './sign-out.service.js';
  * change registers another wildcard under `auth`, double-check
  * routing with an integration test before relying on specificity.)
  *
- * No request body. The session id comes from `req.user.sessionId`,
- * which BaAuthGuard copies from the BA session row. The service does
- * the DB revoke + audit write in a single transaction so a successful
- * revoke always has a matching chain entry.
+ * No request body. The Authorization header is forwarded into
+ * SignOutService so it can call BA's `api.signOut({ headers })` and
+ * invalidate the BA session server-side. The service also writes the
+ * `auth.sign_out` audit row so the §3.8 chain reflects the Quart-side
+ * event.
  *
  * `req.id` (set by RequestIdMiddleware) is forwarded to the service
- * so the `auth.sign_out` audit row carries the same `request_id` as
- * the HTTP response headers and the rest of the chain.
+ * so the audit row carries the same `request_id` as the HTTP response
+ * headers and the rest of the chain.
  */
 @Controller('auth/sign-out')
 @ApiGlobalResponses()
@@ -50,7 +51,8 @@ export class SignOutController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ): Promise<void> {
-    await this.service.signOut(user, req.id);
+    const authorization = (req.headers.authorization ?? req.headers.Authorization) as string | undefined;
+    await this.service.signOut(user, req.id, authorization);
     res.clearCookie('__Host-quart-api-session', cookieClearOptions('mobile'));
   }
 }

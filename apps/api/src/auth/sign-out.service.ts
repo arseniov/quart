@@ -1,98 +1,76 @@
+// apps/api/src/auth/sign-out.service.ts
+// GH #45: Sign-out now delegates the actual session revoke to Better Auth's
+// /sign-out (auth.instance.api.signOut({ headers })), which removes the BA
+// session row + cookie. The `auth_sessions` row that SessionService wrote on
+// sign-in is no longer the runtime cache for a guard — it's a write-only
+// audit artifact that stays around for correlation, so we don't revoke it.
+//
+// We still write the `auth.sign_out` audit row (GH #32 invariant) tagged
+// `via: 'quart_sign_out'` so the §3.8 chain sees the Quart-side event;
+// BA's plugin matcher fires independently with `via: 'ba_sign_out'` for
+// any caller that hits BA's /sign-out directly (admin web app, SDK).
 import { Injectable, Logger } from '@nestjs/common';
 
-// Value (not `import type`) so vitest's decorator-metadata plugin can emit
-// `design:paramtypes` for the AuditService + DbService + ValkeyService
-// constructor parameters. Mirrors the pattern in magic-link.service.ts /
-// password-reset.service.ts.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuditService } from '../audit/audit.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DbService } from '../db/db.service.js';
-
-import { SESSION_CACHE_TTL_SECONDS } from './constants.js';
-import type { AuthUser } from './decorators/current-user.decorator.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { ValkeyService } from './valkey.service.js';
+import { AuthService } from './auth.service.js';
+import type { AuthUser } from './decorators/current-user.decorator.js';
 
-
-/**
- * Revoke the caller's session: stamp `revoked_at` + `revoke_reason` on the
- * `auth_sessions` row, append an `auth.sign_out` audit row in the same
- * transaction, and poison the Valkey session cache so JwtAuthGuard denies
- * any subsequent request on this jti without a DB round-trip.
- *
- * Idempotent: the UPDATE carries `revoked_at IS NULL`, so a second call
- * for an already-revoked session is a no-op. The audit row is still
- * written on replay — "user explicitly signed out at T" is a fact the
- * chain wants to attest even if the revoke itself is a no-op.
- *
- * `auth_sessions` has no RLS (verified — 0011_rls.up.sql and
- * 0015_super_admin_read_bypass.up.sql omit it; Better Auth owns the
- * table). 0011 grants `SELECT, INSERT, UPDATE, DELETE` to `quart_app`,
- * so the UPDATE runs cleanly under the SET LOCAL ROLE issued by
- * runInTenantTx. The audit row goes in the same transaction so a
- * successful revoke always has a matching chain entry.
- */
 @Injectable()
 export class SignOutService {
   private readonly logger = new Logger(SignOutService.name);
 
   constructor(
-    private readonly db: DbService,
+    private readonly auth: AuthService,
     private readonly audit: AuditService,
-    private readonly valkey: ValkeyService,
+    private readonly db: DbService,
   ) {}
 
-  async signOut(user: AuthUser, requestId: string | undefined): Promise<void> {
-    const jti = user.sessionId;
-    // JwtAuthGuard always sets sessionId from claims.jti; if it's missing
-    // we can't revoke anything. The guard would have already 401'd on a
-    // JWT missing the jti claim, so this is a defensive no-op.
-    if (!jti) return;
+  /**
+   * Forward the caller's Authorization header into BA's `/sign-out` so the
+   * BA session row + cookie are invalidated server-side. Writes the
+   * `auth.sign_out` audit row afterwards so the chain reflects the
+   * Quart-side event regardless of BA's response shape.
+   *
+   * BA failure is non-fatal: a 401 from BA just means the session was
+   * already gone (concurrent sign-out, expired cookie) — the caller still
+   * gets a 204 and the audit row lands.
+   */
+  async signOut(user: AuthUser, requestId: string | undefined, authorization: string | undefined): Promise<void> {
+    const sessionId = user.sessionId ?? null;
 
-    await this.db.runInTenantTx(this.tenantCtx(user, requestId), async (trx) => {
-      await trx
-        .updateTable('auth_sessions')
-        .set({ revoked_at: new Date(), revoke_reason: 'signout' } as never)
-        .where('id', '=', jti)
-        .where('revoked_at', 'is', null)
-        .execute();
+    if (authorization) {
+      const headers = new Headers();
+      headers.set('authorization', authorization);
+      try {
+        await this.auth.instance.api.signOut({ headers });
+      } catch (err) {
+        this.logger.warn(
+          { err: String(err), userId: user.id },
+          'sign-out: BA signOut failed (non-fatal — likely already revoked)',
+        );
+      }
+    }
 
-      // Audit regardless of whether the revoke matched: explicit sign-out
-      // at time T is a fact, even if a replay sees the session already
-      // revoked. (Audit chain verifier accounts for repeated action rows
-      // on same target.)
-      await this.audit.write(trx, {
-        tenant: this.tenantCtx(user, requestId),
+    try {
+      await this.audit.writeSystem(this.db.kysely, {
         action: 'auth.sign_out',
         targetType: 'session',
-        targetId: jti,
-        payload: { jti },
+        targetId: sessionId ? `ba:${sessionId}` : `user:${user.id}`,
+        payload: { via: 'quart_sign_out', user_id: user.id, ba_session_id: sessionId },
+        // SystemAuditEvent expects `string | null` (the request id either
+        // parses as a UUID or is null — never undefined). The controller
+        // forwards `req.id` which can be undefined for some Fastify edge
+        // cases, so coerce here.
+        requestId: requestId ?? null,
+        ip: null,
+        userAgent: null,
       });
-    });
-
-    // Best-effort cache poison. The DB row + the guard's fail-closed
-    // behavior already enforce the revoke; the cache just shortens the
-    // hot path. Failure here is non-fatal — a stale 'ok' line expires
-    // in SESSION_CACHE_TTL_SECONDS at worst.
-    try {
-      await this.valkey.setSession(jti, 'revoked', SESSION_CACHE_TTL_SECONDS);
     } catch (err) {
-      // Mirror jwt-auth.guard's pino-warn pattern: log once per failure
-      // so cache outages are visible without breaking the request.
-      this.logger.warn(
-        { err: String(err), jti },
-        'sign-out: valkey poison failed (DB is source of truth)',
-      );
+      this.logger.warn({ err: String(err), userId: user.id }, 'sign-out: audit write failed (non-fatal)');
     }
-  }
-
-  private tenantCtx(user: AuthUser, requestId: string | undefined) {
-    return {
-      cityId: user.cityId,
-      userId: user.id,
-      isSuperAdmin: user.isSuperAdmin,
-      requestId: requestId ?? '',
-    };
   }
 }

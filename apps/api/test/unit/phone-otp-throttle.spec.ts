@@ -24,7 +24,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '../../src/audit/audit.service.js';
-import { JwtService } from '../../src/auth/jwt.service.js';
 import { PhoneOtpController } from '../../src/auth/phone-otp.controller.js';
 import { PhoneOtpService } from '../../src/auth/phone-otp.service.js';
 import { SessionService } from '../../src/auth/session.service.js';
@@ -57,13 +56,27 @@ async function bootApp(): Promise<NestFastifyApplication> {
     runInTenantTx: async (_c: unknown, fn: (trx: unknown) => Promise<unknown>) => fn({}),
   } as unknown as DbService;
   const stubAudit = {} as unknown as AuditService;
-  const stubJwt = { sign: async () => 'jwt.stub' } as unknown as JwtService;
   const stubTwilio = { verifyOtp: vi.fn(async () => true), sendOtp: vi.fn() } as unknown as TwilioService;
 
   // stub PhoneOtpService: always returns a successful session response.
   // The throttler is what we're testing — the controller path is incidental.
+  // GH #45: no access_token — BA owns the bearer, so the response is just
+  // the Quart user projection.
   const stubPhoneOtp = {
-    verifyAndIssueSession: vi.fn(async () => ({ access_token: 'jwt.stub' })),
+    verifyAndIssueSession: vi.fn(async () => ({
+      user: {
+        id: 'user-stub',
+        handle: 'stub',
+        display_name: 'Stub',
+        email: null,
+        phone_e164: '+15555550100',
+        avatar_url: null,
+        preferred_locale: 'en',
+        city_id: null,
+        needs_onboarding: true,
+        roles: [],
+      },
+    })),
   } as unknown as PhoneOtpService;
 
   const modRef = await Test.createTestingModule({
@@ -72,7 +85,6 @@ async function bootApp(): Promise<NestFastifyApplication> {
     providers: [
       { provide: APP_GUARD, useClass: ThrottlerGuard },
       { provide: DbService, useValue: stubDb },
-      { provide: JwtService, useValue: stubJwt },
       { provide: AuditService, useValue: stubAudit },
       { provide: TwilioService, useValue: stubTwilio },
       SessionService,

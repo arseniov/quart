@@ -202,10 +202,13 @@ export function baSessionCreateHook(deps: BaSessionCreateHookDeps) {
         .execute();
       const roles = roleRows.map((r) => r.code);
 
-      // 6. Mint the Quart session + chain row. SessionService is the
-      //    shared helper from GH #30 — same write order, same atomic
-      //    transaction. The discriminator + the BA session id land
-      //    in the payload so a chain walk can correlate to BA's side.
+      // 6. Write the Quart `auth_sessions` row + `session_created`
+      //    chain row. SessionService is the shared helper from GH #30 —
+      //    same write order, same atomic transaction. The discriminator +
+      //    the BA session id land in the payload so a chain walk can
+      //    correlate to BA's side. GH #45: no JWT is minted here; BA
+      //    owns the bearer, and the `auth_sessions` row is now a
+      //    write-only audit artifact.
       await sessions.createSession({
         user: {
           id: quartUser.id,

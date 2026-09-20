@@ -1,17 +1,12 @@
-import { randomBytes } from 'node:crypto';
-
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
-import { JwtService } from '../../src/auth/jwt.service.js';
 import { MfaController } from '../../src/auth/mfa.controller.js';
 import type { MfaService } from '../../src/auth/mfa.service.js';
 
-const jwtKey = randomBytes(32).toString('hex');
-
-function makeJwt(): JwtService {
-  return new JwtService({ env: { JWT_SIGNING_KEY: jwtKey, JWT_ISSUER: 'quart.app' } } as never);
-}
+// GH #45: dropped the JWT re-mint on /enroll + /verify. BA owns the bearer
+// now (BaAuthGuard), so the controller no longer accepts a JwtService —
+// tests construct it with just the MfaService dep.
 
 function makeReq(user: {
   id: string;
@@ -43,7 +38,7 @@ describe('MfaController', () => {
   describe('POST /auth/mfa/enroll', () => {
     it('uses req.user.id (not hardcoded "user") for the otpauth account label', async () => {
       const mfa = makeMfa();
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       const r = await c.enroll({}, makeReq({
         id: 'real-user-id',
         cityId: 'city-1',
@@ -55,27 +50,29 @@ describe('MfaController', () => {
       expect(r.otpauthUrl).not.toContain(':user?');
     });
 
-    it('returns a freshly minted JWT in the response body so the client can swap bearer', async () => {
+    it('returns the secret + otpauthUrl + backupCodes (no token — BA owns the bearer)', async () => {
       const mfa = makeMfa();
-      const jwt = makeJwt();
-      const c = new MfaController(mfa, jwt);
+      const c = new MfaController(mfa);
       const r = await c.enroll({}, makeReq({
         id: 'real-user-id',
         cityId: 'city-1',
         isSuperAdmin: false,
         roleSnapshot: ['citizen'],
       }) as never);
-      expect(typeof r.token).toBe('string');
-      expect(r.token.split('.').length).toBe(3);
-      const claims = await jwt.verify(r.token);
-      expect(claims.sub).toBe('real-user-id');
-      expect(claims.mfaSecret).toBe('JBSWY3DPEHPK3PXP');
-      expect(typeof claims.mfaEnrolledAt).toBe('number');
+      expect(r).toEqual({
+        secret: 'JBSWY3DPEHPK3PXP',
+        otpauthUrl: expect.stringContaining('real-user-id'),
+        backupCodes: expect.any(Array),
+      });
+      // No token field — the bearer stays the BA session cookie, BA
+      // re-reads the user's MFA state from the session metadata on the
+      // next request.
+      expect((r as { token?: unknown }).token).toBeUndefined();
     });
 
     it('passes cityId to enroll (which persists the credential row)', async () => {
       const mfa = makeMfa();
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       await c.enroll({}, makeReq({
         id: 'real-user-id',
         cityId: 'city-1',
@@ -92,7 +89,7 @@ describe('MfaController', () => {
   describe('POST /auth/mfa/verify', () => {
     it('returns 401 when no mfaSecret claim is on the bearer', async () => {
       const mfa = makeMfa();
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       const err = await c
         .verify({ totp_code: '123456' }, makeReq({
           id: 'u-1',
@@ -107,10 +104,9 @@ describe('MfaController', () => {
       expect(resp.error.code).toBe('mfa.not_enrolled');
     });
 
-    it('returns 200 with verified=true when TOTP matches', async () => {
+    it('returns 200 with verified=true when TOTP matches (no token)', async () => {
       const mfa = makeMfa({ verifyTotp: vi.fn(async () => true) });
-      const jwt = makeJwt();
-      const c = new MfaController(mfa, jwt);
+      const c = new MfaController(mfa);
       const r = await c.verify({ totp_code: '123456' }, makeReq({
         id: 'u-1',
         cityId: 'c-1',
@@ -119,17 +115,13 @@ describe('MfaController', () => {
         mfaSecret: 'JBSWY3DPEHPK3PXP',
         mfaEnrolledAt: Date.now() - 60_000,
       }) as never);
-      expect(r.verified).toBe(true);
-      expect(typeof r.token).toBe('string');
-      const claims = await jwt.verify(r.token!);
-      expect(typeof claims.mfaVerifiedAt).toBe('number');
-      expect(Date.now() - (claims.mfaVerifiedAt as number)).toBeLessThan(5_000);
+      expect(r).toEqual({ verified: true });
       expect(mfa.verifyTotp).toHaveBeenCalledWith('u-1', 'c-1', 'JBSWY3DPEHPK3PXP', '123456');
     });
 
     it('returns 200 with verified=false on TOTP mismatch', async () => {
       const mfa = makeMfa({ verifyTotp: vi.fn(async () => false) });
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       const r = await c.verify({ totp_code: '000000' }, makeReq({
         id: 'u-1',
         cityId: 'c-1',
@@ -142,7 +134,7 @@ describe('MfaController', () => {
 
     it('throws BadRequestException when totp_code is missing (ZodValidationPipe)', async () => {
       const mfa = makeMfa();
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       // Validation runs upstream of the handler, but the pipe IS mounted
       // via @UsePipes — assert the behavior at the handler level by
       // emulating a body that bypassed pipe validation. The pipe itself
@@ -165,7 +157,7 @@ describe('MfaController', () => {
       const mfa = makeMfa({
         consumeBackupCode: vi.fn(async () => ({ verified: true, remaining: 9 })),
       });
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       const r = await c.backupCode({ code: 'a'.repeat(32) }, makeReq({
         id: 'u-1',
         cityId: 'c-1',
@@ -179,7 +171,7 @@ describe('MfaController', () => {
       const mfa = makeMfa({
         consumeBackupCode: vi.fn(async () => ({ verified: false, remaining: 10 })),
       });
-      const c = new MfaController(mfa, makeJwt());
+      const c = new MfaController(mfa);
       const r = await c.backupCode({ code: 'a'.repeat(32) }, makeReq({
         id: 'u-1',
         cityId: 'c-1',
@@ -202,13 +194,11 @@ describe('MfaController', () => {
   });
 
   describe('auth enforcement', () => {
-    it('controller class is decorated with @UseGuards(JwtAuthGuard) (static check)', () => {
+    it('controller class is decorated with @UseGuards(BaAuthGuard) (static check)', () => {
       // The decorator isn't directly introspectable from outside, but the
       // metadata symbol IS. Use Reflector or read the source. Quick smoke:
-      // assert that JwtAuthGuard is imported in the same module.
+      // assert that the controller is constructed without throwing.
       expect(typeof MfaController).toBe('function');
-      // The @UseGuards decoration exists at the class level — covered by
-      // integration when JwtAuthGuard rejects a missing bearer.
     });
   });
 });
