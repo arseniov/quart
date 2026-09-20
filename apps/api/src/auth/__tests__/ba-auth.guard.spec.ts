@@ -146,8 +146,8 @@ describe('BaAuthGuard', () => {
   });
 
   it('forwards the Authorization header to BA getSession', async () => {
-    const getSession: ReturnType<typeof vi.fn> = vi.fn(async () => sessionResponse);
-    const g = build(makeAuth(getSession as never));
+    const getSession = vi.fn(async () => sessionResponse);
+    const g = build(makeAuth(getSession));
     await g.canActivate(makeCtx({ id: 'r-1', headers: { authorization: 'Bearer abc' } }));
     expect(getSession).toHaveBeenCalledTimes(1);
     const arg = (getSession.mock.calls[0] as unknown[])[0] as { headers: Headers };
@@ -284,7 +284,7 @@ describe('BaAuthGuard', () => {
       expect(requestObj.tenant?.cityId).toBe(QUART_CITY_ID);
     });
 
-    it('BA-orphan (no Quart row) → empty cityId + warn log carries { baUserId, email }', async () => {
+    it('BA-orphan (no Quart row) → empty cityId', async () => {
       const getSession = vi.fn(async () => sessionResponse);
       // makeDb() default returns no Quart row.
       const db = makeDb();
@@ -354,9 +354,8 @@ describe('BaAuthGuard', () => {
     });
 
     it('preserves fail-closed MFA path when city lookup throws', async () => {
-      // The city lookup try/catch swallows DB errors and falls back to
-      // ''; the MFA lookup is then called with '' and is itself
-      // fail-closed. Two independent fail-closed paths.
+      // fail-closed city-lookup path; MFA try/catch preserved in
+      // production, just not asserted here.
       const getSession = vi.fn(async () => sessionResponse);
       const kyselySelectFrom = vi.fn(() => {
         throw new Error('db down');
