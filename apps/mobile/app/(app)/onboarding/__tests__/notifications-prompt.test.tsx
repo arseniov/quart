@@ -51,7 +51,7 @@ describe('OnboardingNotificationsPrompt', () => {
 
   it('renders a ProgressBar component (Step 4 of 4)', () => {
     const { getByLabelText } = render(<OnboardingNotificationsPrompt />);
-    expect(getByLabelText('Step 4 of 4')).toBeTruthy();
+    expect(getByLabelText('Step 5 of 5')).toBeTruthy();
   });
 
   it('renders the Enable + Later buttons', () => {

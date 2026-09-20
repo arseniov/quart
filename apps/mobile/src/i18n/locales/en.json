@@ -50,6 +50,10 @@
     "neighborhood.title": "Which neighborhood?",
     "topics.title": "What are you interested in?",
     "topics.skip": "Skip",
+    "language": {
+      "title": "Choose your language",
+      "subtitle": "We'll show the app in this language."
+    },
     "locale.title": "Preferred language",
     "notifications.title": "Stay in the loop?",
     "notifications.enable": "Enable notifications",

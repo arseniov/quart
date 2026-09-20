@@ -48,7 +48,7 @@ describe('OnboardingTopics', () => {
 
   it('renders a ProgressBar component (Step 3 of 4)', () => {
     const { getByLabelText } = render(<OnboardingTopics />);
-    expect(getByLabelText('Step 3 of 4')).toBeTruthy();
+    expect(getByLabelText('Step 3 of 5')).toBeTruthy();
   });
 
   it('renders the topic list from useTopics data', () => {

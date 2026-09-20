@@ -49,7 +49,7 @@ describe('OnboardingCity', () => {
 
   it('renders a ProgressBar component (Step X of Y accessibilityLabel)', () => {
     const { getByLabelText } = render(<OnboardingCity />);
-    expect(getByLabelText('Step 1 of 4')).toBeTruthy();
+    expect(getByLabelText('Step 1 of 5')).toBeTruthy();
   });
 
   it('renders the city list when useCities returns data', () => {

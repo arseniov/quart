@@ -51,7 +51,7 @@ export default function OnboardingNotificationsPrompt() {
 
   return (
     <View className="flex-1 bg-bg">
-      <ProgressBar current={4} total={4} />
+      <ProgressBar current={5} total={5} />
       <Text className="text-text-primary text-2xl px-4 mb-6">{t('onboarding.notifications.title')}</Text>
       <Pressable
         accessibilityRole="button"

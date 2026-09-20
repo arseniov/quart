@@ -18,7 +18,7 @@ export default function OnboardingCity() {
 
   return (
     <View className="flex-1 bg-bg">
-      <ProgressBar current={1} total={4} />
+      <ProgressBar current={1} total={5} />
       <Text className="text-text-primary text-2xl px-4 mb-4">{t('onboarding.city.title')}</Text>
       <TextInput
         accessibilityLabel={t('onboarding.city.search')}

@@ -15,6 +15,7 @@ export default function AppLayout() {
       <Stack.Screen name="onboarding/city" options={{ headerShown: true }} />
       <Stack.Screen name="onboarding/neighborhood" options={{ headerShown: true }} />
       <Stack.Screen name="onboarding/topics" options={{ headerShown: true }} />
+      <Stack.Screen name="onboarding/language" options={{ headerShown: true }} />
       <Stack.Screen name="onboarding/notifications-prompt" options={{ headerShown: true }} />
       <Stack.Screen name="settings" />
     </Stack>

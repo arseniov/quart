@@ -48,7 +48,7 @@ describe('OnboardingNeighborhood', () => {
 
   it('renders a ProgressBar component (Step 2 of 4)', () => {
     const { getByLabelText } = render(<OnboardingNeighborhood />);
-    expect(getByLabelText('Step 2 of 4')).toBeTruthy();
+    expect(getByLabelText('Step 2 of 5')).toBeTruthy();
   });
 
   it('renders the neighborhood list from the queried data', () => {

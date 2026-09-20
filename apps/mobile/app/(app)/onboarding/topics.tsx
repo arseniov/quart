@@ -15,7 +15,7 @@ export default function OnboardingTopics() {
 
   return (
     <View className="flex-1 bg-bg">
-      <ProgressBar current={3} total={4} />
+      <ProgressBar current={3} total={5} />
       <Text className="text-text-primary text-2xl px-4 mb-4">{t('onboarding.topics.title')}</Text>
       {isPending ? (
         <ActivityIndicator />
@@ -42,7 +42,7 @@ export default function OnboardingTopics() {
       )}
       <Pressable
         accessibilityRole="button"
-        onPress={() => router.push('/onboarding/notifications-prompt')}
+        onPress={() => router.push('/onboarding/language')}
         className="m-4 bg-primary rounded-md p-3 items-center"
       >
         <Text className="text-text-onPrimary font-semibold">{t('common.ok')}</Text>

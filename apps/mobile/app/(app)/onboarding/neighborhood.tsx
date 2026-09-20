@@ -28,7 +28,7 @@ export default function OnboardingNeighborhood() {
 
   return (
     <View className="flex-1 bg-bg">
-      <ProgressBar current={2} total={4} />
+      <ProgressBar current={2} total={5} />
       <Text className="text-text-primary text-2xl px-4 mb-4">{t('onboarding.neighborhood.title')}</Text>
       {isPending ? (
         <ActivityIndicator />

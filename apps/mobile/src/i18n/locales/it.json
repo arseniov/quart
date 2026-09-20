@@ -50,6 +50,10 @@
     "neighborhood.title": "In quale quartiere?",
     "topics.title": "Cosa ti interessa?",
     "topics.skip": "Salta",
+    "language": {
+      "title": "Scegli la tua lingua",
+      "subtitle": "Mostreremo l'app in questa lingua."
+    },
     "locale.title": "Lingua preferita",
     "notifications.title": "Vuoi ricevere notifiche?",
     "notifications.enable": "Abilita notifiche",
