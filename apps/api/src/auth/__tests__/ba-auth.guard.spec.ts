@@ -125,6 +125,7 @@ describe('BaAuthGuard', () => {
       isSuperAdmin: false,
       roleSnapshot: [],
       requestId: 'r-abc',
+      sessionId: BA_SESSION_ID,
     });
     expect(requestObj.tenant).toEqual({
       cityId: '',

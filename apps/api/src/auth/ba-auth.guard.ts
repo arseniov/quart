@@ -143,6 +143,13 @@ export class BaAuthGuard implements CanActivate {
       isSuperAdmin: false,
       roleSnapshot: [],
       requestId,
+      // BA's session row id (not a JWT `jti`). sign-out.service.ts:47
+      // keys the auth_sessions revoke on `user.sessionId`; for BA
+      // sessions we wire BA's session id so the revoke becomes a real
+      // UPDATE instead of a silent no-op. GH #45 will replace this
+      // code path with delegation to BA's /sign-out, but until then
+      // the session row exists and the revoke should fire.
+      sessionId: session.session.id,
     };
     const tenant: TenantContext = {
       cityId: '',
