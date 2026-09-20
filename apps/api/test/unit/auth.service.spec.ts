@@ -14,6 +14,11 @@ describe('AuthService', () => {
       // ponytail: adapter not exercised in this test — kysely handle can be
       // anything with the right shape.
       { kysely: {} } as never,
+      // SessionService + AuditService are only consumed by the databaseHook
+      // and the sign-out plugin; this test doesn't fire either, so the
+      // shape-only stubs are enough for the constructor to run.
+      {} as never,
+      {} as never,
     );
     expect(svc.instance).toBeDefined();
     expect(svc.instance.options.secret).toHaveLength(32);
