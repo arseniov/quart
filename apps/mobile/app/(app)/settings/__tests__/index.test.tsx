@@ -5,6 +5,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import i18n from '@/i18n';
+import SettingsIndex from '../index';
 
 jest.mock('expo-file-system', () => {
   const state = {
@@ -135,9 +136,7 @@ jest.mock('@/lib/auth', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fsMock = require('expo-file-system') as { __seed: (id: string, bytes: number) => void; __resetFileState: () => void };
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const apiMock = require('@/api/client') as { apiClient: { post: jest.Mock }; __postMock: jest.Mock };
-import SettingsIndex from '../index';
 
 beforeAll(async () => {
   await i18n.changeLanguage('en');
@@ -181,7 +180,6 @@ describe('SettingsIndex — offline maps badge', () => {
 
 // GH #32 — logout must POST /auth/sign-out (audit chain §3.8) AND survive a server failure.
 describe('SettingsIndex — logout', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const authMock = require('@/lib/auth') as { clearTokens: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const routerNs = require('expo-router') as { __router: { replace: jest.Mock; push: jest.Mock } };

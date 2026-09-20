@@ -47,6 +47,7 @@ export default function SettingsIndex() {
     // row and the HMAC chain records the session lifetime ending. Local logout must still
     // complete if the API is unreachable (offline / revocation).
     try {
+      // JWT must still be in MMKV at request time — clearTokens() runs AFTER the POST.
       await apiClient.post('/auth/sign-out', null);
     } catch (err) {
       console.warn('[settings] sign-out request failed', err);
