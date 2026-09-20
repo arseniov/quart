@@ -1,10 +1,18 @@
 // app/(auth)/signup.tsx
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import * as AppleAuthentication from 'expo-apple-authentication';
+// GH #35: email + password sign-up form. Mirrors login.tsx — RHF + zod +
+// Controller, with the email/password form rendered BELOW the Apple + Google
+// social buttons (which already existed for the OAuth-only flow). On submit
+// the new useSignup hook POSTs to /auth/sign-up and routes to / on success.
+import { zodResolver } from '@hookform/resolvers/zod';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { View, Text, Platform, Alert } from 'react-native';
+import { Controller, useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
+import { View, Text, TextInput, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
+
+import { useSignup, SignupSchema, type SignupInput } from '@/api/hooks/useSignup';
 import { useSocialLogin } from '@/api/hooks/useSocialLogin';
 import { SocialButton } from '@/components/auth/SocialButton';
 import {
@@ -12,8 +20,9 @@ import {
   GOOGLE_WEB_CLIENT_ID,
 } from '@/lib/env';
 
-// ponytail: same singleton-config pattern as login.tsx — duplicate intentionally to keep
-//        each screen self-contained for code-splitting. Hoist to a layout if a third caller appears.
+// ponytail: same singleton-config pattern as login.tsx — GoogleSignin is a
+//        process-wide singleton, so duplicate the configure() here rather
+//        than hoist a layout hook for the second caller.
 function useGoogleConfigure() {
   useEffect(() => {
     if (!GOOGLE_WEB_CLIENT_ID) return;
@@ -28,7 +37,27 @@ export default function SignupScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   useGoogleConfigure();
+  const signup = useSignup();
   const socialLogin = useSocialLogin();
+  const { control, handleSubmit, formState: { errors } } = useForm<SignupInput>({
+    resolver: zodResolver(SignupSchema),
+    defaultValues: { email: '', password: '', display_name: '' },
+  });
+
+  const onSubmit = handleSubmit(async (data) => {
+    if (signup.isPending || socialLogin.isPending) return;
+    try {
+      await signup.mutateAsync(data);
+      router.replace('/');
+    } catch (e: unknown) {
+      // ponytail: 401/422 from the API carry a `code`+`message`; surface the
+      //        message via Alert so the user sees something actionable. Real
+      //        field-level zod errors are already shown inline.
+      const apiMessage = (e as { data?: { message?: string }, message?: string })?.data?.message
+        ?? (e as { message?: string })?.message;
+      Alert.alert(apiMessage ?? t('errors.generic'));
+    }
+  });
 
   const onApple = async () => {
     if (Platform.OS !== 'ios') return;
@@ -69,13 +98,93 @@ export default function SignupScreen() {
   };
 
   const showApple = Platform.OS === 'ios';
-  const pending = socialLogin.isPending;
+  const pending = signup.isPending || socialLogin.isPending;
 
   return (
     <View className="flex-1 bg-bg p-6 justify-center">
       <Text className="text-text-primary text-2xl mb-6">{t('auth.signup.title')}</Text>
 
-      <View className="flex-row items-center mt-2">
+      <Controller
+        control={control}
+        name="email"
+        render={({ field }) => (
+          <TextInput
+            value={field.value}
+            onChangeText={field.onChange}
+            onBlur={field.onBlur}
+            accessibilityLabel={t('auth.signup.email')}
+            placeholder={t('auth.signup.email')}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            className="border border-border rounded-md p-3 mb-1 text-text-primary bg-surface"
+          />
+        )}
+      />
+      {errors.email && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {errors.email.message}
+        </Text>
+      )}
+
+      <Controller
+        control={control}
+        name="password"
+        render={({ field }) => (
+          <TextInput
+            value={field.value}
+            onChangeText={field.onChange}
+            onBlur={field.onBlur}
+            accessibilityLabel={t('auth.signup.password')}
+            placeholder={t('auth.signup.password')}
+            secureTextEntry
+            className="border border-border rounded-md p-3 mb-1 text-text-primary bg-surface"
+          />
+        )}
+      />
+      {errors.password && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {errors.password.message}
+        </Text>
+      )}
+
+      <Controller
+        control={control}
+        name="display_name"
+        render={({ field }) => (
+          <TextInput
+            value={field.value}
+            onChangeText={field.onChange}
+            onBlur={field.onBlur}
+            accessibilityLabel={t('auth.signup.displayName')}
+            placeholder={t('auth.signup.displayNamePlaceholder')}
+            className="border border-border rounded-md p-3 mb-1 text-text-primary bg-surface"
+          />
+        )}
+      />
+      {errors.display_name && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {errors.display_name.message}
+        </Text>
+      )}
+
+      {signup.isError && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {t('errors.generic')}
+        </Text>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={onSubmit}
+        disabled={pending}
+        className="bg-primary rounded-md p-3 items-center"
+      >
+        {pending ? <ActivityIndicator color="#fff" /> : (
+          <Text className="text-text-onPrimary font-semibold">{t('auth.signup.submit')}</Text>
+        )}
+      </Pressable>
+
+      <View className="flex-row items-center mt-6">
         <View className="flex-1 border-t border-border" />
         <Text className="text-text-secondary px-3">{t('auth.or')}</Text>
         <View className="flex-1 border-t border-border" />
