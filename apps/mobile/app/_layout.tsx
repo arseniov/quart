@@ -1,12 +1,19 @@
 // app/_layout.tsx
 import '../global.css';
 import '../src/i18n';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+// ponytail: GH #28 — Inter is the design contract (spec §1). Hold the splash
+//          until the two vendored weights resolve so the first paint shows
+//          Inter, not the system fallback flash.
+SplashScreen.preventAutoHideAsync();
 
 import { Announcer } from '@/a11y/Announcer';
 import { PersistProvider } from '@/api/PersistProvider';
@@ -25,6 +32,20 @@ initSentry();
 
 export default function RootLayout() {
   const scheme = useColorScheme();
+
+  // GH #28 — vendor Inter. Two keys: 'Inter' (Regular) + 'Inter-SemiBold'.
+  // tailwind.config.ts overrides fontFamily.bold/semibold to point at
+  // 'Inter-SemiBold' so existing className="font-semibold" usage resolves to
+  // a family swap (not just a numeric fontWeight, which RN ignores for
+  // custom fonts). font-sans defaults to 'Inter'.
+  const [fontsLoaded, fontError] = useFonts({
+    Inter: require('../assets/fonts/Inter-Regular.ttf'),
+    'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError]);
 
   useEffect(() => {
     const sub = configureNotificationHandler();

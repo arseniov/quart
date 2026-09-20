@@ -25,6 +25,17 @@ const config: Config = {
       },
       spacing: tokens.spacing,
       borderRadius: tokens.radius,
+      // ponytail: GH #28 — vendor Inter. font-sans → 'Inter' (Regular).
+      //          Overriding fontFamily.bold/semibold to 'Inter-SemiBold' makes
+      //          className="font-semibold" resolve to a family swap (not just
+      //          numeric fontWeight, which RN ignores for custom fonts). The 55+
+      //          existing `font-semibold` usages across the app start rendering
+      //          semibold without per-component edits.
+      fontFamily: {
+        sans: ['Inter'],
+        bold: ['Inter-SemiBold'],
+        semibold: ['Inter-SemiBold'],
+      },
       fontSize: tokens.fontSize,
       fontWeight: tokens.fontWeight,
       lineHeight: tokens.lineHeight,
