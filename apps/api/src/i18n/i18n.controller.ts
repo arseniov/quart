@@ -1,9 +1,9 @@
 import { Body, Controller, Delete, Get, Header, Param, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
@@ -39,7 +39,7 @@ export class I18nController {
   }
 
   @Put('mobile/:locale')
-  @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
+  @UseGuards(BaAuthGuard, MfaGuard, RbacGuard)
   @RequirePermission('admin.i18n.write')
   async upsert(
     @CurrentUser() user: AuthUser,
@@ -51,7 +51,7 @@ export class I18nController {
   }
 
   @Delete('mobile/:locale')
-  @UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
+  @UseGuards(BaAuthGuard, MfaGuard, RbacGuard)
   @RequirePermission('admin.i18n.write')
   async delete(
     @CurrentUser() user: AuthUser,

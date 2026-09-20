@@ -11,8 +11,8 @@ import { z } from 'zod';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ApiGlobalResponses } from "../openapi/api-global-responses.decorator.js";
 
+import { BaAuthGuard } from './ba-auth.guard.js';
 import type { AuthUser } from './decorators/current-user.decorator.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -35,7 +35,7 @@ interface ReqWithAuth extends FastifyRequest {
 @ApiGlobalResponses()
 @ApiTags('auth/mfa')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard)
+@UseGuards(BaAuthGuard)
 export class MfaController {
   constructor(
     private readonly mfa: MfaService,

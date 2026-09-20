@@ -5,6 +5,7 @@ import { DbModule } from '../db/db.module.js';
 
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { BaAuthGuard } from './ba-auth.guard.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { JwtService } from './jwt.service.js';
 import { LoginController } from './login.controller.js';
@@ -35,6 +36,7 @@ import { ValkeyService } from './valkey.service.js';
     JwtService,
     ValkeyService,
     JwtAuthGuard,
+    BaAuthGuard,
     MfaService,
     MfaGuard,
     MagicLinkService,
@@ -48,6 +50,6 @@ import { ValkeyService } from './valkey.service.js';
     { provide: MAILER, useValue: logMailer },
     { provide: PASSWORD_RESET_MAILER, useValue: logMailerPwd },
   ],
-  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, LoginService, SessionService, SignOutService, MAILER],
+  exports: [AuthService, JwtService, JwtAuthGuard, BaAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, LoginService, SessionService, SignOutService, MAILER],
 })
 export class AuthModule {}

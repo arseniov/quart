@@ -6,9 +6,9 @@ import { z } from 'zod';
 // `design:paramtypes` for the constructor parameter.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuditService } from '../audit/audit.service.js';
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
@@ -40,7 +40,7 @@ const ListQuerySchema = z.object({
 @ApiGlobalResponses()
 @ApiTags('admin/i18n')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
+@UseGuards(BaAuthGuard, MfaGuard, RbacGuard)
 export class AdminI18nController {
   constructor(
     private readonly db: DbService,

@@ -13,9 +13,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
@@ -50,7 +50,7 @@ interface AuthedRequest extends FastifyRequest {
 @ApiGlobalResponses()
 @ApiTags('admin/issues')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
+@UseGuards(BaAuthGuard, MfaGuard, RbacGuard)
 export class AdminIssuesController {
   constructor(private readonly svc: AdminIssuesService) {}
 

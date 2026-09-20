@@ -2,7 +2,7 @@ import { Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
@@ -28,7 +28,7 @@ interface AuthedRequest extends FastifyRequest {
 @ApiGlobalResponses()
 @ApiTags('notifications')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, RbacGuard)
+@UseGuards(BaAuthGuard, RbacGuard)
 export class NotificationsController {
   constructor(private readonly svc: NotificationsService) {}
 

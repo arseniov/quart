@@ -5,9 +5,9 @@ import type { FastifyRequest } from 'fastify';
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuditService } from '../audit/audit.service.js';
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { CurrentTenant } from '../common/decorators/current-tenant.decorator.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the AuditService constructor parameter.
@@ -37,7 +37,7 @@ const TEN_MB = 10 * 1024 * 1024;
 @ApiGlobalResponses()
 @ApiTags('uploads')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard)
+@UseGuards(BaAuthGuard)
 export class UploadsController {
   constructor(
     private readonly uploads: UploadsService,

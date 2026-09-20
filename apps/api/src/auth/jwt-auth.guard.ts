@@ -50,6 +50,15 @@ type FastifyLikeRequest = FastifyRequest & RequestWithAuth;
 // 0015_super_admin_read_bypass.up.sql omit it; Better Auth owns the table
 // and reads it globally). A bare `this.db.kysely` read is correct; no
 // runInTenantTx wrap needed. Re-check if 00xx adds policies to this table.
+/**
+ * @deprecated Since GH #44 — replaced by {@link BaAuthGuard}, which
+ * delegates session validation to Better Auth's own `getSession`
+ * instead of verifying a Quart-minted JWT pair. Retained so the GH #45
+ * LoginController removal + audit-chain migration can land incrementally
+ * (and so `jwt-auth.guard.spec.ts` still has a real class to exercise).
+ * Removal tracked by GH #45.
+ */
+ 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);

@@ -5,10 +5,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { ApiGlobalResponses } from '../openapi/api-global-responses.decorator.js';
 
+import { BaAuthGuard } from './ba-auth.guard.js';
 import { cookieClearOptions } from './cookie-helpers.js';
 import type { AuthUser } from './decorators/current-user.decorator.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SignOutService } from './sign-out.service.js';
 
@@ -26,9 +26,9 @@ import { SignOutService } from './sign-out.service.js';
  * routing with an integration test before relying on specificity.)
  *
  * No request body. The session id comes from `req.user.sessionId`,
- * which JwtAuthGuard copies from `claims.jti` (the JWT's UUID). The
- * service does the DB revoke + audit write in a single transaction
- * so a successful revoke always has a matching chain entry.
+ * which BaAuthGuard copies from the BA session row. The service does
+ * the DB revoke + audit write in a single transaction so a successful
+ * revoke always has a matching chain entry.
  *
  * `req.id` (set by RequestIdMiddleware) is forwarded to the service
  * so the `auth.sign_out` audit row carries the same `request_id` as
@@ -38,7 +38,7 @@ import { SignOutService } from './sign-out.service.js';
 @ApiGlobalResponses()
 @ApiTags('auth')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard)
+@UseGuards(BaAuthGuard)
 export class SignOutController {
   constructor(private readonly service: SignOutService) {}
 

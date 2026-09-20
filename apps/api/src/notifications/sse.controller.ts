@@ -2,9 +2,9 @@ import { Controller, type MessageEvent, Sse, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
 // `design:paramtypes` for the controller constructor parameter.
@@ -35,7 +35,7 @@ const HEARTBEAT_MS = 25_000;
 @ApiGlobalResponses()
 @ApiTags('notifications-sse')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard)
+@UseGuards(BaAuthGuard)
 export class SseController {
   constructor(private readonly subscriber: NotificationsSubscriber) {}
 

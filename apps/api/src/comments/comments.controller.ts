@@ -2,8 +2,8 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { TenantContext } from '../db/run-in-tenant-tx.js';
@@ -26,7 +26,7 @@ interface AuthedRequest extends FastifyRequest {
 @ApiGlobalResponses()
 @ApiTags('comments')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, RbacGuard)
+@UseGuards(BaAuthGuard, RbacGuard)
 export class CommentsController {
   constructor(private readonly svc: CommentsService) {}
 

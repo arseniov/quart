@@ -2,9 +2,9 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
+import { BaAuthGuard } from '../auth/ba-auth.guard.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { MfaGuard } from '../auth/mfa.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ApiGlobalResponses } from '../openapi/api-global-responses.decorator.js';
@@ -37,7 +37,7 @@ const Q = z.object({
 @ApiGlobalResponses()
 @ApiTags('admin/dlq')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, MfaGuard, RbacGuard)
+@UseGuards(BaAuthGuard, MfaGuard, RbacGuard)
 export class AdminDlqController {
    
   constructor(private readonly queues: QueueService) {}

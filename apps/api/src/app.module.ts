@@ -7,7 +7,7 @@ import { AdminIssuesModule } from './admin-issues/admin-issues.module.js';
 import { AuditInterceptor } from './audit/audit.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
-import { JwtAuthGuard } from './auth/jwt-auth.guard.js';
+import { BaAuthGuard } from './auth/ba-auth.guard.js';
 import { CitiesModule } from './cities/cities.module.js';
 import { CommentsModule } from './comments/comments.module.js';
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
@@ -95,10 +95,13 @@ function parseThrottlerEnvOrDefault() {
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
-    // Global JwtAuthGuard — controllers opt out with @Public(). Future
-    // protected controllers opt IN with `@UseGuards(JwtAuthGuard)` on the
-    // specific handler(s) that need the user attached.
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Global BaAuthGuard — controllers opt out with @Public(). Future
+    // protected controllers opt IN with `@UseGuards(BaAuthGuard)` on the
+    // specific handler(s) that need the user attached. Replaces the
+    // GH #33-era JwtAuthGuard; BA session validation runs here so BA's
+    // own /auth/* endpoints can reuse the same guard without leaking the
+    // Quart JWT pair. GH #44.
+    { provide: APP_GUARD, useClass: BaAuthGuard },
     // Conditionally wire ThrottlerGuard. When THROTTLE_ENABLED=false the
     // provider list is empty so the guard is never instantiated and the
     // @Throttle() decorators are effectively metadata-only.
