@@ -1,15 +1,15 @@
 // app/(auth)/phone-otp.tsx
-// GH #29 — wires the phone-otp screen: auto-advance OTP cells with paste,
-// POST /auth/phone/request on mount, POST /auth/phone/verify on submit.
-// /auth/phone/verify returns { verified: true|false } — no tokens. After a
-// successful verify we show the verified copy briefly and route back to
-// /login?phone=… so the user can sign in with another method until the
-// API supports session issuance from this endpoint.
-// RHF + zod validate the OTP string (criterion 5); six visual cells are
-// derived from the field value — auto-advance + paste keep working.
+// GH #29 + GH #30: wires the phone-otp screen end-to-end. On submit we
+// POST /auth/phone/verify, which now issues a session in one round trip
+// (the hook persists the tokens via saveTokens and registers the device,
+// swallowing NotificationsPermissionError). On success the screen routes
+// straight to `/` — the user is signed in.
+//
+// RHF + zod validate the OTP string; six visual cells are derived from
+// the field value — auto-advance + paste keep working.
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,7 +21,6 @@ import { usePhoneVerify } from '@/api/hooks/usePhoneVerify';
 //        string field keeps paste + auto-advance in sync without a 6-field
 //        form schema or stale closures.
 const OTP_LENGTH = 6;
-const VERIFIED_REDIRECT_MS = 2000;
 const OtpSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'invalid'),
 });
@@ -37,7 +36,6 @@ export default function PhoneOtpScreen() {
   const cellRefs = useRef<Array<TextInput | null>>([]);
   const verify = usePhoneVerify();
   const { mutate: sendStart } = usePhoneStart();
-  const [verified, setVerified] = useState(false);
 
   const { setValue, handleSubmit, watch, formState: { errors } } = useForm<OtpInput>({
     resolver: zodResolver(OtpSchema),
@@ -60,17 +58,6 @@ export default function PhoneOtpScreen() {
     if (!phone) return;
     sendStart({ phoneNumber: phone });
   }, [phone, sendStart]);
-
-  // ponytail: show the "verified" copy for ~2s then route back to /login with
-  //        the phone as a query param. The login screen can pre-fill or hint
-  //        "phone verified" later.
-  useEffect(() => {
-    if (!verified) return;
-    const id = setTimeout(() => {
-      router.replace(`/login?phone=${encodeURIComponent(phone)}`);
-    }, VERIFIED_REDIRECT_MS);
-    return () => clearTimeout(id);
-  }, [verified, phone, router]);
 
   const focusCell = (i: number) => cellRefs.current[i]?.focus();
 
@@ -105,14 +92,13 @@ export default function PhoneOtpScreen() {
     if (verify.isPending || !phone) return;
     try {
       await verify.mutateAsync({ phoneNumber: phone, code: submitted });
-      setVerified(true);
+      router.replace('/');
     } catch {
       // error surfaced via verify.isError below
     }
   });
 
   const pending = verify.isPending;
-  const submitDisabled = pending || verified;
 
   const verifyError = (() => {
     if (!verify.isError) return null;
@@ -130,59 +116,47 @@ export default function PhoneOtpScreen() {
         <Text className="text-text-secondary mb-6">{t('auth.phoneOtp.sent', { number: phone })}</Text>
       ) : null}
 
-      {verified ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          accessibilityRole="alert"
-          className="text-success mb-4"
-        >
-          {t('auth.phoneOtp.verified')}
+      <View className="flex-row justify-between mb-4">
+        {Array.from({ length: OTP_LENGTH }, (_, i) => (
+          <TextInput
+            key={i}
+            ref={(el) => { cellRefs.current[i] = el; }}
+            accessibilityRole="text"
+            accessibilityLabel={t('auth.phoneOtp.inputLabel', { n: i + 1 })}
+            value={code[i] ?? ''}
+            onChangeText={(v) => onChangeDigit(i, v)}
+            onKeyPress={(e) => onKeyPress(i, e.nativeEvent.key)}
+            keyboardType="number-pad"
+            maxLength={i === 0 ? OTP_LENGTH : 1}
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            className="border border-border rounded-md w-12 h-14 text-center text-2xl text-text-primary bg-surface"
+          />
+        ))}
+      </View>
+
+      {errors.code && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {t('auth.phoneOtp.invalidCode')}
         </Text>
-      ) : (
-        <>
-          <View className="flex-row justify-between mb-4">
-            {Array.from({ length: OTP_LENGTH }, (_, i) => (
-              <TextInput
-                key={i}
-                ref={(el) => { cellRefs.current[i] = el; }}
-                accessibilityRole="text"
-                accessibilityLabel={t('auth.phoneOtp.inputLabel', { n: i + 1 })}
-                value={code[i] ?? ''}
-                onChangeText={(v) => onChangeDigit(i, v)}
-                onKeyPress={(e) => onKeyPress(i, e.nativeEvent.key)}
-                keyboardType="number-pad"
-                maxLength={i === 0 ? OTP_LENGTH : 1}
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                className="border border-border rounded-md w-12 h-14 text-center text-2xl text-text-primary bg-surface"
-              />
-            ))}
-          </View>
-
-          {errors.code && (
-            <Text accessibilityLiveRegion="polite" className="text-error mb-3">
-              {t('auth.phoneOtp.invalidCode')}
-            </Text>
-          )}
-          {verifyError && (
-            <Text accessibilityLiveRegion="polite" className="text-error mb-3">
-              {verifyError}
-            </Text>
-          )}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: submitDisabled }}
-            onPress={onSubmit}
-            disabled={submitDisabled}
-            className="bg-primary rounded-md p-3 items-center"
-          >
-            {pending ? <ActivityIndicator color="#fff" /> : (
-              <Text className="text-text-onPrimary font-semibold">{t('auth.phoneOtp.submit')}</Text>
-            )}
-          </Pressable>
-        </>
       )}
+      {verifyError && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {verifyError}
+        </Text>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: pending }}
+        onPress={onSubmit}
+        disabled={pending}
+        className="bg-primary rounded-md p-3 items-center"
+      >
+        {pending ? <ActivityIndicator color="#fff" /> : (
+          <Text className="text-text-onPrimary font-semibold">{t('auth.phoneOtp.submit')}</Text>
+        )}
+      </Pressable>
     </View>
   );
 }

@@ -1,22 +1,35 @@
 // app/(auth)/__tests__/phone-otp.test.tsx
-// GH #29 — happy path + 422 invalid code + 401 session-expired + offline UX +
-// missing-phone redirect + verified-redirect-after-2s + array-phone redirect.
+// GH #29 + GH #30: happy path (verify issues session → routes to '/') +
+// 422 invalid code + 401 session-expired + offline UX + missing-phone
+// redirect + array-phone redirect.
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import i18n from '@/i18n';
 
 const mockReplace = jest.fn();
 const mockRouter = { replace: mockReplace, push: jest.fn() };
 
-// ponytail: real react-query drives the mutation state; only apiClient is
-//        stubbed (matches useUser.test.ts shape). Phone-otp no longer
-//        persists anything, so device/register mocks are not stubbed here.
+// ponytail: real react-query drives the mutation state; only apiClient +
+//        saveTokens + register are stubbed. Mirrors the login screen wiring
+//        so the verify hook's side effects don't leak into the screen test.
 const mockPost = jest.fn();
+const mockSaveTokens = jest.fn();
+const mockRegisterMutateAsync = jest.fn();
 jest.mock('@/api/client', () => {
   const actual = jest.requireActual('@/api/client');
   return { ...actual, apiClient: { post: (...args: unknown[]) => mockPost(...args) } };
 });
+jest.mock('@/lib/auth', () => ({
+  saveTokens: (...args: unknown[]) => mockSaveTokens(...args),
+  clearTokens: jest.fn(),
+  loadTokens: jest.fn(),
+}));
+jest.mock('@/lib/device-fingerprint', () => ({ deviceFingerprint: jest.fn().mockResolvedValue('fp') }));
+jest.mock('@/api/hooks/useRegisterDevice', () => ({
+  useRegisterDevice: () => ({ mutateAsync: (...args: unknown[]) => mockRegisterMutateAsync(...args) }),
+  NotificationsPermissionError: class extends Error {},
+}));
 
 // ponytail: default fixture returns a valid phone param. Individual tests
 //        override `useLocalSearchParams` via the module mock when they need
@@ -53,6 +66,8 @@ describe('PhoneOtpScreen', () => {
   beforeEach(() => {
     mockReplace.mockClear();
     mockPost.mockReset();
+    mockSaveTokens.mockReset().mockResolvedValue(undefined);
+    mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
     mockUseLocalSearchParams.mockReset();
     mockUseLocalSearchParams.mockReturnValue({ phone: '+15551234567' });
   });
@@ -70,36 +85,65 @@ describe('PhoneOtpScreen', () => {
     );
   });
 
-  it('happy path: types a 6-digit code, submits, shows verified copy, redirects to /login', async () => {
-    jest.useFakeTimers();
-    try {
-      mockPost.mockImplementation(async (path: string) => {
-        if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
-        if (path === '/auth/phone/verify') return { status: 200, data: { verified: true } };
-        throw new Error(`unexpected path ${path}`);
-      });
-      const { getByLabelText, getByText } = render(<PhoneOtpScreen />, { wrapper: makeWrapper() });
-      for (let i = 1; i <= 6; i++) {
-        typeCell(getByLabelText, `Verification code digit ${i}`, String(i));
+  it('happy path: types a 6-digit code, submits, persists tokens, routes to /', async () => {
+    mockPost.mockImplementation(async (path: string) => {
+      if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
+      if (path === '/auth/phone/verify') {
+        return {
+          status: 200,
+          data: {
+            access_token: 'a',
+            refresh_token: 'r',
+            refresh_expires_at: '2030-01-01T00:00:00.000Z',
+            user: { id: 'u', handle: 'h', display_name: 'd' },
+          },
+        };
       }
-      fireEvent.press(getByText('Verify'));
-      await waitFor(() =>
-        expect(mockPost).toHaveBeenCalledWith(
-          '/auth/phone/verify',
-          { phoneNumber: '+15551234567', code: '123456' },
-          { skipAuth: true },
-        ),
-      );
-      await waitFor(() =>
-        expect(getByText('Phone verified — please sign in.')).toBeTruthy(),
-      );
-      // ponytail: 2s grace window then redirect to /login with the phone as a
-      //        query param so the login screen can pick it up later.
-      act(() => { jest.advanceTimersByTime(2000); });
-      expect(mockReplace).toHaveBeenCalledWith('/login?phone=%2B15551234567');
-    } finally {
-      jest.useRealTimers();
+      throw new Error(`unexpected path ${path}`);
+    });
+    const { getByLabelText, getByText } = render(<PhoneOtpScreen />, { wrapper: makeWrapper() });
+    for (let i = 1; i <= 6; i++) {
+      typeCell(getByLabelText, `Verification code digit ${i}`, String(i));
     }
+    fireEvent.press(getByText('Verify'));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(
+        '/auth/phone/verify',
+        { phoneNumber: '+15551234567', code: '123456', device_fingerprint: 'fp' },
+        { skipAuth: true },
+      ),
+    );
+    await waitFor(() => expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+  });
+
+  it('happy path: NotificationsPermissionError from register is swallowed — user is still routed to /', async () => {
+    const { NotificationsPermissionError } = jest.requireMock('@/api/hooks/useRegisterDevice');
+    mockRegisterMutateAsync.mockReset().mockRejectedValueOnce(
+      new NotificationsPermissionError('denied'),
+    );
+    mockPost.mockImplementation(async (path: string) => {
+      if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
+      if (path === '/auth/phone/verify') {
+        return {
+          status: 200,
+          data: {
+            access_token: 'a',
+            refresh_token: 'r',
+            refresh_expires_at: '2030-01-01T00:00:00.000Z',
+            user: { id: 'u', handle: 'h', display_name: 'd' },
+          },
+        };
+      }
+      throw new Error(`unexpected path ${path}`);
+    });
+    const { getByLabelText, getByText } = render(<PhoneOtpScreen />, { wrapper: makeWrapper() });
+    for (let i = 1; i <= 6; i++) {
+      typeCell(getByLabelText, `Verification code digit ${i}`, String(i));
+    }
+    fireEvent.press(getByText('Verify'));
+    await waitFor(() => expect(mockSaveTokens).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
   });
 
   it('422 invalid code surfaces the inline error and does not navigate', async () => {
@@ -113,13 +157,14 @@ describe('PhoneOtpScreen', () => {
     }
     fireEvent.press(getByText('Verify'));
     await waitFor(() => expect(getByText("That code didn't work. Try again.")).toBeTruthy());
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockSaveTokens).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 
-  it('401 session-expired surfaces the inline error and does not navigate', async () => {
+  it('401 unknown-user surfaces the inline error and does not navigate', async () => {
     mockPost.mockImplementation(async (path: string) => {
       if (path === '/auth/phone/request') return { status: 200, data: { ok: true } };
-      throw new ApiError(401, 'unauthenticated', 'expired');
+      throw new ApiError(401, 'unknown_user', 'no account');
     });
     const { getByLabelText, getByText } = render(<PhoneOtpScreen />, { wrapper: makeWrapper() });
     for (let i = 1; i <= 6; i++) {
@@ -127,7 +172,8 @@ describe('PhoneOtpScreen', () => {
     }
     fireEvent.press(getByText('Verify'));
     await waitFor(() => expect(getByText('Session expired. Restart and try again.')).toBeTruthy());
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockSaveTokens).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 
   it('offline behaviour: a generic network error surfaces "Something went wrong." copy', async () => {
@@ -141,7 +187,7 @@ describe('PhoneOtpScreen', () => {
     }
     fireEvent.press(getByText('Verify'));
     await waitFor(() => expect(getByText('Something went wrong.')).toBeTruthy());
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
   });
 
   it('missing phone param redirects to /login', async () => {

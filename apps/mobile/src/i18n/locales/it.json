@@ -33,7 +33,6 @@
     "phoneOtp.submit": "Verifica",
     "phoneOtp.invalidCode": "Codice non valido. Riprova.",
     "phoneOtp.sessionExpired": "Sessione scaduta. Ricomincia e riprova.",
-    "phoneOtp.verified": "Telefono verificato — accedi per continuare.",
     "forgotPassword.title": "Recupera password",
     "forgotPassword.submit": "Invia link",
     "forgotPassword.email": "Email",
