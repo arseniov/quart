@@ -2,16 +2,26 @@
 // GH #29 — wires the phone-otp screen: auto-advance OTP cells with paste,
 // POST /auth/phone/start on mount, POST /auth/phone/verify on submit,
 // then saveTokens + best-effort device-register + replace('/').
+// RHF + zod validate the OTP string (criterion 5); six visual cells are
+// derived from the field value — auto-advance + paste keep working.
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { usePhoneStart } from '@/api/hooks/usePhoneStart';
 import { usePhoneVerify } from '@/api/hooks/usePhoneVerify';
 
-// ponytail: 6 separate TextInput refs for auto-advance; one string state keeps
-//        paste + auto-advance in sync without 6-field form schemas or stale closures.
+// ponytail: 6 separate TextInput refs for auto-advance; a single zod-validated
+//        string field keeps paste + auto-advance in sync without a 6-field
+//        form schema or stale closures.
 const OTP_LENGTH = 6;
+const OtpSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'invalid'),
+});
+type OtpInput = z.infer<typeof OtpSchema>;
 
 export default function PhoneOtpScreen() {
   const { t } = useTranslation();
@@ -19,9 +29,14 @@ export default function PhoneOtpScreen() {
   const params = useLocalSearchParams<{ phone?: string }>();
   const phone = typeof params.phone === 'string' ? params.phone : '';
   const cellRefs = useRef<Array<TextInput | null>>([]);
-  const [code, setCode] = useState('');
   const verify = usePhoneVerify();
   const { mutate: sendStart } = usePhoneStart();
+
+  const { setValue, handleSubmit, watch, formState: { errors } } = useForm<OtpInput>({
+    resolver: zodResolver(OtpSchema),
+    defaultValues: { code: '' },
+  });
+  const code = watch('code') ?? '';
 
   // ponytail: fire-and-forget on mount when phone arrives; backend is idempotent on retry,
   //        so a remount after nav-back just re-arms the server timer. start error is not
@@ -35,7 +50,7 @@ export default function PhoneOtpScreen() {
 
   const applyCode = (next: string) => {
     const stripped = next.replace(/\D/g, '').slice(0, OTP_LENGTH);
-    setCode(stripped);
+    setValue('code', stripped, { shouldValidate: true });
     const last = stripped.length;
     if (last > 0) focusCell(Math.min(last, OTP_LENGTH - 1));
   };
@@ -57,18 +72,18 @@ export default function PhoneOtpScreen() {
     }
   };
 
-  const onSubmit = async () => {
-    if (verify.isPending || !phone || code.length !== OTP_LENGTH) return;
+  const onSubmit = handleSubmit(async ({ code: submitted }) => {
+    if (verify.isPending || !phone) return;
     try {
-      await verify.mutateAsync({ phone, code });
+      await verify.mutateAsync({ phone, code: submitted });
       router.replace('/');
     } catch {
       // error surfaced via verify.isError below
     }
-  };
+  });
 
   const pending = verify.isPending;
-  const submitDisabled = pending || code.length !== OTP_LENGTH;
+  const submitDisabled = pending;
 
   const verifyError = (() => {
     if (!verify.isError) return null;
@@ -105,6 +120,11 @@ export default function PhoneOtpScreen() {
         ))}
       </View>
 
+      {errors.code && (
+        <Text accessibilityLiveRegion="polite" className="text-error mb-3">
+          {t('auth.phoneOtp.invalidCode')}
+        </Text>
+      )}
       {verifyError && (
         <Text accessibilityLiveRegion="polite" className="text-error mb-3">
           {verifyError}
