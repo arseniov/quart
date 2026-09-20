@@ -106,14 +106,10 @@ function viaForProvider(providerId: string | null | undefined): string {
  * Returns `null` for non-credential providers (social collapses to
  * `ba_<provider>` regardless of sign-in / sign-up — see header).
  */
-function viaForCredential(
-  baUserCreatedAt: Date | string | undefined,
-  isFreshUser: boolean,
-): string {
-  if (!isFreshUser) return 'ba_email_login';
-  // social never reaches here, but keep the discriminator stable.
-  void baUserCreatedAt;
-  return 'ba_email_signup';
+function viaForCredential(isFreshUser: boolean): string {
+  // social never reaches here; the credential provider is the only path
+  // that can distinguish sign-up from sign-in via the fresh-user heuristic.
+  return isFreshUser ? 'ba_email_signup' : 'ba_email_login';
 }
 
 export interface BaSessionCreateHookDeps {
@@ -166,7 +162,7 @@ export function baSessionCreateHook(deps: BaSessionCreateHookDeps) {
       const providerId = account?.providerId ?? null;
       const via =
         providerId === 'credential'
-          ? viaForCredential(account?.createdAt, isFreshUser)
+          ? viaForCredential(isFreshUser)
           : viaForProvider(providerId);
 
       // 4. Look up the Quart projection by email. If it doesn't exist

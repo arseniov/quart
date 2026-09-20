@@ -22,7 +22,6 @@ const BA_USER_ID = 'ba-user-1';
 const BA_SESSION_ID = 'ba-session-1';
 const QUART_USER_ID = '33333333-3333-3333-3333-333333333333';
 const CITY_ID = '22222222-2222-2222-2222-222222222222';
-const REQUEST_ID_UUID = '11111111-1111-1111-1111-111111111111';
 
 interface DbState {
   baUsers: Array<{ id: string; email: string; createdAt: Date }>;
@@ -504,18 +503,5 @@ describe('baSignOutAuditPlugin', () => {
         context: { session: { session: { token: 'ba-tok', userId: 'u' } } },
       }),
     ).resolves.toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Sanity: REQUEST_ID_UUID + the unused session helper var stay
-// referenced so the imports / state shape don't lint-warning away.
-// ---------------------------------------------------------------------------
-
-describe('reference guards', () => {
-  it('keeps REQUEST_ID_UUID, QUART_USER_ID, CITY_ID in scope for future assertions', () => {
-    expect(REQUEST_ID_UUID).toMatch(/^[0-9a-f-]{36}$/);
-    expect(QUART_USER_ID).toMatch(/^[0-9a-f-]{36}$/);
-    expect(CITY_ID).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
