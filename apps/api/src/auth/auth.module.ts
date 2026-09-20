@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { JwtService } from './jwt.service.js';
+import { LoginController } from './login.controller.js';
+import { LoginService } from './login.service.js';
 import { MagicLinkController } from './magic-link.controller.js';
 import { logMailer, MAILER, MagicLinkService } from './magic-link.service.js';
 import { MfaController } from './mfa.controller.js';
@@ -24,7 +26,9 @@ import { ValkeyService } from './valkey.service.js';
 
 @Module({
   imports: [DbModule, forwardRef(() => AuditModule)],
-  controllers: [AuthController, PhoneOtpController, MfaController, MagicLinkController, PasswordResetController, SignOutController],
+  // LoginController is registered AFTER AuthController so the explicit
+  // `/auth/login` route wins over the BA wildcard proxy (`/auth/*`).
+  controllers: [AuthController, PhoneOtpController, MfaController, MagicLinkController, PasswordResetController, SignOutController, LoginController],
   providers: [
     AuthService,
     TwilioService,
@@ -36,6 +40,7 @@ import { ValkeyService } from './valkey.service.js';
     MagicLinkService,
     PasswordResetService,
     PhoneOtpService,
+    LoginService,
     SessionService,
     SignOutService,
     // Default mailer is the Pino-logged stub; AuthModule overrides can
@@ -43,6 +48,6 @@ import { ValkeyService } from './valkey.service.js';
     { provide: MAILER, useValue: logMailer },
     { provide: PASSWORD_RESET_MAILER, useValue: logMailerPwd },
   ],
-  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, SessionService, SignOutService, MAILER],
+  exports: [AuthService, JwtService, JwtAuthGuard, ValkeyService, MfaService, MfaGuard, MagicLinkService, PasswordResetService, PhoneOtpService, LoginService, SessionService, SignOutService, MAILER],
 })
 export class AuthModule {}

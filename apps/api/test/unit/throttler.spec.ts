@@ -448,6 +448,15 @@ describe('path routing helpers', () => {
     expect(__testing__.isPhoneOtpRoute({ url: '/auth/sign-in/email' })).toBe(false);
   });
 
+  it('isLoginRoute matches /auth/login exactly, not other auth subpaths', () => {
+    expect(__testing__.isLoginRoute({ url: '/auth/login' })).toBe(true);
+    expect(__testing__.isLoginRoute({ url: '/auth/login/' })).toBe(true);
+    expect(__testing__.isLoginRoute({ url: '/auth/phone/verify' })).toBe(false);
+    expect(__testing__.isLoginRoute({ url: '/auth/mfa/verify' })).toBe(false);
+    expect(__testing__.isLoginRoute({ url: '/auth/sign-in/email' })).toBe(false);
+    expect(__testing__.isLoginRoute({ url: '/auth' })).toBe(false);
+  });
+
   it('normalizeIp unwraps IPv6-mapped IPv4 and maps ::1', () => {
     expect(__testing__.normalizeIp('::ffff:1.2.3.4')).toBe('1.2.3.4');
     expect(__testing__.normalizeIp('::1')).toBe('127.0.0.1');

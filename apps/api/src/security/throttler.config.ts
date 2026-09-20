@@ -160,6 +160,16 @@ function isPasswordResetRoute(req: { url?: string }): boolean {
 }
 
 /**
+ * Email-login route only — `/auth/login`. Scoped to the `login` throttler
+ * bucket so the budget is per-email rather than per-IP (an attacker
+ * iterating emails from one IP would otherwise multiply the budget).
+ */
+function isLoginRoute(req: { url?: string }): boolean {
+  const path = pathOf(req);
+  return path === '/auth/login' || path.startsWith('/auth/login/');
+}
+
+/**
  * Per-email tracker for the `magiclink` bucket. Falls back to IP when the
  * body is missing/has no email — same caveat as the phone tracker (T44).
  */
@@ -176,6 +186,17 @@ export function getMagicLinkTracker(req: AuthenticatedRequest): string {
  * buckets if either ever needs to diverge.
  */
 export function getPasswordResetTracker(req: AuthenticatedRequest): string {
+  const body = req.body as { email?: unknown } | undefined;
+  const email = body?.email;
+  if (typeof email === 'string' && email.length > 0) return `email:${email.toLowerCase()}`;
+  return `ip:${normalizeIp(req.ip ?? 'unknown')}`;
+}
+
+/**
+ * Per-email tracker for the `login` bucket. Mirrors the magic-link /
+ * password-reset trackers — separate function so the buckets don't couple.
+ */
+export function getLoginTracker(req: AuthenticatedRequest): string {
   const body = req.body as { email?: unknown } | undefined;
   const email = body?.email;
   if (typeof email === 'string' && email.length > 0) return `email:${email.toLowerCase()}`;
@@ -211,7 +232,17 @@ export function buildThrottlerOptions(
         name: 'auth',
         ttl: ttlMs,
         limit: env.THROTTLE_LOGIN_LIMIT,
-        skipIf: (ctx) => !isAuthRoute(ctx.switchToHttp().getRequest()),
+        // The `auth` bucket is the catch-all for /auth/* routes that
+        // don't have a dedicated bucket. Routes with their own bucket
+        // (login, phone-otp, magic-link, password-reset) skip this so
+        // their dedicated per-email/per-phone throttler — not this
+        // IP-keyed one — owns the 429 response. Without this skip the
+        // `auth` bucket fires first on the login route because it sits
+        // earlier in the array, masking the per-email tracker.
+        skipIf: (ctx) => {
+          const req = ctx.switchToHttp().getRequest();
+          return !isAuthRoute(req) || isLoginRoute(req);
+        },
         getTracker: (req: Record<string, unknown>) => getThrottlerTracker(req as AuthenticatedRequest),
         generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
@@ -270,6 +301,24 @@ export function buildThrottlerOptions(
         generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
       },
       {
+        name: 'login',
+        ttl: ttlMs,
+        // Default 10/min via THROTTLE_LOGIN_LIMIT (same knob the `auth`
+        // bucket already reads, kept as a separate bucket so the
+        // per-email tracker isolates brute-force across IPs).
+        limit: env.THROTTLE_LOGIN_LIMIT,
+        skipIf: (ctx) => !isLoginRoute(ctx.switchToHttp().getRequest()),
+        getTracker: (req: Record<string, unknown>) => {
+          try {
+            return getLoginTracker(req as AuthenticatedRequest);
+          } catch (err) {
+            logger.warn({ err: String(err) }, '[throttler] login tracker failed; using ip');
+            return `ip:${normalizeIp((req as AuthenticatedRequest).ip ?? 'unknown')}`;
+          }
+        },
+        generateKey: (ctx, tracker) => getThrottlerKey(ctx, tracker),
+      },
+      {
         name: 'global',
         ttl: ttlMs,
         limit: env.THROTTLE_DEFAULT_LIMIT,
@@ -320,5 +369,6 @@ export const __testing__ = {
   isPhoneOtpRoute,
   isMagicLinkRoute,
   isPasswordResetRoute,
+  isLoginRoute,
   normalizeIp,
 };

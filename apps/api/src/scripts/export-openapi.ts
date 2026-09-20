@@ -57,6 +57,7 @@ import { AdminUsersController } from '../admin/admin-users.controller.js';
 import { AdminIssuesController } from '../admin-issues/admin-issues.controller.js';
 import { VerifyController } from '../audit/verify.controller.js';
 import { AuthController } from '../auth/auth.controller.js';
+import { LoginController } from '../auth/login.controller.js';
 import { MfaController } from '../auth/mfa.controller.js';
 import { PhoneOtpController } from '../auth/phone-otp.controller.js';
 import { CitiesController } from '../cities/cities.controller.js';
@@ -123,6 +124,7 @@ const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   AdminIssuesController,
   VerifyController,
   AuthController,
+  LoginController,
   MfaController,
   PhoneOtpController,
   CitiesController,

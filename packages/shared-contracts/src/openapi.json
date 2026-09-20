@@ -1164,6 +1164,113 @@
         ]
       }
     },
+    "/auth/login": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "access_token": {
+                      "description": "Ed25519 JWT (1h TTL).",
+                      "type": "string"
+                    },
+                    "refresh_expires_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "refresh_token": {
+                      "description": "Ed25519 JWT (30d TTL).",
+                      "type": "string"
+                    },
+                    "user": {
+                      "properties": {
+                        "avatar_url": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "city_id": {
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "handle": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "needs_onboarding": {
+                          "type": "boolean"
+                        },
+                        "phone_e164": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "preferred_locale": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "handle",
+                        "display_name",
+                        "email",
+                        "phone_e164",
+                        "avatar_url",
+                        "preferred_locale",
+                        "city_id",
+                        "needs_onboarding",
+                        "roles"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "refresh_token",
+                    "refresh_expires_at",
+                    "user"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credentials accepted. Returns the session tokens + user profile (mirrors /auth/phone/verify and the email-login contract)."
+          },
+          "401": {
+            "description": "Credentials rejected (auth.login_invalid_credentials)."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Email or password missing/too short."
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "tags": [
+          "auth/login"
+        ]
+      }
+    },
     "/auth/mfa/backup-code": {
       "post": {
         "responses": {
@@ -2799,6 +2906,9 @@
     },
     {
       "name": "auth"
+    },
+    {
+      "name": "auth/login"
     },
     {
       "name": "auth/mfa"
