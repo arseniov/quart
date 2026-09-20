@@ -1,9 +1,13 @@
 // src/api/hooks/__tests__/usePhoneVerify.test.ts
-// GH #30 + GH #46: /auth/phone/verify now returns only the Quart user
-// projection (BA owns the bearer). The hook does NOT persist tokens —
-// the BA session cookie handling for phone-OTP is a follow-up.
+// GH #30 + GH #46 + GH #48: /auth/phone/verify returns the Quart user
+// projection AND, when the server can mint a BA session (the Quart user
+// has a matching BA `user.email` row), forwards a Set-Cookie. The hook
+// extracts the cookie via extractBaSessionToken and persists via
+// saveTokens; throws `auth.no_session` when the server omits it (phone-
+// only Quart user with no BA account — the mint path returns null).
 
 const mockPost = jest.fn();
+const mockSaveTokens = jest.fn();
 const mockRegisterMutateAsync = jest.fn();
 
 jest.mock('@/api/client', () => {
@@ -11,7 +15,7 @@ jest.mock('@/api/client', () => {
   return { ...actual, apiClient: { post: (...args: unknown[]) => mockPost(...args) } };
 });
 jest.mock('@/lib/auth', () => ({
-  saveTokens: jest.fn(),
+  saveTokens: (...args: unknown[]) => mockSaveTokens(...args),
   clearTokens: jest.fn(),
   loadTokens: jest.fn(),
 }));
@@ -32,6 +36,12 @@ jest.mock('@tanstack/react-query', () => ({
 import { ApiError } from '@/api/client';
 import { usePhoneVerify } from '@/api/hooks/usePhoneVerify';
 
+function okVerifyHeaders() {
+  const h = new Headers();
+  h.append('set-cookie', 'better-auth.session_token=ba-phone-tok.xyz; HttpOnly; Path=/');
+  return h;
+}
+
 const okResponse = {
   status: 200,
   data: {
@@ -48,11 +58,13 @@ const okResponse = {
       roles: ['citizen'],
     },
   },
+  headers: okVerifyHeaders(),
 };
 
-describe('usePhoneVerify — happy path', () => {
+describe('usePhoneVerify — happy path (server forwarded BA Set-Cookie)', () => {
   beforeEach(() => {
     mockPost.mockReset().mockResolvedValue(okResponse);
+    mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
   });
 
@@ -65,6 +77,12 @@ describe('usePhoneVerify — happy path', () => {
       { skipAuth: true },
     );
     expect(data).toEqual(okResponse.data);
+  });
+
+  it('persists the BA session cookie via saveTokens when the server forwards Set-Cookie (GH #48)', async () => {
+    const mut = usePhoneVerify() as unknown as { mutateAsync: (i: unknown) => Promise<unknown> };
+    await mut.mutateAsync({ phoneNumber: '+15551234567', code: '123456' });
+    expect(mockSaveTokens).toHaveBeenCalledWith({ baSessionToken: 'ba-phone-tok.xyz' });
   });
 
   it('fires the device-register hook after the verify succeeds', async () => {
@@ -82,28 +100,48 @@ describe('usePhoneVerify — happy path', () => {
     const mut = usePhoneVerify() as unknown as { mutateAsync: (i: unknown) => Promise<unknown> };
     const data = await mut.mutateAsync({ phoneNumber: '+15551234567', code: '123456' });
     expect(data).toEqual(okResponse.data);
+    // saveTokens ran BEFORE the device-register call (cookie persist is
+    // not gated on notifications permission), so the happy-path assertion
+    // is safe here.
+    expect(mockSaveTokens).toHaveBeenCalledWith({ baSessionToken: 'ba-phone-tok.xyz' });
   });
 });
 
 describe('usePhoneVerify — failure paths', () => {
   beforeEach(() => {
+    mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
   });
 
-  it('surfaces 422 invalid code', async () => {
+  it('throws auth.no_session when the server response omits the BA session cookie (GH #48)', async () => {
+    mockPost.mockReset().mockResolvedValueOnce({
+      status: 200,
+      data: okResponse.data,
+      headers: new Headers(),
+    });
+    const mut = usePhoneVerify() as unknown as { mutateAsync: (i: unknown) => Promise<unknown> };
+    await expect(
+      mut.mutateAsync({ phoneNumber: '+15551234567', code: '123456' }),
+    ).rejects.toMatchObject({ status: 500, code: 'auth.no_session' });
+    expect(mockSaveTokens).not.toHaveBeenCalled();
+  });
+
+  it('surfaces 422 invalid code — saveTokens NOT called', async () => {
     mockPost.mockReset().mockRejectedValueOnce(new ApiError(422, 'invalid_code', 'bad otp'));
     const mut = usePhoneVerify() as unknown as { mutateAsync: (i: unknown) => Promise<unknown> };
     await expect(
       mut.mutateAsync({ phoneNumber: '+15551234567', code: '000000' }),
     ).rejects.toBeInstanceOf(ApiError);
+    expect(mockSaveTokens).not.toHaveBeenCalled();
   });
 
-  it('surfaces 401 unknown-user', async () => {
+  it('surfaces 401 unknown-user — saveTokens NOT called', async () => {
     mockPost.mockReset().mockRejectedValueOnce(new ApiError(401, 'unknown_user', 'no account'));
     const mut = usePhoneVerify() as unknown as { mutateAsync: (i: unknown) => Promise<unknown> };
     await expect(
       mut.mutateAsync({ phoneNumber: '+15551234567', code: '123456' }),
     ).rejects.toMatchObject({ status: 401 });
+    expect(mockSaveTokens).not.toHaveBeenCalled();
   });
 
   it('surfaces offline / network errors', async () => {
@@ -112,5 +150,6 @@ describe('usePhoneVerify — failure paths', () => {
     await expect(
       mut.mutateAsync({ phoneNumber: '+15551234567', code: '123456' }),
     ).rejects.toBeInstanceOf(ApiError);
+    expect(mockSaveTokens).not.toHaveBeenCalled();
   });
 });

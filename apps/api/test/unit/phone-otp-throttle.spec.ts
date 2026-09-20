@@ -24,6 +24,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '../../src/audit/audit.service.js';
+import { AuthService } from '../../src/auth/auth.service.js';
 import { PhoneOtpController } from '../../src/auth/phone-otp.controller.js';
 import { PhoneOtpService } from '../../src/auth/phone-otp.service.js';
 import { SessionService } from '../../src/auth/session.service.js';
@@ -87,6 +88,10 @@ async function bootApp(): Promise<NestFastifyApplication> {
       { provide: DbService, useValue: stubDb },
       { provide: AuditService, useValue: stubAudit },
       { provide: TwilioService, useValue: stubTwilio },
+      // GH #48: phone-otp controller now injects AuthService to mint a BA
+      // session cookie. Throttle tests stub the service so minting is a
+      // no-op (we override PhoneOtpService anyway).
+      { provide: AuthService, useValue: { instance: { api: { getSession: { $context: Promise.resolve({}) } } } } },
       SessionService,
       PhoneOtpService,
     ],

@@ -4,15 +4,19 @@
 // so the caller can choose silent-vs-Alert behavior per provider
 // (e.g. ERR_CANCELED from AppleAuthentication is silent).
 //
-// TODO(GH #48): BA's /auth/sign-in/social endpoint expects
-// `{ provider, idToken: { token, ... } }` (nested idToken object), not
-// the flat `{ provider, idToken: <string> }` the mobile sends today —
-// once that body shape lands, this hook should extract the BA session
-// cookie via extractBaSessionToken and persist it via saveTokens. The
-// pre-BA JWT minting is gone (GH #45); no saveTokens call here for now.
+// GH #48: BA's /auth/sign-in/social endpoint expects
+// `{ provider, idToken: { token, ... } }` (nested idToken object) — the body
+// shape matches BA 1.0.20's zod schema in auth-B_LFm6_Y.d.ts:1582. We wrap
+// the caller's string idToken in `{ token }` here so the screen's flat
+// interface (just the provider's opaque token) stays unchanged. After the
+// response, extract the BA session cookie via extractBaSessionToken and
+// persist it via saveTokens; throw `auth.no_session` if the server omitted
+// the cookie (mirrors useLogin).
 import { useMutation } from '@tanstack/react-query';
 
-import { apiClient } from '@/api/client';
+import { apiClient, ApiError } from '@/api/client';
+import { extractBaSessionToken } from '@/api/ba-cookie';
+import { saveTokens } from '@/lib/auth';
 import {
   useRegisterDevice,
   NotificationsPermissionError,
@@ -35,11 +39,14 @@ export function useSocialLogin() {
     mutationFn: async (input: SocialLoginInput) => {
       const r = await apiClient.post<unknown>(
         '/auth/sign-in/social',
-        { provider: input.provider, idToken: input.idToken },
+        { provider: input.provider, idToken: { token: input.idToken } },
         { skipAuth: true },
       );
-      // ponytail: BA session cookie not yet persisted from this flow (GH #48) —
-      //        see file header. Apple userId for silent re-auth stays.
+      const baSessionToken = extractBaSessionToken(r.headers);
+      if (!baSessionToken) {
+        throw new ApiError(500, 'auth.no_session', 'no session cookie in social sign-in response');
+      }
+      saveTokens({ baSessionToken });
       if (input.provider === 'apple' && input.userId) {
         mmkvStorage.setItem(APPLE_USER_KEY, input.userId);
       }

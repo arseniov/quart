@@ -1,16 +1,16 @@
 // src/api/hooks/usePhoneVerify.ts
-// POST /auth/phone/verify → returns the Quart user projection only. The
-// GH #30 JWT-mint path was deleted by GH #45 (BA owns the bearer), so
-// this endpoint no longer issues tokens. The user projection drives the
-// `useMe` cache; the BA session itself is currently NOT persisted from
-// this flow (mobile re-signs in via /login or /signup if needed).
-//
-// TODO(GH #48): thread BA's session cookie through /auth/phone/verify
-// (the server-side handler can mirror BA's Set-Cookie on the response).
-// Until that lands, this hook is a no-op for token storage.
+// POST /auth/phone/verify → the server returns the Quart user projection
+// AND forwards BA's Set-Cookie (GH #48 — see phone-otp.controller.ts). We
+// extract the cookie value via extractBaSessionToken and persist it via
+// saveTokens; if the server omitted the cookie (phone-only Quart user with
+// no BA account — the mint path returns null), we throw `auth.no_session`
+// so the screen can surface a "re-sign in via email or social" fallback
+// instead of silently leaving the bearer token empty.
 import { useMutation } from '@tanstack/react-query';
-import { apiClient } from '@/api/client';
+import { apiClient, ApiError } from '@/api/client';
+import { extractBaSessionToken } from '@/api/ba-cookie';
 import { deviceFingerprint } from '@/lib/device-fingerprint';
+import { saveTokens } from '@/lib/auth';
 import {
   useRegisterDevice,
   NotificationsPermissionError,
@@ -36,9 +36,11 @@ export function usePhoneVerify() {
         { ...input, device_fingerprint: fp },
         { skipAuth: true },
       );
-      // ponytail: GH #48 — BA session token storage is not wired here yet.
-      //        The BA cookie (if any) is ignored; the user is treated as
-      //        "no session" until a follow-up lands.
+      const baSessionToken = extractBaSessionToken(r.headers);
+      if (!baSessionToken) {
+        throw new ApiError(500, 'auth.no_session', 'no session cookie in phone-verify response');
+      }
+      saveTokens({ baSessionToken });
       // ponytail: silently swallow NotificationsPermissionError — user denied notifications but
       //          sign-in must succeed; surface only real failures via throw.
       try {

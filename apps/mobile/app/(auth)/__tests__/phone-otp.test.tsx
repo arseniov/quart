@@ -1,8 +1,10 @@
 // app/(auth)/__tests__/phone-otp.test.tsx
-// GH #29 + GH #30 + GH #46: happy path (verify returns user projection →
-// routes to '/') + 422 invalid code + 401 unknown-user + offline UX +
-// missing-phone redirect + array-phone redirect. GH #45 deleted the JWT
-// mint path so saveTokens is no longer called from this flow.
+// GH #29 + GH #30 + GH #46 + GH #48: happy path (verify returns user
+// projection + BA cookie → routes to '/') + 422 invalid code + 401
+// unknown-user + offline UX + missing-phone redirect + array-phone
+// redirect. The cookie-extract call lives in usePhoneVerify (covered
+// separately in usePhoneVerify.test.ts); here we stub it so the screen
+// tests don't need to fake response headers.
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -17,10 +19,14 @@ const mockRouter = { replace: mockReplace, push: jest.fn() };
 const mockPost = jest.fn();
 const mockSaveTokens = jest.fn();
 const mockRegisterMutateAsync = jest.fn();
+const mockExtractBaSessionToken = jest.fn((_headers: Headers) => 'ba-test-token.sig');
 jest.mock('@/api/client', () => {
   const actual = jest.requireActual('@/api/client');
   return { ...actual, apiClient: { post: (...args: unknown[]) => mockPost(...args) } };
 });
+jest.mock('@/api/ba-cookie', () => ({
+  extractBaSessionToken: (headers: Headers) => mockExtractBaSessionToken(headers),
+}));
 jest.mock('@/lib/auth', () => ({
   saveTokens: (...args: unknown[]) => mockSaveTokens(...args),
   clearTokens: jest.fn(),
@@ -69,6 +75,7 @@ describe('PhoneOtpScreen', () => {
     mockPost.mockReset();
     mockSaveTokens.mockReset();
     mockRegisterMutateAsync.mockReset().mockResolvedValue(undefined);
+    mockExtractBaSessionToken.mockReset().mockReturnValue('ba-test-token.sig');
     mockUseLocalSearchParams.mockReset();
     mockUseLocalSearchParams.mockReturnValue({ phone: '+15551234567' });
   });

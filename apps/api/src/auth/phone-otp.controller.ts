@@ -1,10 +1,14 @@
-import { Body, Controller, Post, Req } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiTags, ApiUnprocessableEntityResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { FastifyReply } from 'fastify';
 
+import { mintBaSessionCookie } from './ba-session-mint.js';
 import { RequestOtpSchema, VerifyOtpSchema, type VerifyOtpResult } from './phone-otp.dto.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin can emit
 // `design:paramtypes` for the constructor parameters.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuthService } from './auth.service.js';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PhoneOtpService, extractVerifyContext } from './phone-otp.service.js';
 import { Public } from './public.decorator.js';
@@ -39,6 +43,7 @@ export class PhoneOtpController {
   constructor(
     private readonly twilio: TwilioService,
     private readonly service: PhoneOtpService,
+    private readonly auth: AuthService,
   ) {}
 
   // Per-handler override of the global `phone` throttler. The phone
@@ -106,9 +111,19 @@ export class PhoneOtpController {
   async verifyOtp(
     @Body() body: unknown,
     @Req() req: VerifyFastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<VerifyOtpResult> {
     const { phoneNumber, code } = VerifyOtpSchema.parse(body);
     const ctx = { ...extractVerifyContext(req), phoneNumber, code };
-    return this.service.verifyAndIssueSession(ctx);
+    const out = await this.service.verifyAndIssueSession(ctx);
+    // GH #48: mint a BA session and forward the Set-Cookie so the mobile
+    // can extract the BA session token. Phone-only Quart users with no
+    // BA account (no email ever provided) skip this — the mobile falls
+    // back to `auth.no_session` and re-signs in via email or social.
+    const baCookie = await mintBaSessionCookie(this.auth, out.user.email, req);
+    if (baCookie) {
+      reply.header('set-cookie', baCookie);
+    }
+    return out;
   }
 }

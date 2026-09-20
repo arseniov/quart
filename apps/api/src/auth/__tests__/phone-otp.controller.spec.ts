@@ -5,10 +5,13 @@
 // session_created).
 
 import { Test } from '@nestjs/testing';
+import type { FastifyReply } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '../../audit/audit.service.js';
 import { DbService } from '../../db/db.service.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuthService } from '../auth.service.js';
 import { PhoneOtpController } from '../phone-otp.controller.js';
 import {
   PhoneOtpService,
@@ -425,11 +428,58 @@ describe('PhoneOtpController', () => {
   // suite owns it). This test pins the controller's contract on the
   // 422 + 401 paths that bubble through NestJS's exception filter.
 
-  function makeController(verifyResult: boolean, user: DbState['users'][number] | null) {
+  function makeController(
+    verifyResult: boolean,
+    user: DbState['users'][number] | null,
+    authOverrides: { baCookie?: string | null; baUser?: { id: string; email: string } | null } = {},
+  ) {
     const doubles = makeDoubles({ verify: verifyResult, user });
+    // GH #48: the controller now mints a BA session via mintBaSessionCookie
+    // (apps/api/src/auth/ba-session-mint.ts). The helper talks to
+    // authService.instance.api.getSession.$context — for unit tests we
+    // stub the authService so the helper resolves to a deterministic
+    // Set-Cookie string (or null when there's no BA account to mint).
+    const auth = {
+      instance: {
+        api: {
+          getSession: {
+            $context: Promise.resolve({
+              secret: 'test-secret',
+              authCookies: {
+                sessionToken: {
+                  name: 'better-auth.session_token',
+                  options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+                },
+                sessionData: { name: 'better-auth.session_data', options: {} },
+                dontRememberToken: { name: 'better-auth.dont_remember', options: {} },
+              },
+              sessionConfig: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24, freshAge: 60 * 5 },
+              internalAdapter: {
+                findUserByEmail: vi.fn(async (email: string) => {
+                  if (authOverrides.baUser === null) return null;
+                  const baUser = authOverrides.baUser ?? { id: 'ba-user-1', email };
+                  return { user: baUser };
+                }),
+                createSession: vi.fn(async (baUserId: string) => ({
+                  id: 'ba-session-id',
+                  userId: baUserId,
+                  token: 'ba-token-value',
+                  expiresAt: new Date(Date.now() + 60_000),
+                  ipAddress: '203.0.113.1',
+                  userAgent: 'jest-ua',
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                })),
+              },
+            }),
+          },
+        },
+      },
+    } as unknown as AuthService;
     const controller = new PhoneOtpController(
       doubles.twilio,
       doubles.service,
+      auth,
     );
     const req = {
       id: REQUEST_ID_UUID,
@@ -437,26 +487,111 @@ describe('PhoneOtpController', () => {
       ip: '203.0.113.1',
       headers: { 'user-agent': 'jest-ua', 'x-device-fingerprint': 'fp-123' },
     };
-    return { controller, doubles, req };
+    // Capture the Set-Cookie header the controller writes via
+    // @Res({ passthrough: true }). The mock mimics Fastify's reply.header:
+    // later calls overwrite the same name (Set-Cookie is multi-value in
+    // real Fastify, but the helper writes a single value here).
+    const setCookieHeaders: string[] = [];
+    const reply = {
+      header: (name: string, value: string | string[]) => {
+        if (name.toLowerCase() !== 'set-cookie') return reply;
+        const values = Array.isArray(value) ? value : [value];
+        if (setCookieHeaders.length === 0) setCookieHeaders.push(...values);
+        else setCookieHeaders[0] = values[values.length - 1]!;
+        return reply;
+      },
+    } as unknown as FastifyReply;
+    // Compute the expected cookie string the helper produces for the
+    // default-stubbed BA user (when authOverrides doesn't override it).
+    const expectedCookie =
+      authOverrides.baCookie !== undefined
+        ? authOverrides.baCookie
+        : 'better-auth.session_token=ba-token-value.' +
+          // base64 HMAC-SHA256('ba-token-value', 'test-secret') —
+          // recomputed inline to keep the test self-contained.
+          Buffer.from(
+            require('node:crypto').createHmac('sha256', 'test-secret').update('ba-token-value').digest(),
+          ).toString('base64') +
+          '; Max-Age=604800; Path=/; SameSite=Lax; HttpOnly';
+    return { controller, doubles, req, reply, setCookieHeaders, expectedCookie };
   }
 
   it('POST /verify delegates body + req metadata to the service', async () => {
-    const { controller, doubles, req } = makeController(true, activeUser());
+    const { controller, doubles, req, reply } = makeController(true, activeUser());
 
     const out = await controller.verifyOtp(
       { phoneNumber: PHONE, code: CODE } as never,
       req as never,
+      reply,
     );
 
     expect(out.user.id).toBe(USER_ID);
     expect(doubles.state.authSessions).toHaveLength(1);
   });
 
-  it('POST /verify rejects an unparseable body before Twilio is called', async () => {
-    const { controller, doubles, req } = makeController(true, activeUser());
+  it('POST /verify forwards a BA Set-Cookie when the Quart user has a BA account (GH #48)', async () => {
+    const { controller, req, reply, setCookieHeaders, expectedCookie } = makeController(
+      true,
+      activeUser(),
+    );
+
+    const out = await controller.verifyOtp(
+      { phoneNumber: PHONE, code: CODE } as never,
+      req as never,
+      reply,
+    );
+
+    expect(out.user.email).toBe('alice@example.com');
+    expect(setCookieHeaders).toHaveLength(1);
+    expect(setCookieHeaders[0]).toBe(expectedCookie);
+    expect(setCookieHeaders[0]).toMatch(/^better-auth\.session_token=ba-token-value\./);
+  });
+
+  it('POST /verify does NOT forward Set-Cookie when the BA user lookup returns null (phone-only Quart user)', async () => {
+    const { controller, req, reply, setCookieHeaders } = makeController(
+      true,
+      activeUser({ email: null }),
+      { baUser: null },
+    );
+
+    const out = await controller.verifyOtp(
+      { phoneNumber: PHONE, code: CODE } as never,
+      req as never,
+      reply,
+    );
+
+    expect(out.user.email).toBeNull();
+    expect(setCookieHeaders).toHaveLength(0);
+  });
+
+  it('POST /verify does NOT forward Set-Cookie on a 401 (verify fails before the cookie path runs)', async () => {
+    const { controller, req, reply, setCookieHeaders } = makeController(
+      false,
+      null,
+    );
 
     await expect(
-      controller.verifyOtp({ phoneNumber: 'not-e164', code: CODE } as never, req as never),
+      controller.verifyOtp(
+        { phoneNumber: PHONE, code: CODE } as never,
+        req as never,
+        reply,
+      ),
+    ).rejects.toMatchObject({
+      response: { error: { code: 'phone_otp.invalid_code' } },
+      status: 422,
+    });
+    expect(setCookieHeaders).toHaveLength(0);
+  });
+
+  it('POST /verify rejects an unparseable body before Twilio is called', async () => {
+    const { controller, doubles, req, reply } = makeController(true, activeUser());
+
+    await expect(
+      controller.verifyOtp(
+        { phoneNumber: 'not-e164', code: CODE } as never,
+        req as never,
+        reply,
+      ),
     ).rejects.toBeInstanceOf(Error); // ZodValidationPipe throws a BadRequestException-like error.
     expect((doubles.twilio.verifyOtp as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
     expect(doubles.state.authSessions).toHaveLength(0);
@@ -472,12 +607,14 @@ describe('PhoneOtpController', () => {
 describe('PhoneOtpController (Nest DI graph)', () => {
   it('compiles the full module graph without missing providers', async () => {
     const doubles = makeDoubles({ user: activeUser() });
+    const authStub = { instance: { api: { getSession: { $context: Promise.resolve({}) } } } } as unknown as AuthService;
     const moduleRef = await Test.createTestingModule({
       controllers: [PhoneOtpController],
       providers: [
         { provide: DbService, useValue: doubles.db },
         { provide: AuditService, useValue: doubles.audit },
         { provide: TwilioService, useValue: doubles.twilio },
+        { provide: AuthService, useValue: authStub },
         SessionService,
         PhoneOtpService,
       ],
