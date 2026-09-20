@@ -195,12 +195,20 @@ describe('SettingsIndex — logout', () => {
     qcNs.__qc.clear.mockClear();
   });
 
-  it('POSTs /auth/sign-out, clears tokens, and redirects to /login', async () => {
+  it('POSTs /auth/sign-out with Authorization header, clears tokens, and redirects to /login', async () => {
     const { findByLabelText } = render(<SettingsIndex />);
     const logout = await findByLabelText('Log out');
     fireEvent.press(logout);
+    // GH #32 — skipAuth:true would strip the Bearer header so JwtAuthGuard 401s before
+    //          SignOutService writes the auth.sign_out audit row (§3.8). Confirm Authorization
+    //          is attached by asserting skipAuth was NOT set on the call.
     await waitFor(() => {
-      expect(apiMock.__postMock).toHaveBeenCalledWith('/auth/sign-out', null, { skipAuth: true });
+      expect(apiMock.__postMock).toHaveBeenCalledWith('/auth/sign-out', null);
+      expect(apiMock.__postMock).not.toHaveBeenCalledWith(
+        '/auth/sign-out',
+        null,
+        expect.objectContaining({ skipAuth: true }),
+      );
     });
     expect(authMock.clearTokens).toHaveBeenCalledTimes(1);
     expect(qcNs.__qc.clear).toHaveBeenCalledTimes(1);
