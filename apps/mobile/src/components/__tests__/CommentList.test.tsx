@@ -6,6 +6,10 @@ jest.mock('@/api/hooks/useIdeaComments', () => ({
   useIdeaComments: jest.fn(),
 }));
 
+jest.mock('@/api/hooks/useUser', () => ({
+  useUser: jest.fn(),
+}));
+
 jest.mock('@/components/Markdown', () => ({
   SafeMarkdown: ({ source }: { source: string }) => {
     const { Text } = require('react-native');
@@ -14,6 +18,7 @@ jest.mock('@/components/Markdown', () => ({
 }));
 
 import { useIdeaComments } from '@/api/hooks/useIdeaComments';
+import { useUser } from '@/api/hooks/useUser';
 import { CommentList } from '@/components/idea/CommentList';
 
 describe('CommentList', () => {
@@ -27,6 +32,13 @@ describe('CommentList', () => {
 
   beforeEach(() => {
     (useIdeaComments as jest.Mock).mockReset();
+    (useUser as jest.Mock).mockReset();
+    // Default: byline resolves successfully so existing assertions stay valid.
+    (useUser as jest.Mock).mockReturnValue({
+      isPending: false,
+      data: { handle: 'alice', displayName: 'Alice' },
+      isError: false,
+    });
   });
 
   it('renders loading state when isPending', () => {

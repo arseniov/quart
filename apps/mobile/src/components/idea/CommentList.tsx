@@ -1,22 +1,23 @@
 // src/components/idea/CommentList.tsx
 import { useTranslation } from 'react-i18next';
 import { View, Text, ActivityIndicator, FlatList, Pressable } from 'react-native';
-import i18n from '@/i18n';
-import { SafeMarkdown } from '@/components/Markdown';
-import { useIdeaComments, type IdeaComment } from '@/api/hooks/useIdeaComments';
 
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
+import { useIdeaComments, type IdeaComment } from '@/api/hooks/useIdeaComments';
+import { SafeMarkdown } from '@/components/Markdown';
+import { AuthorByline } from '@/components/user/AuthorByline';
+import i18n from '@/i18n';
 
 function CommentRow({ comment }: { comment: IdeaComment }) {
   const created = new Date(comment.createdAt);
-  const handle = `Comment by ${shortId(comment.authorUserId)}`;
   return (
     <View className="px-4 py-3 border-b border-border">
-      <Text className="text-text-secondary text-xs mb-1">
-        @{handle} • {created.toLocaleString(i18n.language)}
-      </Text>
+      <View className="flex-row items-center mb-1">
+        <AuthorByline userId={comment.authorUserId} />
+        <Text className="text-text-secondary text-xs">
+          {' • '}
+          {created.toLocaleString(i18n.language)}
+        </Text>
+      </View>
       <SafeMarkdown source={comment.body} />
     </View>
   );
