@@ -178,6 +178,10 @@
       "pollsCount": "Sondaggi",
       "notFound": "Utente non trovato.",
       "deleted": "Utente eliminato"
+    },
+    "byline": {
+      "loading": "Caricamento autore @{{id}}",
+      "unavailable": "Autore non disponibile, id @{{id}}"
     }
   },
   "errors": {

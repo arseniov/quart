@@ -178,6 +178,10 @@
       "pollsCount": "Polls",
       "notFound": "User not found.",
       "deleted": "User deleted."
+    },
+    "byline": {
+      "loading": "Loading author @{{id}}",
+      "unavailable": "Author unavailable, id @{{id}}"
     }
   },
   "errors": {

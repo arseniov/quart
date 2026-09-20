@@ -3,6 +3,7 @@
 // link to `/user/:id`. Loading + 404/410/network all fall back to a non-tappable
 // truncated id so the row never blocks on the profile lookup.
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 
 import { minHitSlop } from '@/a11y/hit-slop';
@@ -18,12 +19,18 @@ interface AuthorBylineProps {
 
 export function AuthorByline({ userId }: AuthorBylineProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data, isPending } = useUser(userId);
+  const short = shortId(userId);
 
   if (isPending) {
     return (
-      <View testID="author-byline-loading">
-        <Text className="text-text-secondary text-xs">{`@${shortId(userId)}`}</Text>
+      <View
+        testID="author-byline-loading"
+        accessibilityRole="text"
+        accessibilityLabel={t('user.byline.loading', { id: short })}
+      >
+        <Text className="text-text-secondary text-xs">{`@${short}`}</Text>
       </View>
     );
   }
@@ -43,9 +50,14 @@ export function AuthorByline({ userId }: AuthorBylineProps) {
   }
 
   // 404 / 410 / network — never block the row, fall back to truncated id.
+  // Italic + "~" prefix distinguishes the failure state from loading for sighted users.
   return (
-    <View testID="author-byline-fallback">
-      <Text className="text-text-secondary text-xs">{`@${shortId(userId)}`}</Text>
+    <View
+      testID="author-byline-fallback"
+      accessibilityRole="text"
+      accessibilityLabel={t('user.byline.unavailable', { id: short })}
+    >
+      <Text className="text-text-secondary text-xs italic">{`~@${short}`}</Text>
     </View>
   );
 }

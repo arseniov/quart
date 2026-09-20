@@ -55,43 +55,23 @@ describe('AuthorByline', () => {
     expect(mockPush).toHaveBeenCalledWith(`/user/${OK_UID}`);
   });
 
-  it('falls back to truncated id and is non-tappable on 404', () => {
+  it.each([
+    { label: '404', uid: NOT_FOUND_UID, expected: '~@deadbeef', mock: { status: 404 } },
+    { label: '410', uid: DELETED_UID, expected: '~@cafebabe', mock: { status: 410 } },
+    { label: 'network', uid: NETWORK_UID, expected: '~@feedface', mock: new Error('boom') },
+  ])('falls back to non-tappable shortId on $label', ({ uid, expected, mock }) => {
     mUseUser.mockReturnValue({
       isPending: false,
       data: undefined,
       isError: true,
-      error: { status: 404 },
+      error: mock,
     });
-    const { getByTestId, getByText, queryByTestId, queryByLabelText } = render(<AuthorByline userId={NOT_FOUND_UID} />);
+    const { getByTestId, getByText, queryByTestId, queryByLabelText } = render(<AuthorByline userId={uid} />);
     expect(getByTestId('author-byline-fallback')).toBeTruthy();
     expect(queryByTestId('author-byline-link')).toBeNull();
     expect(queryByTestId('author-byline-loading')).toBeNull();
-    expect(getByText('@deadbeef')).toBeTruthy();
+    expect(getByText(expected)).toBeTruthy();
     expect(queryByLabelText(/Profile of/)).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('falls back to truncated id and is non-tappable on 410 (soft-deleted)', () => {
-    mUseUser.mockReturnValue({
-      isPending: false,
-      data: undefined,
-      isError: true,
-      error: { status: 410 },
-    });
-    const { getByTestId, getByText } = render(<AuthorByline userId={DELETED_UID} />);
-    expect(getByTestId('author-byline-fallback')).toBeTruthy();
-    expect(getByText('@cafebabe')).toBeTruthy();
-  });
-
-  it('falls back to truncated id on generic/network errors', () => {
-    mUseUser.mockReturnValue({
-      isPending: false,
-      data: undefined,
-      isError: true,
-      error: new Error('boom'),
-    });
-    const { getByTestId, getByText } = render(<AuthorByline userId={NETWORK_UID} />);
-    expect(getByTestId('author-byline-fallback')).toBeTruthy();
-    expect(getByText('@feedface')).toBeTruthy();
   });
 });
