@@ -30,9 +30,8 @@ export async function trySilentAppleReauth(): Promise<boolean> {
       mmkvStorage.removeItem(APPLE_USER_KEY);
       return false;
     }
-    // requestedScopes: [] + user hint = silent refresh path per Apple docs.
-    // ponytail: refreshAsync is the documented silent path — signInAsync has no `user` option
-    //        and would force a UI prompt; refreshAsync uses the user hint for an in-place refresh.
+    // refreshAsync is the documented silent path, but may still surface a one-shot Apple ID
+    // confirmation sheet when biometrics/passcode are required — accepted by the spec.
     const cred = await AppleAuthentication.refreshAsync({
       user: appleUserId,
       requestedScopes: [],

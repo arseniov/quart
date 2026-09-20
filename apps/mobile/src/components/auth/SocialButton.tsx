@@ -44,6 +44,7 @@ export function SocialButton({ provider, label, onPress, disabled }: SocialButto
       <Image
         source={iconSource[provider]}
         testID={`social-icon-${provider}`}
+        accessible={false}
         style={{ width: 20, height: 20, marginRight: 8 }}
       />
       <Text className={`font-semibold ${labelClass[provider]}`}>{label}</Text>
