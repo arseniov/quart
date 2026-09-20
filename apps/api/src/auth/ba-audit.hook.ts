@@ -13,8 +13,9 @@
 //      table to derive the provider discriminator ('credential' /
 //      'google' / 'apple') and delegates to SessionService.createSession
 //      so the chain row is written atomically with our auth_sessions
-//      row. Mirrors LoginService's email-login path (GH #33) — same
-//      SessionService helper, same write order.
+//      row. Same SessionService helper, same write order as the
+//      pre-GH #45 email-login flow (LoginService was deleted in GH #45
+//      along with the custom /auth/login Nest controller).
 //
 //   2. Sign-out (plugin.hooks.after, path === '/sign-out')
 //      BA 1.0.20 has no session-delete hook; the plugin matcher is the
@@ -24,8 +25,9 @@
 //      chain walk can correlate). Skip when no token — the matcher
 //      fires on /sign-out even if the caller wasn't authenticated.
 //
-// Discriminator naming (auditPayload.via) — GH #33 vs GH #34:
-//   GH #33 /auth/login          → 'email_login'
+// Discriminator naming (auditPayload.via) — GH #34 BA-driven flows only.
+// (GH #33's /auth/login used to write 'email_login' via a dedicated
+// Nest controller; that endpoint was deleted in GH #45.)
 //   GH #34 BA /sign-in/email    → 'ba_email_login'
 //   GH #34 BA /sign-up/email    → 'ba_email_signup'
 //   GH #34 BA /sign-in/google   → 'ba_google'
@@ -33,6 +35,8 @@
 //   GH #34 BA /sign-up/google   → 'ba_google'
 //   GH #34 BA /sign-up/apple    → 'ba_apple'
 //   GH #34 BA /sign-out         → 'ba_sign_out'
+// Quart-driven /auth/sign-out (BA session still alive on the BA side)
+// writes a parallel `auth.sign_out` chain entry tagged `via: 'quart_sign_out'`.
 // Sign-in vs sign-up is collapsed to one provider tag for OAuth —
 // the most recent account row reflects the flow that just produced
 // this session, and a single `ba_<provider>` tag keeps the chain
@@ -129,7 +133,7 @@ export function baSessionCreateHook(deps: BaSessionCreateHookDeps) {
   return async (session: BaSessionRow): Promise<void> => {
     try {
       // 1. Find the BA user (provides email — the canonical join key
-      //    between BA and Quart, same as login.service.ts:83-97).
+      //    between BA and Quart).
       const baUser = await db.kysely
         .selectFrom('user' as never)
         .select(['id', 'email', 'createdAt'] as never)
@@ -192,8 +196,9 @@ export function baSessionCreateHook(deps: BaSessionCreateHookDeps) {
         return;
       }
 
-      // 5. Role snapshot for the JWT role_snapshot claim (matches the
-      //    other controllers' shape — see login.service.ts:108-115).
+      // 5. Role snapshot (read from `user_roles` + `roles`). BA's session
+      //    payload doesn't carry roles — we look them up here so the
+      //    chain row + auth_sessions row are self-describing.
       const roleRows = await db.kysely
         .selectFrom('user_roles')
         .innerJoin('roles', 'roles.id', 'user_roles.role_id')
