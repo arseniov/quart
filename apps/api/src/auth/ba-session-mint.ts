@@ -49,18 +49,25 @@ function serializeSessionCookie(
   expiresInSeconds: number,
 ): string {
   const signature = createHmac('sha256', secret).update(token).digest('base64');
-  const value = `${token}.${signature}`;
+  // BA's `setSessionCookie` wraps the signed value in `encodeURIComponent`
+  // in `serializeSigned` (better-call/cookies.mjs), then decodes URI before
+  // splitting. We mirror that here so the emitted Set-Cookie matches BA's
+  // byte-for-byte output for the value. For nanoid-32 alphanumeric tokens
+  // the encode is a no-op, but the parity holds for any token shape.
+  const value = encodeURIComponent(`${token}.${signature}`);
   const opts: Record<string, unknown> = { ...cookieConfig.options, maxAge: expiresInSeconds };
   const parts = [`${cookieConfig.name}=${value}`];
   if (typeof opts['maxAge'] === 'number') parts.push(`Max-Age=${opts['maxAge']}`);
   if (typeof opts['path'] === 'string') parts.push(`Path=${opts['path']}`);
-  // BA's `setSessionCookie` capitalizes the first letter of SameSite
-  // (`lax` → `Lax`, `strict` → `Strict`, `none` → `None`) — mirror that
-  // here so the byte-for-byte Set-Cookie header matches what BA's own
-  // /sign-in/email + /sign-in/social endpoints emit. Existing clients
-  // (browsers, mobile cookie jars) treat the values case-insensitively,
-  // but parity avoids subtle regressions in cookie-attribute comparators
-  // (e.g. express-session's signed-cookie verifier).
+  // The Set-Cookie emitted here is case-insensitively equivalent to what
+  // BA's `setSessionCookie` produces for the same `authCookies.sessionToken`.
+  // Attribute order differs (this emits `Max-Age, Path, SameSite, HttpOnly,
+  // Secure` vs BA's `Max-Age, Domain, Path, Expires, HttpOnly, Secure,
+  // SameSite`), but RFC 6265 treats attribute order as irrelevant — all
+  // compliant cookie parsers yield the same parsed cookie. The sameSite
+  // capitalisation (`lax` → `Lax`) matches BA's output, which keeps existing
+  // cookie-attribute comparators (e.g. express-session's signed-cookie
+  // verifier) happy.
   if (typeof opts['sameSite'] === 'string') {
     const sameSite = opts['sameSite'];
     parts.push(`SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`);

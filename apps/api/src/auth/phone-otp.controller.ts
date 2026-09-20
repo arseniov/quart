@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Logger, Post, Req, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiTags, ApiUnprocessableEntityResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
@@ -40,6 +40,8 @@ interface VerifyFastifyRequest {
 @ApiTags('auth/phone')
 @Public()
 export class PhoneOtpController {
+  private readonly logger = new Logger(PhoneOtpController.name);
+
   constructor(
     private readonly twilio: TwilioService,
     private readonly service: PhoneOtpService,
@@ -117,12 +119,31 @@ export class PhoneOtpController {
     const ctx = { ...extractVerifyContext(req), phoneNumber, code };
     const out = await this.service.verifyAndIssueSession(ctx);
     // GH #48: mint a BA session and forward the Set-Cookie so the mobile
-    // can extract the BA session token. Phone-only Quart users with no
-    // BA account (no email ever provided) skip this — the mobile falls
-    // back to `auth.no_session` and re-signs in via email or social.
-    const baCookie = await mintBaSessionCookie(this.auth, out.user.email, req);
+    // can extract the BA session token. The user is already authenticated
+    // (their Quart user row is the source of truth), so any failure here —
+    // BA's `internalAdapter` rejects mid-rotation, transient DB hiccup,
+    // etc. — must NOT fail the user-visible response. We log + swallow;
+    // the mobile just won't have the BA cookie for this round trip and
+    // will re-auth on the next request.
+    let baCookie: string | null = null;
+    try {
+      baCookie = await mintBaSessionCookie(this.auth, out.user.email, req);
+    } catch (err) {
+      this.logger.warn(
+        { err: String(err), phone: out.user.phone_e164 },
+        'phone-otp verify: BA session mint failed (non-fatal) — cookie omitted',
+      );
+    }
     if (baCookie) {
       reply.header('set-cookie', baCookie);
+    } else if (out.user.email && out.user.phone_e164) {
+      // BA-orphan: the Quart user has an email but no matching BA row.
+      // Operators need to know so they can backfill (per ba-audit.hook's
+      // join-key contract).
+      this.logger.warn(
+        { phone: out.user.phone_e164 },
+        'phone-otp verify: no BA user row for phone-otp verify — cookie omitted',
+      );
     }
     return out;
   }

@@ -5,12 +5,15 @@
 // session_created).
 
 import { Test } from '@nestjs/testing';
+import { createHmac } from 'node:crypto';
 import type { FastifyReply } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '../../audit/audit.service.js';
 import { DbService } from '../../db/db.service.js';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+// Value (not `import type`) — the DI graph test references `AuthService` as
+// a Nest provider token (`provide: AuthService`), which needs the runtime
+// class binding. The decorator-metadata comment applies here too.
 import { AuthService } from '../auth.service.js';
 import { PhoneOtpController } from '../phone-otp.controller.js';
 import {
@@ -431,7 +434,11 @@ describe('PhoneOtpController', () => {
   function makeController(
     verifyResult: boolean,
     user: DbState['users'][number] | null,
-    authOverrides: { baCookie?: string | null; baUser?: { id: string; email: string } | null } = {},
+    authOverrides: {
+      baCookie?: string | null;
+      baUser?: { id: string; email: string } | null;
+      mintThrows?: boolean;
+    } = {},
   ) {
     const doubles = makeDoubles({ verify: verifyResult, user });
     // GH #48: the controller now mints a BA session via mintBaSessionCookie
@@ -456,20 +463,24 @@ describe('PhoneOtpController', () => {
               sessionConfig: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24, freshAge: 60 * 5 },
               internalAdapter: {
                 findUserByEmail: vi.fn(async (email: string) => {
+                  if (authOverrides.mintThrows) throw new Error('mock: ba internalAdapter down');
                   if (authOverrides.baUser === null) return null;
                   const baUser = authOverrides.baUser ?? { id: 'ba-user-1', email };
                   return { user: baUser };
                 }),
-                createSession: vi.fn(async (baUserId: string) => ({
-                  id: 'ba-session-id',
-                  userId: baUserId,
-                  token: 'ba-token-value',
-                  expiresAt: new Date(Date.now() + 60_000),
-                  ipAddress: '203.0.113.1',
-                  userAgent: 'jest-ua',
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                })),
+                createSession: vi.fn(async (baUserId: string) => {
+                  if (authOverrides.mintThrows) throw new Error('mock: ba internalAdapter down');
+                  return {
+                    id: 'ba-session-id',
+                    userId: baUserId,
+                    token: 'ba-token-value',
+                    expiresAt: new Date(Date.now() + 60_000),
+                    ipAddress: '203.0.113.1',
+                    userAgent: 'jest-ua',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  };
+                }),
               },
             }),
           },
@@ -506,12 +517,16 @@ describe('PhoneOtpController', () => {
     const expectedCookie =
       authOverrides.baCookie !== undefined
         ? authOverrides.baCookie
-        : 'better-auth.session_token=ba-token-value.' +
-          // base64 HMAC-SHA256('ba-token-value', 'test-secret') —
-          // recomputed inline to keep the test self-contained.
-          Buffer.from(
-            require('node:crypto').createHmac('sha256', 'test-secret').update('ba-token-value').digest(),
-          ).toString('base64') +
+        : 'better-auth.session_token=' +
+          // GH #48: ba-session-mint wraps the signed value in encodeURIComponent
+          // (matches BA's `serializeSigned`). The base64 sig may contain
+          // `+`/`/`/`=`, all of which `encodeURIComponent` escapes.
+          encodeURIComponent(
+            'ba-token-value.' +
+              // base64 HMAC-SHA256('ba-token-value', 'test-secret') —
+              // recomputed inline to keep the test self-contained.
+              createHmac('sha256', 'test-secret').update('ba-token-value').digest('base64'),
+          ) +
           '; Max-Age=604800; Path=/; SameSite=Lax; HttpOnly';
     return { controller, doubles, req, reply, setCookieHeaders, expectedCookie };
   }
@@ -595,6 +610,45 @@ describe('PhoneOtpController', () => {
     ).rejects.toBeInstanceOf(Error); // ZodValidationPipe throws a BadRequestException-like error.
     expect((doubles.twilio.verifyOtp as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
     expect(doubles.state.authSessions).toHaveLength(0);
+  });
+
+  it('POST /verify swallows mintBaSessionCookie errors and still returns the user (GH #48 review)', async () => {
+    // Mid-rotation BA adapter rejection must NOT fail the user-visible
+    // response — the user is authenticated via verifyAndIssueSession's
+    // return value and the mobile falls back to re-auth on next request.
+    const { controller, req, reply, setCookieHeaders } = makeController(
+      true,
+      activeUser(),
+      { mintThrows: true },
+    );
+
+    const out = await controller.verifyOtp(
+      { phoneNumber: PHONE, code: CODE } as never,
+      req as never,
+      reply,
+    );
+
+    expect(out.user.id).toBe(USER_ID);
+    expect(setCookieHeaders).toHaveLength(0); // swallowed — no cookie, but no 5xx either.
+  });
+
+  it('POST /verify returns 200 with no Set-Cookie when the BA user lookup returns null for an email-bearing Quart user (BA-orphan)', async () => {
+    const { controller, req, reply, setCookieHeaders } = makeController(
+      true,
+      activeUser({ email: 'alice@example.com' }),
+      { baUser: null },
+    );
+
+    const out = await controller.verifyOtp(
+      { phoneNumber: PHONE, code: CODE } as never,
+      req as never,
+      reply,
+    );
+
+    // 200 + user projection, just no cookie. Controller logs a warn via
+    // `this.logger.warn` (Fix 5) so ops can backfill the orphan account.
+    expect(out.user.id).toBe(USER_ID);
+    expect(setCookieHeaders).toHaveLength(0);
   });
 });
 
