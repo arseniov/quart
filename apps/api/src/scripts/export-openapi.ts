@@ -66,6 +66,7 @@ import { HealthController } from '../health/health.controller.js';
 import { I18nController } from '../i18n/i18n.controller.js';
 import { IdeasController } from '../ideas/ideas.controller.js';
 import { IssuesController } from '../issues/issues.controller.js';
+import { MeDevicesController } from '../me/me.controller.js';
 import { NotificationsController } from '../notifications/notifications.controller.js';
 import { SseController } from '../notifications/sse.controller.js';
 import { MetricsController } from '../observability/metrics.controller.js';
@@ -131,6 +132,7 @@ const CONTROLLERS: Array<new (...args: never[]) => unknown> = [
   I18nController,
   IdeasController,
   IssuesController,
+  MeDevicesController,
   NotificationsController,
   SseController,
   MetricsController,

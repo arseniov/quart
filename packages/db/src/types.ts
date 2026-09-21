@@ -469,6 +469,23 @@ export interface PushSubscriptionsTable {
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 
+// 0042 — per-device push registration. See 0042_devices.up.sql.
+// The mobile app POSTs here on login / push permission grant and
+// DELETEs on toggle-off; the controller upserts on (user_id, device_id)
+// so re-logins don't duplicate rows.
+export interface DevicesTable {
+  id: Generated<string>;
+  user_id: string;
+  city_id: string;
+  device_id: string;
+  platform: 'ios' | 'android';
+  expo_push_token: string;
+  app_version: string;
+  locale: string;
+  created_at: ColumnType<Date, Date | string | undefined, never>;
+  updated_at: ColumnType<Date, Date | string | undefined, Date | string | undefined>;
+}
+
 export interface NotificationDeliveriesTable {
   id: Generated<string>;
   notification_id: string;
@@ -610,6 +627,11 @@ export interface DB {
   notifications: NotificationsTable;
   push_subscriptions: PushSubscriptionsTable;
   notification_deliveries: NotificationDeliveriesTable;
+  // 0042 — per-device push registration. See 0042_devices.up.sql.
+  // The mobile app POSTs here on login / push permission grant and
+  // DELETEs on toggle-off; the controller upserts on (user_id, device_id)
+  // so re-logins don't duplicate rows.
+  devices: DevicesTable;
   saved_items: SavedItemsTable;
   magic_links: MagicLinksTable;
   password_resets: PasswordResetsTable;

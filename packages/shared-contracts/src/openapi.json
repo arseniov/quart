@@ -2079,6 +2079,82 @@
         ]
       }
     },
+    "/me/devices": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "me-devices"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "me-devices"
+        ]
+      }
+    },
+    "/me/devices/{id}": {
+      "delete": {
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "me-devices"
+        ]
+      }
+    },
     "/me/notifications/stream": {
       "get": {
         "responses": {
@@ -2808,6 +2884,9 @@
     },
     {
       "name": "issues"
+    },
+    {
+      "name": "me-devices"
     },
     {
       "name": "metrics"
