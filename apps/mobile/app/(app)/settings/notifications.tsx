@@ -1,14 +1,16 @@
 // app/(app)/settings/notifications.tsx
+import * as Notifications from 'expo-notifications';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Alert, FlatList, Pressable, Switch, Text, View } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import i18n from '@/i18n';
+
+import { apiClient } from '@/api/client';
 import { useTopics } from '@/api/hooks/useTopics';
 import {
   useTopicSubscriptions,
   useUpdateTopicSubscriptions,
 } from '@/api/hooks/useUpdatePrefs';
+import i18n from '@/i18n';
 
 export default function NotificationsSettings() {
   const { t } = useTranslation();
@@ -26,7 +28,25 @@ export default function NotificationsSettings() {
   };
 
   const onPushToggle = async (value: boolean) => {
-    if (!value) return; // ponytail: only request, never revoke (platform-agnostic); add explicit revoke in Phase 12
+    if (!value) {
+      // GH #38: revoke OS-level push permission so users who said "yes" once
+      // but change their mind in settings stop receiving pushes.
+      // unregisterForNotificationsAsync() asks FCM/APNs to drop the push token
+      // for this device — the actual mechanism that stops deliveries.
+      try {
+        await Notifications.unregisterForNotificationsAsync();
+      } catch {
+        // Rejects when no token is registered — nothing to revoke, safe to ignore.
+      }
+      // Best-effort backend cleanup. Endpoint may not exist yet; sweepers mark
+      // stale tokens invalid anyway, so a failed DELETE is not load-bearing.
+      try {
+        await apiClient.del('/me/devices');
+      } catch {
+        // ponytail: fire-and-forget — notifications are not security-critical.
+      }
+      return;
+    }
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(t('notifications.permissionDenied'));
