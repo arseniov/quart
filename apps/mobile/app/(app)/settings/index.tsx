@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 import { useMe } from '@/api/hooks/useMe';
 import { clearTokens } from '@/lib/auth';
+import { log } from '@/lib/log';
 import { getStorageStats, formatBytes, type StorageStats } from '@/lib/tile-cache';
 
 const ITEMS = [
@@ -50,7 +51,9 @@ export default function SettingsIndex() {
       // JWT must still be in MMKV at request time — clearTokens() runs AFTER the POST.
       await apiClient.post('/auth/sign-out', null);
     } catch (err) {
-      console.warn('[settings] sign-out request failed', err);
+      // GH #53 — routed through @/lib/log so tests can spy on log.warn instead of leaving
+      //          an unguarded console.warn visible to jest's open-handle detector.
+      log.warn('[settings] sign-out request failed', err);
     }
     await clearTokens();
     qc.clear();

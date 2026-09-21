@@ -1,4 +1,15 @@
 // src/lib/__tests__/notifications.test.ts
+// GH #53 — mock expo-notifications so jest workers don't see DevicePushTokenAutoRegistration's
+//          module-level addPushTokenListener() (which holds a never-cleared timer). routeForNotification
+//          is pure and never touches expo-notifications at runtime; the bare stub is enough.
+jest.mock('expo-notifications', () => ({
+  __esModule: true,
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn().mockResolvedValue(undefined),
+  AndroidImportance: { HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+}));
+
 import { routeForNotification } from '../notifications';
 
 describe('routeForNotification', () => {

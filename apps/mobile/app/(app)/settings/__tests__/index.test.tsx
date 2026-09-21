@@ -5,6 +5,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import i18n from '@/i18n';
+import { log } from '@/lib/log';
 import SettingsIndex from '../index';
 
 jest.mock('expo-file-system', () => {
@@ -214,6 +215,9 @@ describe('SettingsIndex — logout', () => {
   });
 
   it('still clears tokens and redirects when /auth/sign-out throws', async () => {
+    // GH #53 — spy on log.warn so jest's open-handle detector doesn't see the unguarded
+    //          console.warn in the sign-out rejection path.
+    const warnSpy = jest.spyOn(log, 'warn').mockImplementation(() => undefined);
     apiMock.__postMock.mockRejectedValueOnce(new Error('network down'));
     const { findByLabelText } = render(<SettingsIndex />);
     const logout = await findByLabelText('Log out');
@@ -223,5 +227,7 @@ describe('SettingsIndex — logout', () => {
     });
     expect(qcNs.__qc.clear).toHaveBeenCalledTimes(1);
     expect(routerNs.__router.replace).toHaveBeenCalledWith('/login');
+    expect(warnSpy).toHaveBeenCalledWith('[settings] sign-out request failed', expect.any(Error));
+    warnSpy.mockRestore();
   });
 });
