@@ -5,10 +5,10 @@
 // of each caller so the pattern lives in one place. Kept separate from
 // ba-cookie.ts because the helper also pulls in saveTokens + the
 // register-device mutation — past ba-cookie's pure-parse scope.
-import { ApiError } from '@/api/client';
 import { extractBaSessionToken } from '@/api/ba-cookie';
-import { saveTokens } from '@/lib/auth';
+import { ApiError } from '@/api/client';
 import { NotificationsPermissionError } from '@/api/hooks/useRegisterDevice';
+import { saveTokens } from '@/lib/auth';
 
 export type BaSessionSource = 'login' | 'signup' | 'social' | 'phone_verify';
 
