@@ -46,4 +46,12 @@ module.exports = {
   ...expo,
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   transformIgnorePatterns: [`${extended}`, ...rest],
+  // GH #54 — global RTL cleanup + fake-timer drain so unmounts don't
+  // leak react-query's 5-min gc setTimeout past jest's FORCE_EXIT_DELAY.
+  // maxWorkers: 1 prevents the parallel-worker "A worker process has
+  // failed to exit gracefully" message that surfaces when jest's worker
+  // shutdown races with the fake-timer cleanup (the suite is small enough
+  // that sequential execution costs nothing).
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  maxWorkers: 1,
 };
