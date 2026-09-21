@@ -1,18 +1,14 @@
 // src/api/hooks/useLogin.ts
 // GH #46: POST /auth/sign-in/email → BA's standard email+password endpoint.
 // BA returns `{ user, redirect, url }` in the body and sets the session
-// cookie via Set-Cookie; we extract the cookie value, persist it via
-// saveTokens, and let the screen route to /(app).
+// cookie via Set-Cookie; the helper in ba-session.ts persists it via
+// saveTokens, and lets the screen route to /(app).
 import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { apiClient, ApiError } from '@/api/client';
-import { extractBaSessionToken } from '@/api/ba-cookie';
-import { saveTokens } from '@/lib/auth';
-import {
-  useRegisterDevice,
-  NotificationsPermissionError,
-} from '@/api/hooks/useRegisterDevice';
+import { persistBaSessionFromResponse } from '@/api/ba-session';
+import { apiClient } from '@/api/client';
+import { useRegisterDevice } from '@/api/hooks/useRegisterDevice';
 
 export const LoginSchema = z.object({
   email: z.string().email(),
@@ -45,18 +41,7 @@ export function useLogin() {
         { email: input.email, password: input.password },
         { skipAuth: true },
       );
-      const baSessionToken = extractBaSessionToken(r.headers);
-      if (!baSessionToken) {
-        throw new ApiError(500, 'auth.no_session', 'no session cookie in sign-in response');
-      }
-      saveTokens({ baSessionToken });
-      // ponytail: silently swallow NotificationsPermissionError — user denied notifications but
-      //          login must succeed; surface only real failures via throw.
-      try {
-        await register.mutateAsync();
-      } catch (e) {
-        if (!(e instanceof NotificationsPermissionError)) throw e;
-      }
+      await persistBaSessionFromResponse(r.headers, 'login', register);
       return r.data;
     },
   });

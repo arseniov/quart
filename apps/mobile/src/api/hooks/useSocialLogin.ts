@@ -9,18 +9,14 @@
 // shape matches BA 1.0.20's zod schema in auth-B_LFm6_Y.d.ts:1582. We wrap
 // the caller's string idToken in `{ token }` here so the screen's flat
 // interface (just the provider's opaque token) stays unchanged. After the
-// response, extract the BA session cookie via extractBaSessionToken and
-// persist it via saveTokens; throw `auth.no_session` if the server omitted
+// response, the helper in ba-session.ts extracts the BA session cookie and
+// persists it via saveTokens; throws `auth.no_session` if the server omitted
 // the cookie (mirrors useLogin).
 import { useMutation } from '@tanstack/react-query';
 
-import { apiClient, ApiError } from '@/api/client';
-import { extractBaSessionToken } from '@/api/ba-cookie';
-import { saveTokens } from '@/lib/auth';
-import {
-  useRegisterDevice,
-  NotificationsPermissionError,
-} from '@/api/hooks/useRegisterDevice';
+import { persistBaSessionFromResponse } from '@/api/ba-session';
+import { apiClient } from '@/api/client';
+import { useRegisterDevice } from '@/api/hooks/useRegisterDevice';
 import { APPLE_USER_KEY } from '@/auth/apple-silent-reauth';
 import { mmkvStorage } from '@/lib/storage';
 
@@ -42,20 +38,10 @@ export function useSocialLogin() {
         { provider: input.provider, idToken: { token: input.idToken } },
         { skipAuth: true },
       );
-      const baSessionToken = extractBaSessionToken(r.headers);
-      if (!baSessionToken) {
-        throw new ApiError(500, 'auth.no_session', 'no session cookie in social sign-in response');
-      }
-      saveTokens({ baSessionToken });
+      await persistBaSessionFromResponse(r.headers, 'social', register);
+      // Apple caller-specific: persist the stable user id for future silent re-auth.
       if (input.provider === 'apple' && input.userId) {
         mmkvStorage.setItem(APPLE_USER_KEY, input.userId);
-      }
-      // ponytail: same swallow-NotificationsPermissionError pattern as useLogin — register-device
-      //        is best-effort post-auth; user denying notifications must not fail social login.
-      try {
-        await register.mutateAsync();
-      } catch (e) {
-        if (!(e instanceof NotificationsPermissionError)) throw e;
       }
       return r.data;
     },
