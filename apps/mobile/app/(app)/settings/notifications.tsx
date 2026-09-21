@@ -11,6 +11,7 @@ import {
   useUpdateTopicSubscriptions,
 } from '@/api/hooks/useUpdatePrefs';
 import i18n from '@/i18n';
+import { log } from '@/lib/log';
 
 export default function NotificationsSettings() {
   const { t } = useTranslation();
@@ -42,7 +43,7 @@ export default function NotificationsSettings() {
       } catch (err) {
         // ponytail: log only — OS unregister rejection is expected when no push
         //          token is registered; backend DELETE 404s are tracked by GH #51.
-        console.warn('[notifications] revoke:os_unregister', err);
+        log.warn('[notifications] revoke:os_unregister', err);
       }
       // Best-effort backend cleanup. Endpoint may not exist yet; sweepers mark
       // stale tokens invalid anyway, so a failed DELETE is not load-bearing.
@@ -51,7 +52,7 @@ export default function NotificationsSettings() {
       } catch (err) {
         // ponytail: log only — /me/devices 404 is tracked by GH #51; we
         //          don't surface server-side revocation failures to the user.
-        console.warn('[notifications] revoke:backend_delete', err);
+        log.warn('[notifications] revoke:backend_delete', err);
       }
       return;
     }

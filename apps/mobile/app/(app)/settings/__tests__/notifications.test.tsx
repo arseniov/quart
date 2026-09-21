@@ -33,6 +33,9 @@ jest.mock('expo-router', () => ({
 }));
 
 import NotificationsSettings from '../notifications';
+
+import { log } from '@/lib/log';
+
 const Notifications = require('expo-notifications') as {
   unregisterForNotificationsAsync: jest.Mock;
   requestPermissionsAsync: jest.Mock;
@@ -71,6 +74,7 @@ describe('NotificationsSettings — revoke on toggle off (GH #38)', () => {
 
   it('still calls unregister even when DELETE /me/devices fails (backend endpoint missing)', async () => {
     apiNs.apiClient.del.mockRejectedValueOnce(new Error('404 not found'));
+    const warnSpy = jest.spyOn(log, 'warn').mockImplementation(() => undefined);
     const { UNSAFE_getByType } = render(<NotificationsSettings />);
     const { Switch } = require('react-native');
     const toggle = UNSAFE_getByType(Switch);
@@ -83,10 +87,13 @@ describe('NotificationsSettings — revoke on toggle off (GH #38)', () => {
     // The best-effort DELETE throws are swallowed by the component — no Alert,
     // no thrown error escaping onPushToggle.
     expect(apiNs.apiClient.del).toHaveBeenCalledWith('/me/devices');
+    expect(warnSpy).toHaveBeenCalledWith('[notifications] revoke:backend_delete', expect.any(Error));
+    warnSpy.mockRestore();
   });
 
   it('still calls unregister even when unregisterForNotificationsAsync rejects (no token registered)', async () => {
     Notifications.unregisterForNotificationsAsync.mockRejectedValueOnce(new Error('no token'));
+    const warnSpy = jest.spyOn(log, 'warn').mockImplementation(() => undefined);
     const { UNSAFE_getByType } = render(<NotificationsSettings />);
     const { Switch } = require('react-native');
     const toggle = UNSAFE_getByType(Switch);
@@ -99,6 +106,8 @@ describe('NotificationsSettings — revoke on toggle off (GH #38)', () => {
       expect(apiNs.apiClient.del).toHaveBeenCalledWith('/me/devices');
     });
     expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith('[notifications] revoke:os_unregister', expect.any(Error));
+    warnSpy.mockRestore();
   });
 
   it('on toggle true with granted permission, requests permission and does not alert', async () => {
