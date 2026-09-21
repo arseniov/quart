@@ -27,7 +27,6 @@ import { RbacGuard } from '../rbac/rbac.guard.js';
 import {
   DeviceIdSchema,
   RegisterDeviceSchema,
-  type DeviceIdParam,
   type RegisterBody,
 } from './me.dto.js';
 // Value (not `import type`) so vitest's decorator-metadata plugin emits
@@ -73,7 +72,6 @@ export class MeDevicesController {
     @Param('id', new ZodValidationPipe(DeviceIdSchema.shape.id)) id: string,
     @Req() req: AuthedRequest,
   ): Promise<void> {
-    const parsed: DeviceIdParam = DeviceIdSchema.parse({ id });
-    await this.svc.revoke(parsed.id, req.user, req.tenant);
+    await this.svc.revoke(id, req.user, req.tenant);
   }
 }

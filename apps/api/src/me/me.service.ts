@@ -100,10 +100,8 @@ export class MeService {
     tenant: TenantContext,
   ): Promise<Device> {
     const platform = body.platform ?? body.device_platform;
-    if (!platform) {
-      // Zod schema makes this unreachable; defensive for future schema edits.
-      throw new Error('platform is required');
-    }
+    // ponytail: 32-hex-char prefix is collision-prone past ~1M devices per
+    //          user; switch to full sha256 or uuid v5 once a mobile UUID lands.
     const deviceId = body.device_id ?? sha256Hex(body.expo_push_token);
     const now = new Date();
 
@@ -112,6 +110,9 @@ export class MeService {
         .insertInto('devices')
         .values({
           user_id: user.id,
+          // ponytail: city_id denormalised from req.tenant.cityId per
+          //          0042_devices.up.sql — no per-row city lookup. Drop the
+          //          column if you migrate to a global (non-tenant) table.
           city_id: tenant.cityId,
           device_id: deviceId,
           platform,

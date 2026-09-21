@@ -11,6 +11,7 @@ import { IS_PUBLIC_KEY } from '../../src/auth/public.decorator.js';
 import type { DbService } from '../../src/db/db.service.js';
 import type { TenantContext } from '../../src/db/run-in-tenant-tx.js';
 import { MeDevicesController } from '../../src/me/me.controller.js';
+import { RegisterDeviceSchema } from '../../src/me/me.dto.js';
 import type { MeService } from '../../src/me/me.service.js';
 
 const tenant: TenantContext = {
@@ -65,6 +66,39 @@ describe('MeDevicesController', () => {
     const c = new MeDevicesController(svc);
     await c.revoke('mobile-uuid', req);
     expect(svc.revoke).toHaveBeenCalledWith('mobile-uuid', user, tenant);
+  });
+});
+
+// ============================================================================
+// RegisterDeviceSchema — GH #51 review: client must send at least one of
+// `platform` / `device_platform`. Both omitted → 400 via ZodValidationPipe,
+// not 500 from `me.service.ts`'s defensive throw (which has since been
+// removed). The pipe applies the same `safeParse` this test exercises.
+// ============================================================================
+describe('RegisterDeviceSchema', () => {
+  const valid = {
+    expo_push_token: 'ExponentPushToken[abc]',
+    app_version: '1.0.0',
+    locale: 'en',
+  };
+
+  it('accepts `platform` alone', () => {
+    const r = RegisterDeviceSchema.safeParse({ ...valid, platform: 'ios' });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts `device_platform` alone (legacy alias)', () => {
+    const r = RegisterDeviceSchema.safeParse({ ...valid, device_platform: 'android' });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects when both `platform` and `device_platform` are omitted', () => {
+    const r = RegisterDeviceSchema.safeParse(valid);
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      // BadRequestException from ZodValidationPipe carries code='validation.failed'.
+      expect(r.error.flatten().fieldErrors.platform).toBeDefined();
+    }
   });
 });
 
