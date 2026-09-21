@@ -57,6 +57,14 @@ describe('NotificationsSettings — revoke on toggle off (GH #38)', () => {
       expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
     });
     expect(apiNs.apiClient.del).toHaveBeenCalledWith('/me/devices');
+    // ponytail: order matters — OS must revoke before backend DELETE so a slow
+    //          network doesn't leave the user receiving pushes after the
+    //          "off" promise resolves.
+    const unregOrder = Notifications.unregisterForNotificationsAsync.mock.invocationCallOrder[0];
+    const delOrder = apiNs.apiClient.del.mock.invocationCallOrder[0];
+    expect(unregOrder).toBeDefined();
+    expect(delOrder).toBeDefined();
+    expect(unregOrder!).toBeLessThan(delOrder!);
     // The request flow on false must NOT also ask the OS for permission.
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
   });
@@ -91,5 +99,39 @@ describe('NotificationsSettings — revoke on toggle off (GH #38)', () => {
       expect(apiNs.apiClient.del).toHaveBeenCalledWith('/me/devices');
     });
     expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('on toggle true with granted permission, requests permission and does not alert', async () => {
+    Notifications.requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted' });
+    const { UNSAFE_getByType } = render(<NotificationsSettings />);
+    const { Switch, Alert } = require('react-native');
+    const toggle = UNSAFE_getByType(Switch);
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    fireEvent(toggle, 'valueChange', true);
+
+    await waitFor(() => {
+      expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(alertSpy).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('on toggle true with denied permission, surfaces an alert', async () => {
+    Notifications.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    const { UNSAFE_getByType } = render(<NotificationsSettings />);
+    const { Switch, Alert } = require('react-native');
+    const toggle = UNSAFE_getByType(Switch);
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    fireEvent(toggle, 'valueChange', true);
+
+    await waitFor(() => {
+      expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(alertSpy).toHaveBeenCalled();
+
+    alertSpy.mockRestore();
   });
 });

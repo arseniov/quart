@@ -33,17 +33,25 @@ export default function NotificationsSettings() {
       // but change their mind in settings stop receiving pushes.
       // unregisterForNotificationsAsync() asks FCM/APNs to drop the push token
       // for this device — the actual mechanism that stops deliveries.
+      // Token is never cached in MMKV — register flow calls
+      // Notifications.getExpoPushTokenAsync() fresh each time, so there's
+      // nothing to clear here. The backend DELETE is best-effort because the
+      // endpoint may not exist yet (GH #51).
       try {
         await Notifications.unregisterForNotificationsAsync();
-      } catch {
-        // Rejects when no token is registered — nothing to revoke, safe to ignore.
+      } catch (err) {
+        // ponytail: log only — OS unregister rejection is expected when no push
+        //          token is registered; backend DELETE 404s are tracked by GH #51.
+        console.warn('[notifications] revoke:os_unregister', err);
       }
       // Best-effort backend cleanup. Endpoint may not exist yet; sweepers mark
       // stale tokens invalid anyway, so a failed DELETE is not load-bearing.
       try {
         await apiClient.del('/me/devices');
-      } catch {
-        // ponytail: fire-and-forget — notifications are not security-critical.
+      } catch (err) {
+        // ponytail: log only — /me/devices 404 is tracked by GH #51; we
+        //          don't surface server-side revocation failures to the user.
+        console.warn('[notifications] revoke:backend_delete', err);
       }
       return;
     }
