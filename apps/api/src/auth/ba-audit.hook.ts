@@ -25,6 +25,12 @@
 //      chain walk can correlate). Skip when no token — the matcher
 //      fires on /sign-out even if the caller wasn't authenticated.
 //
+// GH #42 — spec reconciled with implementation (option 2).
+// OAuth sign-in vs sign-up is collapsed to `ba_<provider>` because the
+// BA `account` table retains only the most-recent row per user, so the
+// originating flow cannot be reliably derived. Email flows stay split
+// (see below).
+//
 // Discriminator naming (auditPayload.via) — GH #34 BA-driven flows only.
 // (GH #33's /auth/login used to write 'email_login' via a dedicated
 // Nest controller; that endpoint was deleted in GH #45.)
