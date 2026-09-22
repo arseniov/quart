@@ -135,22 +135,6 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
   const allNames = Object.keys(allMigrations).sort();
   const failures = new Map<string, string>();
   const MAX_PASSES = 5;
-  // ponytail: drop the broken permissions_code_check constraint after
-  // 0024 has had a chance to run. 0024 re-creates a pattern that's still
-  // wrong (literal parens, no digit support — see 0028's `admin.i18n.write`
-  // which has `1`/`8`). The constraint isn't required for the e2e smoke;
-  // we just need the seeds to land. Run the drop inside its own
-  // transaction so it doesn't get rolled back if a later migration fails.
-  let droppedAfter0024 = false;
-  const dropPermissionsCheck = async (): Promise<void> => {
-    await db
-      .executeQuery(
-        CompiledQuery.raw(
-          `ALTER TABLE permissions DROP CONSTRAINT IF EXISTS permissions_code_check`,
-        ),
-      )
-      .catch(() => undefined);
-  };
   // gh #8 prerequisite: 0038 seeds a sentinel city with slug `__system`,
   // but `cities_slug_check` (from 0001) forbids underscores. 0001 installs
   // the check inline — drop it AFTER 0001 finishes so 0038's INSERT lands
@@ -269,16 +253,8 @@ export async function createTestApp(): Promise<CreateTestAppResult> {
               .execute();
           });
         }
-        // After 0024 commits, the broken constraint it just installed is
-        // active. Drop it once, outside the migration's own transaction,
-        // so 0028's seed can land on the next pass. Idempotent.
-        if (!droppedAfter0024 && name === '0024_fix_permissions_code_constraint') {
-          await dropPermissionsCheck();
-          droppedAfter0024 = true;
-        }
         // 0001 installs cities_slug_check inline; drop it once after the
-        // migration commits so 0038's sentinel insert lands. Same pattern
-        // as the permissions shim above. Idempotent.
+        // migration commits so 0038's sentinel insert lands. Idempotent.
         if (!droppedAfter0001 && name === '0001_geography') {
           await dropCitiesSlugCheck();
           droppedAfter0001 = true;

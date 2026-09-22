@@ -23,9 +23,10 @@ const provider = new SqlFileMigrationProvider(migrationsDir);
 // the constraint never gets a chance to run.
 //
 // For this repo we want later migrations to be able to fix earlier ones
-// (see 0024 widening `permissions_code_check` to match 0021's namespaced
-// codes). Run each migration in its own transaction instead, retrying any
-// previously-failed migrations after the rest have had a chance to apply.
+// (see 0017 widening `permissions_code_check` to match 0021's namespaced
+// codes and 0028's `admin.i18n.write` digit-bearing code). Run each
+// migration in its own transaction instead, retrying any previously-failed
+// migrations after the rest have had a chance to apply.
 
 interface KyselyMigrationRow {
   name: string;
@@ -77,7 +78,7 @@ await ensureMigrationTables(db as AnyDb);
 
 // `failures` is reset every pass: a migration that failed on an earlier
 // pass may succeed on a later one once a later migration has unblocked it
-// (e.g. 0024 widens the CHECK constraint that 0021's INSERT violates).
+// (e.g. 0017 widens the CHECK constraint that 0021/0028's INSERTs violate).
 // `MAX_PASSES` bounds the loop so a migration that genuinely can't apply
 // doesn't make us run forever.
 const failures = new Map<string, string>();
@@ -139,7 +140,7 @@ for (let pass = 0; pass < MAX_PASSES; pass += 1) {
 const finalExecuted = await getExecuted(db as AnyDb);
 
 // ponytail: a migration that fails on the first pass (e.g. 0021 hitting a
-// CHECK constraint that 0024 widens) is inserted in `kysely_migration` only
+// CHECK constraint that 0017 widens) is inserted in `kysely_migration` only
 // when it eventually succeeds — so rows end up in INSERT order, not name
 // order. Kysely's Migrator validates name order at the start of every run,
 // which would otherwise reject the table. Re-sort at the end.
