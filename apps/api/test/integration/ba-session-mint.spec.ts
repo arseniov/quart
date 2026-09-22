@@ -19,8 +19,8 @@
 import { fileURLToPath } from 'node:url';
 
 import { createDb, SqlFileMigrationProvider } from '@quart/db';
-import { Migrator, sql } from 'kysely';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { Migrator, sql, type Kysely } from 'kysely';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AuthService } from '../../src/auth/auth.service.js';
 import { mintBaSessionCookie } from '../../src/auth/ba-session-mint.js';
@@ -30,13 +30,14 @@ const MIGRATIONS_DIR = fileURLToPath(
 );
 
 let connectionUri: string;
+let bootstrap: Kysely<unknown>;
 
 describe('ba-session-mint (integration) — GH #49 upgrade contract', () => {
   beforeAll(async () => {
     connectionUri = process.env.TEST_DATABASE_URL ?? '';
     if (!connectionUri) throw new Error('TEST_DATABASE_URL not set');
 
-    const bootstrap = createDb({ connectionString: connectionUri });
+    bootstrap = createDb({ connectionString: connectionUri });
     await sql`SELECT 1`.execute(bootstrap);
     await sql`CREATE EXTENSION IF NOT EXISTS postgis`.execute(bootstrap);
     await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`.execute(bootstrap);
@@ -49,8 +50,13 @@ describe('ba-session-mint (integration) — GH #49 upgrade contract', () => {
       provider: new SqlFileMigrationProvider(MIGRATIONS_DIR),
     });
     await migrator.migrateToLatest();
-    await bootstrap.destroy();
   }, 180_000);
+
+  afterAll(async () => {
+    // Explicit teardown so the bootstrap handle doesn't rely on
+    // fork-pool teardown — safer when CI swaps pool strategy.
+    await bootstrap.destroy();
+  });
 
   it('mints a cookie that auth.instance.api.getSession accepts', async () => {
     const email = `mint-${Date.now()}-${Math.random().toString(36).slice(2)}-${process.pid}@example.com`;
