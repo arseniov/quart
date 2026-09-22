@@ -83,13 +83,9 @@ describe('SearchScreen', () => {
     await i18n.changeLanguage('it');
   });
   beforeEach(() => {
-    jest.useFakeTimers();
     mockPush.mockClear();
     mUseMe.mockReset();
     mUseSearch.mockReset();
-  });
-  afterEach(() => {
-    jest.useRealTimers();
   });
 
   it('renders the initial prompt before the user types', () => {

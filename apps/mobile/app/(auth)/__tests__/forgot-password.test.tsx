@@ -79,26 +79,21 @@ describe('ForgotPasswordScreen', () => {
   });
 
   it('throttles a second submit within the 30s window and never calls POST again', async () => {
-    jest.useFakeTimers();
-    try {
-      mockPost.mockResolvedValue({ status: 200, data: { sent: true } });
-      const { getByLabelText, getByText } = render(<ForgotPasswordScreen />, { wrapper: makeWrapper() });
-      fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
-      // First submit: POST fires, server returns 200, success copy + countdown.
-      await act(async () => {
-        fireEvent.press(getByText('Send link'));
-      });
-      await waitFor(() =>
-        expect(mockPost).toHaveBeenCalledTimes(1),
-      );
-      // The button now shows the "Wait Ns…" copy; a second press must be a no-op.
-      await waitFor(() =>
-        expect(getByText(/Wait \d+s before sending another link\./)).toBeTruthy(),
-      );
-      fireEvent.press(getByText(/Wait \d+s before sending another link\./));
-      expect(mockPost).toHaveBeenCalledTimes(1);
-    } finally {
-      jest.useRealTimers();
-    }
+    mockPost.mockResolvedValue({ status: 200, data: { sent: true } });
+    const { getByLabelText, getByText } = render(<ForgotPasswordScreen />, { wrapper: makeWrapper() });
+    fireEvent.changeText(getByLabelText('Email'), 'a@b.com');
+    // First submit: POST fires, server returns 200, success copy + countdown.
+    await act(async () => {
+      fireEvent.press(getByText('Send link'));
+    });
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledTimes(1),
+    );
+    // The button now shows the "Wait Ns…" copy; a second press must be a no-op.
+    await waitFor(() =>
+      expect(getByText(/Wait \d+s before sending another link\./)).toBeTruthy(),
+    );
+    fireEvent.press(getByText(/Wait \d+s before sending another link\./));
+    expect(mockPost).toHaveBeenCalledTimes(1);
   });
 });
