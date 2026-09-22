@@ -4,6 +4,13 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    # GH #49: ba-session-mint.ts reads `$context.internalAdapter` and the
+    # session cookie signing format — both are private BA API. The next
+    # 1.0.x patch should auto-flow, but any minor (1.1+) or major bump
+    # needs a manual review + the GH #49 integration test re-run.
+    ignore:
+      - dependency-name: "better-auth"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }

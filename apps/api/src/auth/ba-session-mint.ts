@@ -95,6 +95,51 @@ export async function mintBaSessionCookie(
 ): Promise<string | null> {
   if (!email) return null;
 
+  // ponytail: GH #49 upgrade contract — `better-auth` is pinned to `~1.0.x`
+  // in apps/api/package.json so the next 1.0.x patch auto-flows but any
+  // minor (1.1+) or major bump needs manual review. The fields below
+  // come from BA's runtime `$context` (added by api.cjs at runtime, NOT
+  // in BA's TS declarations). Verify against the GH #49 integration
+  // test (test/integration/ba-session-mint.spec.ts) before bumping.
+  //
+  //   $context.internalAdapter.findUserByEmail(email: string)
+  //     → Promise<{ user: { id: string; email: string } } | null>
+  //     Looks up BA's `user` table. Returns the user row (only `id` +
+  //     `email` are read here) or null if no row matches. The Kysely
+  //     adapter implementation is in auth.adapter.ts.
+  //
+  //   $context.internalAdapter.createSession(userId: string, headers: Headers)
+  //     → Promise<{ token: string } | null>
+  //     Writes a row to BA's `session` table and emits a nanoid-32
+  //     `token`. Reads `ipAddress` + `userAgent` from `headers` (via
+  //     Headers.get) the same way BA's own /sign-in/email endpoint
+  //     populates them — we just pass the inbound request headers
+  //     straight through. Returns null on a DB hiccup; callers must
+  //     treat null as "no session minted" and fall back.
+  //
+  //   $context.secret: string
+  //     The `BETTER_AUTH_SECRET` env value. Used as the HMAC-SHA256 key
+  //     in `serializeSessionCookie` so the signed cookie matches what
+  //     `getSessionCookie` will verify on the next request.
+  //
+  //   $context.authCookies.sessionToken: { name: string; options: ... }
+  //     The cookie name + attrs BA emits. `name` typically
+  //     `better-auth.session_token` (or `__Secure-better-auth.session_token`
+  //     when `BETTER_AUTH_URL` is HTTPS). `options` carries httpOnly,
+  //     sameSite, path, secure — we forward them through to the
+  //     Set-Cookie string so the emitted attrs match BA's `setSessionCookie`
+  //     byte-for-byte (modulo order, which RFC 6265 says is irrelevant).
+  //
+  //   $context.sessionConfig.expiresIn: number (seconds)
+  //     Session lifetime. We emit it as `Max-Age=<seconds>` so the
+  //     browser + BA's `getSessionCookie` agree on expiry.
+  //
+  // If BA 1.1+ renames any of these (e.g. drops `$context` from
+  // endpoint objects, changes `internalAdapter.createSession` to
+  // return `{ token, expiresAt }`, or moves `authCookies.sessionToken`
+  // under a different key), this cast breaks the typecheck AND the
+  // GH #49 integration test fails on first run. That's the point.
+  //
   // `$context` is added by BA at runtime on every endpoint object
   // (see better-auth/api.cjs `n={...{signInSocial:De,signInEmail:Ce}}`)
   // but is NOT in BA 1.0.20's TypeScript declarations. Cast through
