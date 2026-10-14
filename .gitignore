@@ -1,6 +1,11 @@
 .claude
 CLAUDE.md
 docs/
+.cursor/
+.graymatter/
+.mcp.json
+.windsurf/
+opencode.jsonc
 
 .env
 .env.*
